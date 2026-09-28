@@ -15,6 +15,10 @@ flowchart TB
 
   subgraph S1["① 시작 · 연결"]
     A["앱 실행"]
+    BOOT["부팅 로고"]:::screen
+    ENV["기본 환경 체크 화면 (0단계)<br/>ASCOM·NINA·NINA 실행·Advanced API<br/>·프로필의 가이더/솔버 설치 확인"]:::screen
+    ENVOK{"필수 항목<br/>모두 ✅?"}
+    ENVFIX["설치 방법 안내·[다시 확인]<br/>(권장 항목 ⚠️는 건너뛰기 가능)"]
     B{"최초 실행?"}
     C["장비 세팅 화면"]:::screen
     D["장비 선택 및 연결<br/>허브·적도의·포커서·카메라·열선·가이드카메라"]
@@ -67,7 +71,9 @@ flowchart TB
   end
 
   %% ① 시작 · 연결
-  A --> B
+  A --> BOOT --> ENV --> ENVOK
+  ENVOK -->|"예"| B
+  ENVOK -->|"아니오 (필수 항목 ❌)"| ENVFIX --> ENV
   B -->|"예"| C --> D --> E1
   E1 -->|"예"| L
   E1 -->|"아니오"| F
@@ -117,7 +123,7 @@ flowchart TB
   classDef default fill:#FFFFFF,stroke:#6E6A80,color:#1E1C26
   classDef screen fill:#F24E1E,stroke:#B8330F,color:#FFFFFF
   classDef decide fill:#E8DEFF,stroke:#7B61FF,color:#221A40
-  class B,E1,E2,T,OK,AN,DONE,RES,WAIT,POST decide
+  class ENVOK,B,E1,E2,T,OK,AN,DONE,RES,WAIT,POST decide
   style S1 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S2 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S3 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
