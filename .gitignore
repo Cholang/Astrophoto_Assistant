@@ -1,0 +1,4 @@
+﻿# 로컬 API 점검 결과 (관측지 위치 등 개인 정보 포함 가능)
+api-check-results/
+node_modules/
+.claude/
