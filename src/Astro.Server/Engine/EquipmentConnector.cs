@@ -23,17 +23,27 @@ public sealed class EquipmentOptions
 public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options)
 {
     /// <summary>연결 순서: 허브가 다른 장비에 전원을 주므로 가장 먼저 (onboarding-and-architecture.md 4.2).</summary>
+    // Fix: 연결에 실패했을 때 상태 옆 ? 툴팁에 보여 줄 해결 방법 (장비마다 다르게)
     private static readonly Slot[] Slots =
     [
-        new("switch", "SwitchSettings", "전원 허브", "망원경·카메라·열선에 전원을 나눠 주는 장치입니다. 다른 장비보다 먼저 연결합니다."),
-        new("mount", "TelescopeSettings", "적도의", "망원경을 움직이고 별을 따라 돌려 주는 받침대입니다."),
-        new("camera", "CameraSettings", "카메라", "사진을 찍는 카메라입니다."),
-        new("focuser", "FocuserSettings", "포커서", "초점을 자동으로 맞춰 주는 모터입니다."),
-        new("filterwheel", "FilterWheelSettings", "필터휠", "촬영 중에 필터를 바꿔 끼워 주는 장치입니다."),
-        new("guider", "GuiderSettings", "가이딩", "보조 카메라로 별을 지켜보며 흔들림을 바로잡습니다. N.I.N.A.가 PHD2를 거쳐 가이드 카메라와 실제로 연결되는지 확인합니다."),
+        new("switch", "SwitchSettings", "전원 허브", "망원경·카메라·열선에 전원을 나눠 주는 장치입니다. 열선은 허브의 포트로 함께 제어합니다.",
+            "허브의 12V 전원 어댑터와 PC로 가는 USB 케이블을 확인해 주세요. 허브가 켜져야 다른 장비에도 전원이 들어갑니다."),
+        new("mount", "TelescopeSettings", "적도의", "망원경을 움직이고 별을 따라 돌려 주는 받침대입니다.",
+            "적도의 전원과 케이블(USB·네트워크)을 확인해 주세요. 무선으로 연결한다면 PC가 적도의의 와이파이에 연결되어 있는지도 확인해 주세요."),
+        new("camera", "CameraSettings", "카메라", "사진을 찍는 카메라입니다.",
+            "카메라 전원과 USB 케이블을 확인하고, 카메라의 PC 연결 방식이 테더링(PC 촬영)으로 되어 있는지 확인해 주세요."),
+        new("focuser", "FocuserSettings", "포커서", "초점을 자동으로 맞춰 주는 모터입니다.",
+            "포커서 전원(허브 포트)과 USB 케이블을 확인해 주세요."),
+        new("filterwheel", "FilterWheelSettings", "필터휠", "촬영 중에 필터를 바꿔 끼워 주는 장치입니다.",
+            "필터휠 전원과 USB 케이블을 확인해 주세요."),
+        new("guider", "GuiderSettings", "가이딩", "보조 카메라로 별을 지켜보며 흔들림을 바로잡습니다. N.I.N.A.가 PHD2를 거쳐 가이드 카메라와 실제로 연결되는지 확인합니다.",
+            "PHD2가 켜져 있는지, PHD2 안에서 가이드 카메라와 적도의가 연결되어 있는지 확인해 주세요."),
     ];
 
-    private sealed record Slot(string Kind, string ProfileKey, string Role, string Hint);
+    private sealed record Slot(string Kind, string ProfileKey, string Role, string Hint, string Fix);
+
+    /// <summary>허브가 실패하면 뒤 장비는 이 문장으로 보류한다 (전원이 허브에서 오므로 원인을 하나로 모은다).</summary>
+    private const string WaitingForHub = "전원 허브가 연결되면 확인합니다";
 
     /// <summary>화면에 미리 칸을 그릴 수 있게, 연결할 장비 목록만 먼저 알려 준다.</summary>
     public async Task<IReadOnlyList<CheckResult>> PlanAsync(CancellationToken ct = default) =>
@@ -49,24 +59,40 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             yield break;
         }
 
+        var hubFailed = false;
         foreach (var d in devices)
         {
+            // 허브가 실패하면 멈추고 허브부터 해결한다: 뒤 장비는 연결을 시도하지 않고 보류
+            if (hubFailed)
+            {
+                yield return Make(d, CheckStatus.Skipped, WaitingForHub);
+                continue;
+            }
             yield return Make(d, CheckStatus.Running, "연결하는 중입니다");
-            yield return await ConnectOneAsync(d, ct);
+            var result = await ConnectOneAsync(d, ct);
+            yield return result;
+            if (d.Slot.Kind == "switch" && result.Status != CheckStatus.Pass) hubFailed = true;
         }
     }
 
-    /// <summary>장비 하나만 다시 연결한다 (쉐브론 안의 새로고침).</summary>
-    public async Task<CheckResult?> RetryAsync(string id, CancellationToken ct = default)
+    /// <summary>
+    /// 장비 하나만 다시 연결한다 (쉐브론 안의 새로고침).
+    /// simulateFail: [임시] 화면 설계용 — 실패했을 때와 똑같은 결과를 만든다 (Simulate가 켜져 있을 때만).
+    /// </summary>
+    public async Task<CheckResult?> RetryAsync(string id, bool simulateFail = false, CancellationToken ct = default)
     {
         var d = (await ReadDevicesAsync(ct)).FirstOrDefault(x => x.Slot.Kind == id);
-        return d is null ? null : await ConnectOneAsync(d, ct);
+        return d is null ? null : await ConnectOneAsync(d, ct, simulateFail && options.Value.Simulate);
     }
 
-    private async Task<CheckResult> ConnectOneAsync(Device d, CancellationToken ct)
+    private async Task<CheckResult> ConnectOneAsync(Device d, CancellationToken ct, bool forceFail = false)
     {
         bool connected;
-        if (options.Value.Simulate)
+        if (forceFail)
+        {
+            connected = false;
+        }
+        else if (options.Value.Simulate)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(450), ct); // 연결되는 모습이 보이게 잠깐 기다린다
             connected = true;
@@ -81,7 +107,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         return connected
             ? Make(d, CheckStatus.Pass, "연결되어 있습니다")
             : Make(d, CheckStatus.Fail, "연결되어 있지 않습니다", new Diagnosis([],
-                $"장비 전원과 USB 케이블을 확인한 뒤 새로고침을 눌러 주세요. 처음 쓰는 장비라면 N.I.N.A.의 장비 탭에서 드라이버 설정(톱니바퀴)을 먼저 해 주세요. (드라이버: {d.DriverName})"));
+                $"{d.Slot.Fix} 그다음 새로고침을 눌러 주세요. 처음 쓰는 장비라면 N.I.N.A.의 장비 탭에서 드라이버 설정(톱니바퀴)을 먼저 해 주세요. (드라이버: {d.DriverName})"));
     }
 
     private sealed record Device(Slot Slot, string Id, string Name, string DriverName);

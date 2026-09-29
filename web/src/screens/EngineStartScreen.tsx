@@ -1,6 +1,7 @@
-import { Check, RotateCw } from 'lucide-react'
+import { RotateCw } from 'lucide-react'
 import { useEffect } from 'react'
 import InfoTip from '../components/InfoTip'
+import JarvisRing from '../components/JarvisRing'
 import { pending, useCheckStream } from '../checks'
 import styles from './EngineStartScreen.module.css'
 
@@ -11,6 +12,7 @@ const STEPS = [pending('launch', 'N.I.N.A. 실행'), pending('connect', 'N.I.N.A
 /**
  * 1단계: 화면 가운데 원형 진행 표시 안에 지금 하는 일 한 줄만.
  * 설명 영역은 두지 않는다. 연결되면 잠깐 보여 주고 바로 다음 단계로 (누를 필요 없는 "다음"은 두지 않음).
+ * 다음 단계(장비 연결)는 이 원이 작아지며 가운데에 남는 모양으로 이어진다.
  */
 export default function EngineStartScreen({ onContinue }: { onContinue: () => void }) {
   const { items, allPass, failed, done, restart } = useCheckStream('/api/engine/start', STEPS)
@@ -37,21 +39,9 @@ export default function EngineStartScreen({ onContinue }: { onContinue: () => vo
 
   return (
     <main className={styles.stage}>
-      <div className={styles.ring} data-state={state} role="status" aria-live="polite">
-        <svg className={styles.arcs} viewBox="0 0 200 200" aria-hidden="true">
-          <circle className={styles.track} cx="100" cy="100" r="92" />
-          <circle className={styles.outer} cx="100" cy="100" r="92" pathLength="100" />
-          <circle className={styles.middle} cx="100" cy="100" r="80" pathLength="100" />
-          <circle className={styles.inner} cx="100" cy="100" r="70" pathLength="100" />
-        </svg>
-        <div className={styles.center}>
-          {/* 아이콘 자리는 항상 두고 상태에 따라 보이기만 바꾼다 (글자가 움직이지 않게) */}
-          <span className={styles.icon}>
-            <Check strokeWidth={2.5} aria-hidden="true" data-shown={state === 'done'} />
-          </span>
-          <p className={styles.line}>{line}</p>
-        </div>
-      </div>
+      <JarvisRing state={state} className={styles.ring}>
+        {line}
+      </JarvisRing>
 
       {/* 실패했을 때만: 해결 방법(?)과 다시 시도. 자리는 항상 확보 */}
       <div className={styles.actions} data-shown={state === 'failed'}>

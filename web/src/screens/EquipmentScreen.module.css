@@ -1,0 +1,259 @@
+/* 2단계 장비 연결: 가운데 작아진 원형 표시 + 방사형 장비 원 + 연결 선 */
+.stage {
+  flex: 1;
+  position: relative;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 20px;
+  padding: 16px 16px 64px;
+}
+
+/* 정사각형 그래프. 안의 모든 크기·위치는 한 변에 대한 % (EquipmentScreen.tsx의 CENTER·ORBIT·NODE) */
+.graph {
+  position: relative;
+  width: min(640px, 68vh, 92vw);
+  aspect-ratio: 1;
+  container-type: inline-size;
+}
+
+.links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* 연결 선: 연결에 성공하면 가운데에서 장비 쪽으로 그려진다 */
+.link {
+  stroke: var(--pass);
+  stroke-width: 0.45;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 500ms ease-out;
+}
+
+.link[data-on='true'] {
+  stroke-dashoffset: 0;
+}
+
+/* 가운데 원: 1단계 크기에서 작아지며 시작 */
+.center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28%;
+  transform: translate(-50%, -50%);
+  animation: shrink 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.ring {
+  width: 100%;
+  --ring-font: clamp(11px, 2.4cqw, 15px);
+}
+
+@keyframes shrink {
+  from { transform: translate(-50%, -50%) scale(var(--shrink-from, 1)); }
+  to { transform: translate(-50%, -50%) scale(1); }
+}
+
+/* 장비 원 */
+.node {
+  position: absolute;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-rows: 1fr auto auto 1fr;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  padding: 0 6px;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: var(--step-idle);
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  /* 가운데 원이 작아진 뒤 차례로 나타난다 (투명도만) */
+  animation: appear 300ms ease-out both;
+  animation-delay: calc(450ms + var(--i) * 90ms);
+  transition: background-color 260ms, border-color 260ms, color 260ms;
+}
+
+.kind {
+  grid-row: 2;
+  font-size: clamp(11px, 2.3cqw, 16px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.name {
+  grid-row: 3;
+  font-size: clamp(9px, 1.6cqw, 12px);
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+
+.mark {
+  grid-row: 4;
+  align-self: start;
+  width: clamp(14px, 2.6cqw, 20px);
+  height: clamp(14px, 2.6cqw, 20px);
+  margin-top: 4px;
+}
+
+.mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* 연결 중: 원 둘레를 도는 호 (원과 글자는 제자리) */
+.node::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+
+.node[data-status='Running'] {
+  color: var(--text);
+}
+
+.node[data-status='Running']::before {
+  opacity: 1;
+  animation: spin 1s linear infinite;
+}
+
+.node[data-status='Pass'] {
+  background: var(--step-done);
+  border-color: var(--step-done-line);
+  color: var(--text);
+}
+
+.node[data-status='Pass'] .mark {
+  color: var(--pass);
+}
+
+.node[data-status='Fail'] {
+  border-color: var(--fail);
+  color: var(--text);
+}
+
+.node[data-status='Fail'] .mark {
+  color: var(--fail);
+}
+
+.node[data-status='Skipped'] {
+  border-style: dashed;
+  border-color: var(--line);
+}
+
+.node[data-selected='true'] {
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--fail);
+}
+
+.node:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--focus);
+}
+
+/* 아래 상태 줄: 자리는 항상 차지 */
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 42px;
+  visibility: hidden;
+}
+
+.status[data-shown='true'] {
+  visibility: visible;
+}
+
+.statusName {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.statusName small {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.statusText {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.statusText[data-status='Fail'] {
+  color: var(--fail);
+}
+
+.retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius);
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* [임시] 화면 설계용 버튼: 오른쪽 아래 구석, 배치에 영향 없음 */
+.temp {
+  position: absolute;
+  right: var(--gutter);
+  bottom: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 60vw;
+  font-size: var(--size-bar);
+  color: var(--muted);
+}
+
+.temp button {
+  padding: 3px 9px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--size-bar);
+  cursor: pointer;
+}
+
+.temp button:hover {
+  color: var(--text);
+}
+
+@keyframes appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

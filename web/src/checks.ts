@@ -85,5 +85,5 @@ export function useCheckStream(url: string, initial: CheckItem[]) {
   const failed = items.some((i) => i.severity === 'Required' && i.status !== 'Pass')
   const allPass = done && !interrupted && !failed && items.length > 0
 
-  return { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne }
+  return { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne, patch: setItems }
 }

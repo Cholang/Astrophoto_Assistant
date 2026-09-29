@@ -66,8 +66,9 @@ public static class AppServer
         api.MapGet("/equipment/plan", (EquipmentConnector connector, CancellationToken ct) => connector.PlanAsync(ct));
         api.MapGet("/equipment/connect", (EquipmentConnector connector, CancellationToken ct) =>
             TypedResults.ServerSentEvents(connector.RunAsync(ct), eventType: "check"));
-        api.MapGet("/equipment/connect/{id}", async (string id, EquipmentConnector connector, CancellationToken ct) =>
-            await connector.RetryAsync(id, ct) is { } result ? Results.Ok(result) : Results.NotFound());
+        // simulateFail=true: [임시] 화면 설계용 실패 만들기 (Equipment:Simulate가 켜져 있을 때만 동작)
+        api.MapGet("/equipment/connect/{id}", async (string id, bool? simulateFail, EquipmentConnector connector, CancellationToken ct) =>
+            await connector.RetryAsync(id, simulateFail ?? false, ct) is { } result ? Results.Ok(result) : Results.NotFound());
 
         MapProfiles(api.MapGroup("/profiles"));
 

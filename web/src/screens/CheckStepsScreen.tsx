@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import Button from '../components/Button'
 import StepChevrons from '../components/StepChevrons'
 import StepPanel from '../components/StepPanel'
 import { useCheckStream, type CheckItem } from '../checks'
 import styles from './CheckStepsScreen.module.css'
+
+/** [임시] 화면 설계용 버튼을 화면마다 따로 그릴 때 쓰는 손잡이 */
+export interface TempApi {
+  items: CheckItem[]
+  done: boolean
+  patch: Dispatch<SetStateAction<CheckItem[]>>
+}
 
 export interface StepScreenText {
   /** [제목, 설명]. 설명은 비워 둘 수 있다 */
@@ -28,6 +35,8 @@ export default function CheckStepsScreen({
   statusText = (item) => item.message,
   tempComplete,
   recheckUrl,
+  restartWhen,
+  temp,
 }: {
   url: string
   initial: CheckItem[]
@@ -40,8 +49,12 @@ export default function CheckStepsScreen({
   tempComplete?: { label: string; passMessage: string }
   /** 있으면 새로고침이 현재 항목 하나만 다시 확인한다. 없으면 전체를 처음부터 (차례가 중요한 단계) */
   recheckUrl?: (id: string) => string
+  /** 이 항목의 새로고침은 처음부터 다시 (예: 전원 허브 — 뒤 장비가 허브를 기다리고 있음) */
+  restartWhen?: (item: CheckItem) => boolean
+  /** [임시] 화면 설계용 버튼을 화면이 직접 그린다 (오른쪽 아래) */
+  temp?: (api: TempApi) => ReactNode
 }) {
-  const { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne } = useCheckStream(url, initial)
+  const { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne, patch } = useCheckStream(url, initial)
   const [picked, setPicked] = useState<string | null>(null)
 
   // 다시 확인하면 사용자가 고른 칸을 풀고 자동으로 따라가게 한다.
@@ -61,7 +74,7 @@ export default function CheckStepsScreen({
 
   // 새로고침: 현재 칸이 확인을 마쳤는데 통과하지 못했을 때만. 가능하면 그 항목 하나만 다시 확인한다.
   const canRetry = done && !allPass && (current.status === 'Fail' || current.status === 'Warn')
-  const retry = recheckUrl ? () => recheckOne(current.id, recheckUrl(current.id)) : restart
+  const retry = recheckUrl && !restartWhen?.(current) ? () => recheckOne(current.id, recheckUrl(current.id)) : restart
 
   return (
     <main className={styles.stage}>
@@ -110,6 +123,8 @@ export default function CheckStepsScreen({
           </button>
         </div>
       )}
+
+      {temp && <div className={styles.tempRow}>{temp({ items, done, patch })}</div>}
     </main>
   )
 }
