@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Astro.Core/Astro.Core.csproj" />
+    <Project Path="src/Astro.Desktop/Astro.Desktop.csproj" />
+    <Project Path="src/Astro.Nina/Astro.Nina.csproj" />
+    <Project Path="src/Astro.Server/Astro.Server.csproj" />
+  </Folder>
+</Solution>

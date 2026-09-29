@@ -1,0 +1,29 @@
+.track {
+  height: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 300ms ease-out;
+}
+
+.moving {
+  width: 30%;
+  height: 100%;
+  background: var(--accent);
+  animation: slide 1.6s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+
+/* 촬영용: 움직임 없이 멈춘 막대로 */
+:global(:root[data-theme='night']) .moving {
+  animation: none;
+  opacity: 0.6;
+}

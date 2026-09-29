@@ -16,10 +16,16 @@ flowchart TB
   subgraph S1["① 시작 · 연결"]
     A["앱 실행"]
     BOOT["부팅 로고"]:::screen
-    ENV["기본 환경 체크 화면 (0단계)<br/>ASCOM·NINA·NINA 실행·Advanced API<br/>·프로필의 가이더/솔버 설치 확인"]:::screen
-    ENVOK{"필수 항목<br/>모두 ✅?"}
-    ENVFIX["설치 방법 안내·[다시 확인]<br/>(권장 항목 ⚠️는 건너뛰기 가능)"]
-    B{"최초 실행?"}
+    PROF{"프로필 있음?"}
+    PSEL["프로필 선택 화면<br/>(하나여도 항상 표시, 마지막 프로필에 초점)"]:::screen
+    PNEW["새 프로필 만들기<br/>닉네임(필수)·메모·프로필 이미지"]:::screen
+    ENV["설치 확인 (0단계)<br/>ASCOM·NINA·Advanced API 플러그인·PHD2·ASTAP<br/>(파일·레지스트리만 확인, 아무것도 실행 안 함)"]:::screen
+    ENVOK{"5개 모두<br/>설치됨?"}
+    ENVFIX["설치 방법 안내·[다시 확인]"]
+    ENG["엔진 켜기 (1단계)<br/>N.I.N.A. 실행 → 연결 통로 응답 대기"]:::screen
+    ENGOK{"연결 통로<br/>응답?"}
+    ENGFIX["원인 안내·[다시 시도]<br/>(Advanced API 꺼짐·포트)"]
+    B{"저장된<br/>장비 구성 있음?"}
     C["장비 세팅 화면"]:::screen
     D["장비 선택 및 연결<br/>허브·적도의·포커서·카메라·열선·가이드카메라"]
     E1{"필수 장비<br/>연결 성공?"}
@@ -71,13 +77,22 @@ flowchart TB
   end
 
   %% ① 시작 · 연결
-  A --> BOOT --> ENV --> ENVOK
-  ENVOK -->|"예"| B
-  ENVOK -->|"아니오 (필수 항목 ❌)"| ENVFIX --> ENV
-  B -->|"예"| C --> D --> E1
+  A --> BOOT --> PROF
+  PROF -->|"아니오 (처음)"| PNEW
+  PROF -->|"예"| PSEL
+  PSEL -->|"새 프로필"| PNEW
+  PSEL -->|"프로필 고름"| ENV
+  PNEW -->|"만들기 (선택 화면 없이)"| ENV
+  ENV --> ENVOK
+  ENVOK -->|"예"| ENG
+  ENVOK -->|"아니오"| ENVFIX --> ENV
+  ENG --> ENGOK
+  ENGOK -->|"예"| B
+  ENGOK -->|"아니오"| ENGFIX --> ENG
+  B -->|"아니오"| C --> D --> E1
   E1 -->|"예"| L
   E1 -->|"아니오"| F
-  B -->|"아니오"| L
+  B -->|"예"| L
   L --> E2
   E2 -->|"예"| H
   E2 -->|"아니오"| F
@@ -123,7 +138,7 @@ flowchart TB
   classDef default fill:#FFFFFF,stroke:#6E6A80,color:#1E1C26
   classDef screen fill:#F24E1E,stroke:#B8330F,color:#FFFFFF
   classDef decide fill:#E8DEFF,stroke:#7B61FF,color:#221A40
-  class ENVOK,B,E1,E2,T,OK,AN,DONE,RES,WAIT,POST decide
+  class PROF,ENVOK,ENGOK,B,E1,E2,T,OK,AN,DONE,RES,WAIT,POST decide
   style S1 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S2 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S3 fill:none,stroke:#9A94B8,stroke-dasharray:5 4

@@ -1,0 +1,84 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 44px;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--size-bar);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.brand {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.devices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.device {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pass);
+}
+
+/* 끊긴 장비는 속이 빈 점 + 오류 색 (모양으로도 구분) */
+.device[data-connected='false'] {
+  color: var(--fail);
+}
+
+.device[data-connected='false'] .dot {
+  background: transparent;
+  border: 1.5px solid var(--fail);
+}
+
+.clock {
+  color: var(--text);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* 폰: 한 줄에 다 안 들어가면 화면 모드를 아랫줄로 */
+@media (max-width: 560px) {
+  .bar {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding-block: 8px;
+  }
+  .devices { display: none; }
+  .clock { margin-left: auto; }
+  .bar > :last-child { flex-basis: 100%; }
+}

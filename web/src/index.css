@@ -1,0 +1,116 @@
+/* 색·간격·글자 크기는 모두 여기 토큰으로만 쓴다 (DESIGN.md 7장).
+   세 테마(dark · light · night)가 같은 토큰 이름을 공유한다. 값은 모두 [임시].
+   글꼴은 앱 안에 포함한다 — 현장에는 인터넷이 없을 수 있다. */
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+
+:root,
+:root[data-theme='dark'] {
+  /* [임시] 다크: 푸른 기 없는 짙은 회색 + 호박색 */
+  --bg: #1e1f21;
+  --surface: #27292c;
+  --surface-2: #303236;
+  --line: #3b3e42;
+  --text: #ebe8e3;
+  --muted: #a3a09a;
+  --accent: #f0a93b;
+  --on-accent: #231800;
+  --pass: #72bf8e;
+  --fail: #f07a52;
+  --warn: #f0a93b;
+  --focus: #f0a93b;
+  --primary-bg: var(--accent);
+  --primary-border: var(--accent);
+  --primary-text: var(--on-accent);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  /* [임시] 라이트: 순백이 아닌 옅은 회색 + 진한 호박색 */
+  --bg: #f1f1ef;
+  --surface: #fafaf9;
+  --surface-2: #e7e7e4;
+  --line: #d6d6d2;
+  --text: #25272a;
+  --muted: #676a6e;
+  --accent: #b36b00;
+  --on-accent: #ffffff;
+  --pass: #2f7d4e;
+  --fail: #c24a26;
+  --warn: #a06200;
+  --focus: #b36b00;
+  --primary-bg: var(--accent);
+  --primary-border: var(--accent);
+  --primary-text: var(--on-accent);
+  color-scheme: light;
+}
+
+:root[data-theme='night'] {
+  /* [임시] 촬영용: 적색 외의 빛을 내지 않는다 — 모든 색의 초록·파랑 값은 00.
+     가장 밝은 요소도 어두운 빨강. 구분은 명도 차이와 모양으로. */
+  --bg: #000000;
+  --surface: #0c0000;
+  --surface-2: #170000;
+  --line: #3c0000;
+  --text: #b80000;
+  --muted: #720000;
+  --accent: #d00000;
+  --on-accent: #000000;
+  --pass: #b80000;
+  --fail: #b80000;
+  --warn: #b80000;
+  --focus: #d00000;
+  /* 넓은 면을 밝은 빨강으로 칠하지 않는다: 주 버튼도 어두운 바탕 + 빨간 글자 */
+  --primary-bg: #260000;
+  --primary-border: #8a0000;
+  --primary-text: #d00000;
+  color-scheme: dark;
+}
+
+:root {
+  --font: 'Pretendard Variable', Pretendard, 'Malgun Gothic', sans-serif;
+  --size-title: 30px;
+  --size-body: 15.5px;
+  --size-small: 13.5px;
+  --size-bar: 12.5px;
+  --radius: 6px;
+  --gutter: clamp(20px, 6vw, 96px);
+
+  font-family: var(--font);
+  font-size: var(--size-body);
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  /* 한글은 단어 중간에서 줄을 바꾸지 않는다 */
+  word-break: keep-all;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  caret-color: var(--accent);
+  scrollbar-color: var(--line) var(--bg);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+button { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* 촬영용: 이미지(프로필 사진, 프레임 미리보기)는 빨강 채널만 남긴다. 필터는 index.html에 정의 */
+:root[data-theme='night'] img { filter: url(#aa-red-only); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

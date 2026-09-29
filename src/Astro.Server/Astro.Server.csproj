@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Astro.Core\Astro.Core.csproj" />
+    <ProjectReference Include="..\Astro.Nina\Astro.Nina.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- dotnet run을 어디서 실행해도 프로젝트 폴더의 wwwroot·설정을 쓴다 -->
+    <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 데스크톱 창에서 실행할 때도 화면 파일을 찾을 수 있게 빌드 출력에 복사한다. -->
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

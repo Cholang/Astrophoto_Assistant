@@ -1,0 +1,28 @@
+.group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.option {
+  min-width: 56px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--size-bar);
+  cursor: pointer;
+}
+
+.option:hover {
+  color: var(--text);
+}
+
+.option[aria-checked='true'] {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}

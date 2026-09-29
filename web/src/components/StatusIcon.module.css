@@ -1,0 +1,20 @@
+.icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon[data-status='Pass'] { stroke: var(--pass); stroke-width: 2.2; }
+.icon[data-status='Fail'] { stroke: var(--fail); stroke-width: 2.2; }
+.icon[data-status='Warn'] { stroke: var(--warn); }
+.icon[data-status='Running'] { stroke: var(--accent); }
+
+.fill {
+  fill: var(--accent);
+  stroke: none;
+}

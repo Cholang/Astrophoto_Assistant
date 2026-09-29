@@ -1,0 +1,29 @@
+/* 부팅 로고: 글자 하나로만. 장식 없이 짧게 */
+.boot {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  padding: 0 var(--gutter);
+  gap: 6px;
+}
+
+.mark {
+  margin: 0;
+  font-size: clamp(64px, 12vw, 112px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--accent);
+}
+
+.name {
+  margin: 0;
+  font-size: 17px;
+  color: var(--muted);
+}
+
+.error {
+  margin: 24px 0 0;
+  color: var(--fail);
+  font-weight: 600;
+}

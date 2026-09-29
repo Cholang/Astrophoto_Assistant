@@ -1,0 +1,48 @@
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.labelLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.labelLine label {
+  font-weight: 600;
+}
+
+.optional {
+  margin-left: 8px;
+  font-size: var(--size-bar);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.count {
+  font-size: var(--size-bar);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.input {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+  border-color: transparent;
+}
