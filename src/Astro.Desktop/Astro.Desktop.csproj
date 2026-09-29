@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Astro.Server\Astro.Server.csproj" />
@@ -14,7 +14,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <AssemblyName>AA</AssemblyName>
+    <!-- 실행 파일 이름 = product.json의 name (Directory.Build.props) -->
+    <AssemblyName>$(AppProductName)</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

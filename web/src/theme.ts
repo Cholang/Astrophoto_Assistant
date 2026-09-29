@@ -5,10 +5,10 @@ export type Theme = 'dark' | 'light' | 'night'
 export const THEMES: { value: Theme; label: string }[] = [
   { value: 'dark', label: '어둡게' },
   { value: 'light', label: '밝게' },
-  { value: 'night', label: '촬영용' },
+  { value: 'night', label: '촬영' },
 ]
 
-const KEY = 'aa.theme'
+const KEY = 'app.theme'
 
 function load(): Theme {
   try {

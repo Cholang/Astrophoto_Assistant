@@ -1,9 +1,8 @@
-/* 제목 → 화면 폭을 채우는 쉐브론 띠 → 공통 영역, 오른쪽 아래 주 버튼 하나 */
+/* 제목 → 화면 폭을 채우는 쉐브론 띠 → 공통 영역 → (모두 통과 시) 가운데 "다음" */
 .stage {
   flex: 1;
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
@@ -29,22 +28,37 @@
 }
 
 .panel {
-  padding: 0 clamp(24px, 5vw, 72px) 28px;
+  padding: 0 clamp(24px, 5vw, 72px);
 }
 
-.footer {
-  position: sticky;
-  bottom: 0;
+/* 모두 통과: 공통 영역 상자는 없애고, 그 자리에 완료 문장 + 바로 아래 다음 버튼 */
+.complete {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  padding: 22px 28px;
+  text-align: center;
+  animation: appear 260ms ease-out both;
+}
+
+.complete p {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.complete > button {
+  min-width: 200px;
+}
+
+/* [임시] 화면 설계용 버튼: 작고 눈에 띄지 않게, 오른쪽 아래 */
+.tempRow {
+  margin-top: auto;
   display: flex;
   justify-content: flex-end;
-  align-items: center;
-  gap: 16px;
-  padding: 16px var(--gutter) 24px;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
+  padding: 24px var(--gutter);
 }
 
-/* [임시] 화면 설계용 버튼: 작고 눈에 띄지 않게, 주 버튼 왼쪽 */
 .temp {
   padding: 4px 10px;
   border: 1px dashed var(--line);
@@ -57,4 +71,9 @@
 
 .temp:hover {
   color: var(--text);
+}
+
+@keyframes appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

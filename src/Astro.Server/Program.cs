@@ -1,3 +1,3 @@
-﻿using Astro.Server;
+using Astro.Server;
 
-AaServer.Build(args).Run();
+AppServer.Build(args).Run();

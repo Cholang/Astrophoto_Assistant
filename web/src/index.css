@@ -72,7 +72,8 @@
   --size-body: 15.5px;
   --size-small: 13.5px;
   --size-bar: 12.5px;
-  --radius: 6px;
+  /* 모든 도형은 둥근 모서리 (DESIGN.md 3장). 상자·버튼·입력창은 이 값, 쉐브론은 SVG로 같은 느낌의 곡선 */
+  --radius: 10px;
   --gutter: clamp(20px, 6vw, 96px);
 
   font-family: var(--font);
@@ -109,7 +110,7 @@ button { font: inherit; color: inherit; }
 }
 
 /* 촬영용: 이미지(프로필 사진, 프레임 미리보기)는 빨강 채널만 남긴다. 필터는 index.html에 정의 */
-:root[data-theme='night'] img { filter: url(#aa-red-only); }
+:root[data-theme='night'] img { filter: url(#red-only); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

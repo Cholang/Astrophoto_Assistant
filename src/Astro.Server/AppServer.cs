@@ -8,10 +8,10 @@ using Microsoft.Extensions.Options;
 namespace Astro.Server;
 
 /// <summary>
-/// AA 코어 서버. 단독 실행(Program.cs)과 데스크톱 창(Astro.Desktop) 안에서 똑같이 만들어 쓴다.
+/// 코어 서버. 단독 실행(Program.cs)과 데스크톱 창(Astro.Desktop) 안에서 똑같이 만들어 쓴다.
 /// 화면(web/ 빌드 결과)은 wwwroot에서 제공한다.
 /// </summary>
-public static class AaServer
+public static class AppServer
 {
     public const string DefaultUrl = "http://localhost:5210";
 
@@ -37,8 +37,8 @@ public static class AaServer
         });
         builder.Services.AddTransient<SetupChecker>();
         builder.Services.AddTransient<EngineStarter>();
-        // 데이터 폴더(기본 %LOCALAPPDATA%\AA)는 설정 AA:DataDir로 바꿀 수 있다 (테스트용).
-        builder.Services.AddSingleton(new ProfileStore(builder.Configuration["AA:DataDir"]));
+        // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
+        builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
         var app = builder.Build();

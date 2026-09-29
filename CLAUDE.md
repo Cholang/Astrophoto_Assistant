@@ -2,6 +2,12 @@
 
 프로젝트 개요와 구성은 README.md를 볼 것.
 
+## 제품 이름
+
+- 제품 이름(현재 가칭 "AA")은 `product.json` 한 곳에서만 정한다. 코드·화면 문구에 이름을 직접 쓰지 말 것.
+- 웹은 `web/src/product.ts`의 `PRODUCT`, .NET은 `Astro.Core.Product`를 쓴다.
+- 문장 속 조사는 `PRODUCT.ga/reul/neun/wa`, `Product.Ga/Reul/Neun/Wa`로 (이름이 바뀌면 조사도 맞춰 바뀜).
+
 ## UI 작업 규칙
 
 - UI(`web/`, `src/Astro.Desktop`의 창 모양)를 만들거나 수정하기 전에 반드시 DESIGN.md를 읽을 것.

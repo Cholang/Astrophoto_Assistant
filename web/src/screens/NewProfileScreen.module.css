@@ -54,14 +54,10 @@
   color: var(--accent);
 }
 
+/* 아이콘: lucide Pencil */
 .editImage svg {
   width: 15px;
   height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
 }
 
 .fields {

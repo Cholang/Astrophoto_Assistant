@@ -14,6 +14,8 @@ export default function StepPanel({ item, statusText }: { item: CheckItem; statu
 
   return (
     <section className={styles.panel} data-status={item.status} aria-live="polite">
+      {/* 좁은 화면에서는 쉐브론에 번호만 있으므로 여기에 이름을 보여 준다 */}
+      <h2 className={styles.narrowTitle}>{item.title}</h2>
       {item.hint && <p className={styles.hint}>{item.hint}</p>}
 
       {item.status === 'Running' && <ProgressLine indeterminate label={`${item.title} 확인 중`} />}

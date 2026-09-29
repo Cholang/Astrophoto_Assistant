@@ -2,19 +2,10 @@
   width: 20px;
   height: 20px;
   flex: none;
-  fill: none;
-  stroke: var(--muted);
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  color: var(--muted);
 }
 
-.icon[data-status='Pass'] { stroke: var(--pass); stroke-width: 2.2; }
-.icon[data-status='Fail'] { stroke: var(--fail); stroke-width: 2.2; }
-.icon[data-status='Warn'] { stroke: var(--warn); }
-.icon[data-status='Running'] { stroke: var(--accent); }
-
-.fill {
-  fill: var(--accent);
-  stroke: none;
-}
+.icon[data-status='Pass'] { color: var(--pass); }
+.icon[data-status='Fail'] { color: var(--fail); }
+.icon[data-status='Warn'] { color: var(--warn); }
+.icon[data-status='Running'] { color: var(--accent); }

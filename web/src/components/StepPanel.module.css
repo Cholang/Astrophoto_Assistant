@@ -36,6 +36,17 @@
   text-decoration-thickness: 2px;
 }
 
+.narrowTitle {
+  display: none;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .narrowTitle { display: block; }
+}
+
 @media (max-width: 520px) {
   .panel { padding: 18px; }
 }

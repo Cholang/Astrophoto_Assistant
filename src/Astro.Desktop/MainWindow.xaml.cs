@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
+using Astro.Core;
 using Astro.Server;
 using Microsoft.AspNetCore.Builder;
 
@@ -23,13 +24,14 @@ public partial class MainWindow : Window
     };
 
     private static readonly string ThemeFile =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AA", "theme.txt");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Product.DataFolder, "theme.txt");
 
     private WebApplication? _server;
 
     public MainWindow()
     {
         InitializeComponent();
+        Title = string.IsNullOrEmpty(Product.Tagline) ? Product.Name : $"{Product.Name} · {Product.Tagline}";
         ApplyTheme(ReadSavedTheme());
         Loaded += OnLoaded;
         Closing += OnClosing;
@@ -39,7 +41,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            _server = AaServer.Build([], AaServer.DefaultUrl, AppContext.BaseDirectory);
+            _server = AppServer.Build([], AppServer.DefaultUrl, AppContext.BaseDirectory);
             await _server.StartAsync();
 
             await Web.EnsureCoreWebView2Async();
@@ -63,11 +65,11 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { }
             };
-            Web.Source = new Uri(AaServer.DefaultUrl);
+            Web.Source = new Uri(AppServer.DefaultUrl);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"AA를 시작하지 못했습니다.\n\n{ex.Message}", "AA", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"{Product.Reul} 시작하지 못했습니다.\n\n{ex.Message}", Product.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
         }
     }

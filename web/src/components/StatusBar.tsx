@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { PRODUCT } from '../product'
 import { profileImageUrl, type Profile } from '../profiles'
 import type { Theme } from '../theme'
 import ProfileAvatar from './ProfileAvatar'
@@ -29,7 +30,7 @@ export default function StatusBar({
 
   return (
     <header className={styles.bar}>
-      <span className={styles.brand}>AA</span>
+      <span className={styles.brand}>{PRODUCT.name}</span>
 
       {profile && (
         <span className={styles.profile}>
@@ -40,7 +41,7 @@ export default function StatusBar({
 
       <span className={styles.devices}>
         {devices === null ? (
-          <span className={styles.muted}>장비 연결 전</span>
+          <span className={styles.muted}>소프트웨어 준비</span>
         ) : (
           devices.map((d) => (
             <span key={d.name} className={styles.device} data-connected={d.connected}>

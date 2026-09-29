@@ -1,18 +1,19 @@
-/* 화면 폭을 가득 채우는 큰 화살표 띠. 화살표 모양은 clip-path로 만든다.
+/* 화면 폭을 가득 채우는 큰 화살표 띠. 모양은 칸 크기에 맞춰 그린 SVG(둥근 모서리).
    현재 칸은 120%로 키우므로 양옆·위아래에 그만큼 여유를 둔다. */
 .strip {
-  --notch: clamp(18px, 2.4vw, 36px);
+  --notch-px: 42;
   --h: clamp(170px, 38vh, 380px);
   list-style: none;
   margin: 0;
   padding: calc(var(--h) * 0.14) clamp(24px, 5vw, 72px) calc(var(--h) * 0.12);
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .item {
   flex: 1 1 0;
   min-width: 0;
+  height: var(--h);
   position: relative;
   transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
@@ -23,91 +24,109 @@
 }
 
 .shape {
-  position: relative;
-  height: var(--h);
-  background: var(--surface);
-  color: var(--text);
-  clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%, var(--notch) 50%);
-  transition: background-color 260ms, color 260ms;
+  position: absolute;
+  inset: 0;
+  overflow: visible;
 }
 
-.item:first-child .shape {
-  border-radius: var(--radius) 0 0 var(--radius);
-  clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%);
+.shape path {
+  fill: var(--surface);
+  stroke: transparent;
+  stroke-width: 2;
+  transition: fill 260ms;
 }
 
-.item[data-current='true'] .shape {
-  background: var(--primary-bg);
-  color: var(--primary-text);
+.item:not([data-current='true']):hover .shape path {
+  fill: var(--surface-2);
 }
 
-.item:not([data-current='true']) .shape:hover {
-  background: var(--surface-2);
+.item[data-current='true'] .shape path {
+  fill: var(--primary-bg);
 }
 
+/* 촬영(적색) 테마: 면의 명도 차이만으로는 경계가 잘 안 보여 외곽선을 그린다.
+   선은 도형 크기를 바꾸지 않으므로 다른 요소의 위치는 그대로다. */
+:global(:root[data-theme='night']) .shape path {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+
+:global(:root[data-theme='night']) .item[data-current='true'] .shape path {
+  stroke: var(--primary-border);
+}
+
+/* 키보드 초점은 화살표 테두리로 보여 준다 (촬영 테마의 외곽선보다 우선) */
+.item:has(.select:focus-visible) .shape path,
+:global(:root[data-theme='night']) .item:has(.select:focus-visible) .shape path {
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+
+/* 세 줄 그리드: 위 빈 줄 · 가운데 이름 · 아래 체크 자리.
+   위아래 줄이 같은 1fr이라 이름은 항상 칸의 세로 정중앙에 있고, 체크가 생겨도 움직이지 않는다. */
 .select {
+  position: relative;
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 0 calc(var(--notch) + 12px) 0 calc(var(--notch) + 18px);
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  justify-items: center;
+  row-gap: 14px;
+  padding: 0 38px;
   border: none;
   background: transparent;
-  color: inherit;
-  text-align: left;
+  color: var(--text);
+  text-align: center;
   cursor: pointer;
+  transition: color 260ms;
 }
 
-.item:first-child .select {
-  padding-left: 22px;
-}
-
-/* clip-path가 포커스 테두리를 잘라내므로 안쪽 선으로 보여 준다 */
 .select:focus-visible,
 .retry:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--focus);
 }
 
-.select :global(svg) {
-  width: clamp(28px, 3.2vw, 44px);
-  height: clamp(28px, 3.2vw, 44px);
+.item[data-current='true'] .select,
+.item[data-current='true'] .retry {
+  color: var(--primary-text);
 }
 
-.item[data-current='true'] .select :global(svg) {
-  stroke: var(--primary-text);
-}
-
-.item[data-status='Pending'] .text,
-.item[data-status='Skipped'] .text {
+.item[data-status='Pending'] .title {
   opacity: 0.6;
 }
 
-.text {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
+.title,
+.number {
+  grid-row: 2;
 }
 
 .title {
-  font-size: clamp(15px, 1.5vw, 22px);
+  font-size: clamp(15px, 1.6vw, 24px);
   font-weight: 700;
   line-height: 1.25;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
-.term {
-  font-size: clamp(12px, 1vw, 15px);
-  opacity: 0.75;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 설치 완료: 이름 아래 가운데 큰 체크. 자리는 항상 있고, 보이기만 바뀐다 */
+.check {
+  grid-row: 3;
+  align-self: start;
+  width: clamp(34px, 3.6vw, 56px);
+  height: clamp(34px, 3.6vw, 56px);
+  color: var(--pass);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 260ms, visibility 0s 260ms;
+}
+
+.check[data-shown='true'] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 260ms;
+}
+
+.item[data-current='true'] .check {
+  color: var(--primary-text);
 }
 
 .number {
@@ -116,20 +135,21 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 현재 칸 안의 새로고침(다시 확인) 버튼: 아래쪽, 화살표 끝 안쪽 */
+/* 현재 칸 안의 새로고침(다시 확인) 버튼: 아래쪽 가운데 */
 .retry {
   position: absolute;
-  right: calc(var(--notch) + 10px);
-  bottom: 12px;
-  width: 34px;
-  height: 34px;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1.5px solid currentColor;
+  border: none;
   border-radius: 50%;
   background: transparent;
-  color: inherit;
+  color: var(--text);
   cursor: pointer;
   opacity: 0.85;
 }
@@ -138,47 +158,27 @@
   opacity: 1;
 }
 
+.retry:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
 .retry svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  width: 22px;
+  height: 22px;
 }
 
-/* 중간 폭: 원어 줄은 빼고 한글 이름만 (원어는 아래 공통 영역 툴팁에) */
-@media (max-width: 1000px) {
-  .term { display: none; }
-  .title { -webkit-line-clamp: 3; }
-}
-
-/* 좁은 화면: 칸에는 아이콘과 번호만 */
+/* 좁은 화면: 칸에는 번호와 체크만 */
 @media (max-width: 720px) {
   .strip {
-    --notch: 10px;
+    --notch-px: 12;
     --h: 88px;
-    gap: 3px;
+    gap: 4px;
     padding-inline: 16px;
   }
-  .select {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 0 var(--notch) 0 calc(var(--notch) + 4px);
-  }
-  .item:first-child .select { padding-left: 6px; }
-  .select :global(svg) { width: 20px; height: 20px; }
-  .text { display: none; }
+  .select { padding: 0 14px; row-gap: 4px; }
+  .title { display: none; }
   .number { display: inline; }
-  .retry {
-    right: 50%;
-    bottom: 4px;
-    transform: translateX(50%);
-    width: 22px;
-    height: 22px;
-  }
-  .retry svg { width: 12px; height: 12px; }
+  .check { width: 20px; height: 20px; }
+  .retry { bottom: 2px; width: 24px; height: 24px; }
+  .retry svg { width: 14px; height: 14px; }
 }

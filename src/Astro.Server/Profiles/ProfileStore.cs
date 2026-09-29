@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Astro.Core;
 
 namespace Astro.Server.Profiles;
 
@@ -8,7 +9,7 @@ public sealed record Profile(string Id, string Nickname, string? Memo, bool HasI
 public sealed record NewProfile(string? Nickname, string? Memo);
 
 /// <summary>
-/// 프로필 목록은 %LOCALAPPDATA%\AA\profiles.json, 이미지는 profile-images\{id}.webp에 둔다.
+/// 프로필 목록은 %LOCALAPPDATA%\<데이터 폴더>\profiles.json, 이미지는 profile-images\{id}.webp에 둔다.
 /// 서버 한 곳에서 관리하므로 PC 화면과 폰 화면이 같은 목록을 본다.
 /// </summary>
 public sealed class ProfileStore
@@ -27,7 +28,7 @@ public sealed class ProfileStore
 
     public ProfileStore(string? root = null)
     {
-        root ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AA");
+        root ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Product.DataFolder);
         _file = Path.Combine(root, "profiles.json");
         _imageDir = Path.Combine(root, "profile-images");
     }

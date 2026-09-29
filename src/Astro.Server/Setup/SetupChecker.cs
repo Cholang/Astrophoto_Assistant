@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Astro.Core;
 using Astro.Core.Setup;
 using Microsoft.Extensions.Options;
 
@@ -31,26 +32,27 @@ public sealed class SetupOptions
 public sealed class SetupChecker(IOptions<NinaOptions> nina, IOptions<SetupOptions> setup)
 {
     // 화면은 이 순서대로 쉐브론 칸을 그린다 (web/src/screens/SetupCheckScreen.tsx와 같은 순서).
+    // 칸에는 실제 설치할 프로그램 이름만, 무엇을 하는 프로그램인지는 Hint(공통 영역)에.
     // Diagnosis.Fix는 상태 옆 ? 툴팁, ActionLabel/ActionUrl은 설치 링크로 쓰인다.
     private static readonly (CheckItem Item, Diagnosis HowToInstall)[] Items =
     [
-        (new("ascom", "장비 드라이버 기반", "ASCOM Platform",
+        (new("ascom", "ASCOM Platform", null,
             "여러 제조사의 망원경·카메라 드라이버가 공통으로 쓰는 기반 프로그램입니다."),
          new([], "ASCOM 공식 페이지에서 설치 파일을 받아 설치한 뒤, 새로고침을 눌러 주세요. 설치 후 PC를 다시 시작해야 할 수 있습니다.",
              "ASCOM Platform 내려받기", "https://ascom-standards.org/Downloads/Index.htm")),
-        (new("nina", "촬영 엔진", "N.I.N.A.",
-            "실제로 장비를 움직이고 사진을 찍는 프로그램입니다. AA는 N.I.N.A.를 통해 장비를 다룹니다."),
+        (new("nina", "N.I.N.A.", null,
+            $"실제로 장비를 움직이고 사진을 찍는 프로그램입니다. {Product.Neun} N.I.N.A.를 통해 장비를 다룹니다."),
          new([], "N.I.N.A. 공식 페이지에서 설치한 뒤 새로고침을 눌러 주세요. 기본 위치가 아닌 곳에 설치했다면 설정에서 경로를 지정할 수 있습니다.",
              "N.I.N.A. 내려받기", "https://nighttime-imaging.eu/download/")),
-        (new("advanced-api", "N.I.N.A. 연결 통로", "Advanced API",
-            "AA가 N.I.N.A.에 명령을 보내고 상태를 받는 통로입니다. N.I.N.A. 플러그인으로 설치합니다."),
+        (new("advanced-api", "Advanced API", null,
+            $"{Product.Ga} N.I.N.A.에 명령을 보내고 상태를 받는 통로입니다. N.I.N.A. 플러그인으로 설치합니다."),
          new([], "N.I.N.A.를 열고 플러그인(Plugins) 탭에서 'Advanced API'를 찾아 설치한 뒤, N.I.N.A.를 다시 시작하고 새로고침을 눌러 주세요.",
              "Advanced API 안내 페이지", "https://github.com/christian-photo/ninaAPI")),
-        (new("phd2", "가이딩 프로그램", "PHD2",
+        (new("phd2", "PHD2", null,
             "보조 카메라로 별 하나를 계속 지켜보며 망원경의 작은 흔들림을 바로잡는 프로그램입니다."),
          new([], "PHD2 공식 페이지에서 설치한 뒤 새로고침을 눌러 주세요.",
              "PHD2 내려받기", "https://openphdguiding.org/downloads/")),
-        (new("astap", "별 위치 분석", "ASTAP",
+        (new("astap", "ASTAP", null,
             "사진 속 별 배치를 분석해 망원경이 실제로 어디를 보고 있는지 계산하는 프로그램입니다(플레이트 솔빙)."),
          new([], "ASTAP과 별 데이터(예: D50)를 함께 설치한 뒤 새로고침을 눌러 주세요.",
              "ASTAP 내려받기", "https://www.hnsky.org/astap.htm")),

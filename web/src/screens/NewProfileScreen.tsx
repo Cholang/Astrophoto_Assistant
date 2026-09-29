@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Button from '../components/Button'
 import ProfileAvatar from '../components/ProfileAvatar'
@@ -62,10 +63,7 @@ export default function NewProfileScreen({ onCreated, onCancel }: { onCreated: (
             <ProfileAvatar src={preview} size="hero" />
             {/* 이미지 변경: 이미지 오른쪽 아래의 정사각형 연필 버튼 (이미지 한 변의 약 1/6) */}
             <button type="button" className={styles.editImage} aria-label="이미지 변경" title="이미지 변경" onClick={() => fileInput.current?.click()}>
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M11.2 2.3l2.5 2.5-7.9 7.9-3.2.7.7-3.2z" />
-                <path d="M9.8 3.7l2.5 2.5" />
-              </svg>
+              <Pencil strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
         </div>

@@ -5,12 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
-    <title>AA</title>
+    <title>%PRODUCT_NAME%</title>
   </head>
   <body>
     <!-- 촬영용 적색 테마: 이미지의 밝기만 남겨 빨강 채널로만 내보낸다 (초록·파랑은 0) -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
-      <filter id="aa-red-only" color-interpolation-filters="sRGB">
+      <filter id="red-only" color-interpolation-filters="sRGB">
         <feColorMatrix type="matrix" values="0.21 0.5 0.08 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" />
       </filter>
     </svg>

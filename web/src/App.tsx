@@ -6,6 +6,7 @@ import EngineStartScreen from './screens/EngineStartScreen'
 import NewProfileScreen from './screens/NewProfileScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import SetupCheckScreen from './screens/SetupCheckScreen'
+import { PRODUCT } from './product'
 import { useTheme } from './theme'
 import styles from './App.module.css'
 
@@ -90,7 +91,7 @@ export default function App() {
         </div>
       )}
       <div className={styles.screen} data-shown={shown}>
-        {phase === 'boot' && <BootScreen error={loadError ? 'AA 내부 서버에 연결하지 못했습니다. AA를 다시 실행해 주세요.' : null} />}
+        {phase === 'boot' && <BootScreen error={loadError ? `${PRODUCT.name} 내부 서버에 연결하지 못했습니다. ${PRODUCT.reul} 다시 실행해 주세요.` : null} />}
         {phase === 'profiles' && <ProfileScreen profiles={profiles ?? []} onSelect={choose} onNew={() => setPhase('newProfile')} />}
         {phase === 'newProfile' && (
           <NewProfileScreen onCreated={created} onCancel={(profiles ?? []).length > 0 ? () => setPhase('profiles') : undefined} />

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Astro.Core;
 using Astro.Core.Setup;
 using Astro.Nina;
 using Astro.Server.Setup;
@@ -14,9 +15,9 @@ namespace Astro.Server.Engine;
 public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> options)
 {
     private static readonly CheckItem Launch = new("launch", "N.I.N.A. 켜기", null,
-        "N.I.N.A.가 꺼져 있으면 AA가 대신 켭니다.");
+        $"N.I.N.A.가 꺼져 있으면 {Product.Ga} 대신 켭니다.");
     private static readonly CheckItem Connect = new("connect", "연결 통로 응답", "Advanced API",
-        "AA가 N.I.N.A.에 말을 걸고 대답을 받는지 확인합니다.");
+        $"{Product.Ga} N.I.N.A.에 말을 걸고 대답을 받는지 확인합니다.");
 
     public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -34,7 +35,7 @@ public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> opti
             if (ninaExe is null || !opt.LaunchIfNotRunning)
             {
                 yield return Launch.Fail("N.I.N.A.가 꺼져 있습니다.", new Diagnosis(
-                    ninaExe is null ? ["N.I.N.A. 실행 파일을 찾지 못했습니다."] : ["설정에서 AA가 N.I.N.A.를 자동으로 켜지 않도록 해 두었습니다."],
+                    ninaExe is null ? ["N.I.N.A. 실행 파일을 찾지 못했습니다."] : [$"설정에서 {Product.Ga} N.I.N.A.를 자동으로 켜지 않도록 해 두었습니다."],
                     "N.I.N.A.를 직접 실행한 뒤 새로고침을 눌러 주세요."));
                 yield return Connect.Skip("N.I.N.A.가 켜지면 확인합니다.");
                 yield break;
@@ -58,7 +59,7 @@ public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> opti
                 yield return Connect.Skip("N.I.N.A.가 켜지면 확인합니다.");
                 yield break;
             }
-            yield return Launch.Pass("AA가 N.I.N.A.를 켰습니다");
+            yield return Launch.Pass($"{Product.Ga} N.I.N.A.를 켰습니다");
         }
 
         // 2. 연결 통로 응답 대기
@@ -74,7 +75,7 @@ public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> opti
 
         yield return version is not null
             ? Connect.Pass($"연결되었습니다 (Advanced API {version})")
-            : Connect.Fail("N.I.N.A.가 AA의 연결에 응답하지 않습니다.", new Diagnosis(
+            : Connect.Fail($"N.I.N.A.가 {Product.Name}의 연결에 응답하지 않습니다.", new Diagnosis(
                 ["N.I.N.A.의 옵션에서 Advanced API가 꺼져 있습니다.",
                  "Advanced API의 포트가 1888이 아닙니다.",
                  "플러그인을 설치한 뒤 N.I.N.A.를 다시 시작하지 않았습니다."],

@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    제품 이름은 저장소 맨 위의 product.json 한 곳에서만 정한다.
+    .NET 프로젝트는 여기서 읽어 쓰고 (실행 파일 이름, Astro.Core.Product),
+    web/은 vite.config.ts에서 같은 파일을 읽는다.
+  -->
+  <PropertyGroup>
+    <AppProductJson>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)product.json'))</AppProductJson>
+    <AppProductName>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"name"\s*:\s*"([^"]*)".*', '$1'))</AppProductName>
+    <AppProductFullName>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"fullName"\s*:\s*"([^"]*)".*', '$1'))</AppProductFullName>
+    <AppProductTagline>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"tagline"\s*:\s*"([^"]*)".*', '$1'))</AppProductTagline>
+    <AppDataFolder>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"dataFolder"\s*:\s*"([^"]*)".*', '$1'))</AppDataFolder>
+  </PropertyGroup>
+
+  <!-- Astro.Core.Product가 실행 중에 읽는 값 -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Astro.Core'">
+    <AssemblyMetadata Include="AppProductName" Value="$(AppProductName)" />
+    <AssemblyMetadata Include="AppProductFullName" Value="$(AppProductFullName)" />
+    <AssemblyMetadata Include="AppProductTagline" Value="$(AppProductTagline)" />
+    <AssemblyMetadata Include="AppDataFolder" Value="$(AppDataFolder)" />
+  </ItemGroup>
+</Project>

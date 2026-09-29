@@ -6,15 +6,19 @@ import { useCheckStream, type CheckItem } from '../checks'
 import styles from './CheckStepsScreen.module.css'
 
 export interface StepScreenText {
-  running: [string, string]
-  failed: [string, string]
-  passed: [string, string]
+  /** [제목, 설명]. 설명은 비워 둘 수 있다 */
+  running: [string, string?]
+  failed: [string, string?]
+  passed: [string, string?]
+  /** 모두 통과했을 때 공통 영역 자리에 보여 줄 문장. 바로 아래에 "다음" 버튼 */
+  completed: string
   stripLabel: string
 }
 
 /**
  * 0단계(설치 확인)와 1단계(엔진 켜기)가 함께 쓰는 화면 틀:
- * 제목·설명 → 화면 폭을 채우는 큰 쉐브론 띠(현재 칸 안에 새로고침) → 하단 공통 영역 → 오른쪽 아래 "다음".
+ * 제목(·설명) → 화면 폭을 채우는 큰 쉐브론 띠(현재 칸 안에 새로고침) → 하단 공통 영역
+ * → 모두 통과하면 가운데 아래에 "다음" (눌러야 넘어간다).
  */
 export default function CheckStepsScreen({
   url,
@@ -39,13 +43,6 @@ export default function CheckStepsScreen({
   // 다시 확인하면 사용자가 고른 칸을 풀고 자동으로 따라가게 한다.
   useEffect(() => setPicked(null), [run])
 
-  // 전부 통과하면 잠깐 보여 주고 자동으로 넘어간다 ("다음"을 눌러도 된다).
-  useEffect(() => {
-    if (!allPass) return
-    const t = setTimeout(onContinue, 1500)
-    return () => clearTimeout(t)
-  }, [allPass, onContinue])
-
   // 현재 칸: 사용자가 고른 칸 → 확인 중인 칸 → 첫 실패 칸 → 마지막 칸
   const auto =
     items.find((i) => i.status === 'Running') ??
@@ -60,7 +57,7 @@ export default function CheckStepsScreen({
     <main className={styles.stage}>
       <div className={styles.intro}>
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
 
       <StepChevrons
@@ -71,13 +68,23 @@ export default function CheckStepsScreen({
         label={text.stripLabel}
       />
 
+      {/* 모두 통과하면 공통 영역 자리에 완료 문장과 바로 아래 "다음" (눌러야 넘어간다) */}
       <div className={styles.panel}>
-        <StepPanel item={current} statusText={statusText(current)} />
+        {allPass ? (
+          <div className={styles.complete}>
+            <p>{text.completed}</p>
+            <Button variant="primary" onClick={onContinue} autoFocus>
+              다음
+            </Button>
+          </div>
+        ) : (
+          <StepPanel item={current} statusText={statusText(current)} />
+        )}
       </div>
 
-      <footer className={styles.footer}>
-        {/* 지금 선택된 칸 하나만 설치된 것으로 바꾸고, 다음 미설치 칸으로 자동으로 옮겨 간다 */}
-        {tempComplete && done && current.status !== 'Pass' && (
+      {/* 지금 선택된 칸 하나만 설치된 것으로 바꾸고, 다음 미설치 칸으로 자동으로 옮겨 간다 */}
+      {tempComplete && done && current.status !== 'Pass' && (
+        <div className={styles.tempRow}>
           <button
             type="button"
             className={styles.temp}
@@ -88,11 +95,8 @@ export default function CheckStepsScreen({
           >
             {tempComplete.label.replace('{title}', current.title)}
           </button>
-        )}
-        <Button variant="primary" disabled={!allPass} onClick={onContinue}>
-          다음
-        </Button>
-      </footer>
+        </div>
+      )}
     </main>
   )
 }

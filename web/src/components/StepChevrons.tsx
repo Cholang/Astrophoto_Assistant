@@ -1,10 +1,11 @@
-import StatusIcon, { type Status } from './StatusIcon'
+import { Check, RotateCw } from 'lucide-react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import type { Status } from './StatusIcon'
 import styles from './StepChevrons.module.css'
 
 export interface ChevronStep {
   id: string
   title: string
-  term?: string | null
   status: Status
 }
 
@@ -19,6 +20,8 @@ const STATUS_WORD: Record<Status, string> = {
 
 /**
  * 한 단계 안의 하위 항목을 화면 폭을 가득 채우는 큰 화살표 띠로 보여 준다 (설치 확인, 엔진 켜기 등).
+ * 칸에는 이름만 쓰고, 통과하면 이름 아래 가운데에 큰 체크 표시. 실패 표시는 칸에 두지 않는다.
+ * 이름은 칸의 세로 정중앙에 고정 — 체크 자리를 미리 확보해 두어 체크가 생겨도 이름이 움직이지 않는다.
  * 현재 칸은 채우고 120%로 키운다 (전환은 애니메이션). 칸을 누르면 그 항목이 현재가 된다.
  * onRetry가 있으면 현재 칸 안에 새로고침(다시 확인) 버튼을 둔다.
  */
@@ -35,41 +38,93 @@ export default function StepChevrons({
   onRetry?: () => void
   label: string
 }) {
+  const size = useCellSize()
+
   return (
-    <ol className={styles.strip} aria-label={label}>
+    <ol className={styles.strip} aria-label={label} ref={size.ref}>
       {steps.map((s, i) => {
         const isCurrent = s.id === current
         return (
           <li key={s.id} className={styles.item} data-status={s.status} data-current={isCurrent}>
-            <div className={styles.shape}>
-              <button
-                type="button"
-                className={styles.select}
-                aria-current={isCurrent ? 'step' : undefined}
-                aria-label={`${i + 1}. ${s.title}${s.term ? ` (${s.term})` : ''}: ${STATUS_WORD[s.status]}`}
-                onClick={() => onSelect(s.id)}
-              >
-                <StatusIcon status={s.status} />
-                <span className={styles.text}>
-                  <span className={styles.title}>{s.title}</span>
-                  {s.term && <span className={styles.term}>{s.term}</span>}
-                </span>
-                <span className={styles.number} aria-hidden="true">
-                  {i + 1}
-                </span>
+            {size.w > 0 && (
+              <svg className={styles.shape} width={size.w} height={size.h} aria-hidden="true">
+                <path d={chevronPath(size.w, size.h, i === 0, size.notch)} />
+              </svg>
+            )}
+            <button
+              type="button"
+              className={styles.select}
+              aria-current={isCurrent ? 'step' : undefined}
+              aria-label={`${i + 1}. ${s.title}: ${STATUS_WORD[s.status]}`}
+              onClick={() => onSelect(s.id)}
+            >
+              <span className={styles.title}>{s.title}</span>
+              <span className={styles.number} aria-hidden="true">
+                {i + 1}
+              </span>
+              {/* 체크 자리는 처음부터 확보해 두고 통과하면 보이기만 한다 — 이름 위치가 움직이지 않게 */}
+              <Check className={styles.check} data-shown={s.status === 'Pass'} strokeWidth={2.5} aria-hidden="true" />
+            </button>
+            {isCurrent && onRetry && (
+              <button type="button" className={styles.retry} aria-label="다시 확인" title="다시 확인" onClick={onRetry}>
+                <RotateCw strokeWidth={2} aria-hidden="true" />
               </button>
-              {isCurrent && onRetry && (
-                <button type="button" className={styles.retry} aria-label="다시 확인" title="다시 확인" onClick={onRetry}>
-                  <svg viewBox="0 0 20 20" aria-hidden="true">
-                    <path d="M16 10a6 6 0 1 1-1.8-4.3" />
-                    <path d="M16.2 3.2v3.3h-3.3" />
-                  </svg>
-                </button>
-              )}
-            </div>
+            )}
           </li>
         )
       })}
     </ol>
   )
+}
+
+/** 칸 하나의 크기를 재서 화살표 모양을 그 크기에 맞게 그린다 (모든 칸은 같은 크기). */
+function useCellSize() {
+  const ref = useRef<HTMLOListElement>(null)
+  const [size, setSize] = useState({ w: 0, h: 0, notch: 0 })
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => {
+      const cell = el.querySelector('li')
+      if (!cell) return
+      const w = cell.clientWidth
+      const h = cell.clientHeight
+      const notch = parseFloat(getComputedStyle(el).getPropertyValue('--notch-px')) || 24
+      setSize((s) => (s.w === w && s.h === h && s.notch === notch ? s : { w, h, notch }))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return { ref, ...size }
+}
+
+/** 둥근 모서리 화살표. 첫 칸은 왼쪽이 평평하다. 뾰족한 끝·들어간 곳까지 모두 둥글게. */
+function chevronPath(w: number, h: number, first: boolean, notch: number) {
+  const pts: [number, number][] = first
+    ? [[0, 0], [w - notch, 0], [w, h / 2], [w - notch, h], [0, h]]
+    : [[0, 0], [w - notch, 0], [w, h / 2], [w - notch, h], [0, h], [notch, h / 2]]
+  return roundedPolygon(pts, Math.min(14, h / 8))
+}
+
+function roundedPolygon(pts: [number, number][], r: number) {
+  const n = pts.length
+  let d = ''
+  for (let i = 0; i < n; i++) {
+    const [px, py] = pts[(i - 1 + n) % n]
+    const [cx, cy] = pts[i]
+    const [nx, ny] = pts[(i + 1) % n]
+    const toPrev = Math.hypot(px - cx, py - cy)
+    const toNext = Math.hypot(nx - cx, ny - cy)
+    const k = Math.min(r, toPrev / 2, toNext / 2)
+    const ax = cx + ((px - cx) / toPrev) * k
+    const ay = cy + ((py - cy) / toPrev) * k
+    const bx = cx + ((nx - cx) / toNext) * k
+    const by = cy + ((ny - cy) / toNext) * k
+    d += `${i === 0 ? 'M' : 'L'}${ax.toFixed(1)},${ay.toFixed(1)} Q${cx},${cy} ${bx.toFixed(1)},${by.toFixed(1)} `
+  }
+  return d + 'Z'
 }
