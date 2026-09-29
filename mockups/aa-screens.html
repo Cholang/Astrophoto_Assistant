@@ -1,0 +1,790 @@
+<title>AA 화면 모음</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<style>
+/* 레이아웃: 위에 테마 선택, 아래로 화면 목업(1280×800 기준을 폭에 맞춰 축소)을 차례대로.
+   페이지 바깥(설명 부분)은 보는 사람의 라이트/다크를 따르고, 목업 안은 앱의 세 테마 토큰을 그대로 쓴다. */
+:root {
+  --page-bg: #ececea;
+  --page-surface: #f7f7f5;
+  --page-text: #25272a;
+  --page-muted: #62656a;
+  --page-line: #d4d4cf;
+  --page-accent: #9a5c00;
+  --font: 'Pretendard Variable', Pretendard, 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94;
+    --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94;
+  --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page-bg); color: var(--page-text);
+  font-family: var(--font); font-size: 15px; line-height: 1.6; word-break: keep-all;
+}
+.page { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 64px; display: grid; gap: 40px; }
+header.top { display: grid; gap: 14px; }
+header.top h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
+header.top p { margin: 0; color: var(--page-muted); max-width: 68ch; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.controls span { font-size: 13px; color: var(--page-muted); }
+.seg { display: inline-grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-surface); }
+.seg button { min-width: 72px; padding: 5px 14px; border: none; border-radius: 8px; background: transparent; color: var(--page-muted); font: inherit; font-size: 14px; cursor: pointer; }
+.seg button[aria-checked="true"] { background: var(--page-line); color: var(--page-text); font-weight: 700; }
+.seg button:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
+
+section.shot { display: grid; gap: 12px; }
+.shot-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.shot-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.shot-head .step { font-size: 13px; font-weight: 700; color: var(--page-accent); font-variant-numeric: tabular-nums; }
+.shot-head p { margin: 0; flex-basis: 100%; color: var(--page-muted); font-size: 14px; max-width: 80ch; }
+.frame { width: 100%; max-width: 100%; aspect-ratio: 16 / 10; position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--page-line); }
+.note { font-size: 13px; color: var(--page-muted); border-top: 1px solid var(--page-line); padding-top: 16px; max-width: 80ch; }
+
+/* ───────── 앱 목업: web/src/index.css 토큰 그대로 ───────── */
+.app {
+  position: absolute; left: 0; top: 0; width: 1280px; height: 800px; transform-origin: 0 0; transform: scale(var(--s, 1));
+  display: flex; flex-direction: column;
+  font-family: var(--font); font-size: 15.5px; line-height: 1.6; color: var(--text); background: var(--bg);
+  --size-title: 30px; --size-bar: 12.5px; --radius: 10px; --gutter: 96px;
+}
+.app, .app[data-t="dark"] {
+  --bg: #1e1f21; --surface: #27292c; --surface-2: #303236; --line: #3b3e42; --text: #ebe8e3; --muted: #a3a09a;
+  --accent: #f0a93b; --on-accent: #231800; --pass: #72bf8e; --fail: #f07a52; --warn: #f0a93b;
+  --primary-bg: #f0a93b; --primary-border: #f0a93b; --primary-text: #231800;
+  --step-idle: #242528; --step-done: #303337; --step-done-line: #5e8f6f;
+}
+.app[data-t="light"] {
+  --bg: #f1f1ef; --surface: #fafaf9; --surface-2: #e7e7e4; --line: #d6d6d2; --text: #25272a; --muted: #676a6e;
+  --accent: #b36b00; --on-accent: #ffffff; --pass: #2f7d4e; --fail: #c24a26; --warn: #a06200;
+  --primary-bg: #b36b00; --primary-border: #b36b00; --primary-text: #ffffff;
+  --step-idle: #e7e7e4; --step-done: #ffffff; --step-done-line: #8fb89d;
+}
+.app[data-t="night"] {
+  --bg: #000000; --surface: #0c0000; --surface-2: #170000; --line: #3c0000; --text: #b80000; --muted: #720000;
+  --accent: #d00000; --on-accent: #000000; --pass: #b80000; --fail: #b80000; --warn: #b80000;
+  --primary-bg: #260000; --primary-border: #8a0000; --primary-text: #d00000;
+  --step-idle: #060000; --step-done: #150000; --step-done-line: #6a0000;
+}
+.app svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 상태 줄 */
+.bar { display: flex; align-items: center; gap: 20px; min-height: 44px; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); font-size: var(--size-bar); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar .brand { font-weight: 800; letter-spacing: 0.04em; color: var(--text); }
+.bar .prof { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.bar .devs { display: flex; gap: 14px; flex: 1; }
+.bar .dev { display: inline-flex; align-items: center; gap: 6px; }
+.bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pass); }
+.bar .clock { color: var(--text); }
+.tsw { display: grid; grid-template-columns: repeat(3, 1fr); padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); }
+.tsw span { min-width: 56px; padding: 3px 10px; border-radius: 8px; color: var(--muted); text-align: center; }
+.tsw span.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
+
+/* 아바타 */
+.ava { display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); color: var(--muted); overflow: hidden; }
+.ava svg { width: 62%; height: 62%; fill: currentColor; stroke: none; }
+.ava.sm { width: 22px; height: 22px; }
+
+/* 부팅 */
+.boot { flex: 1; display: grid; align-content: center; padding: 0 var(--gutter); gap: 6px; }
+.boot .mark { margin: 0; font-size: 112px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--accent); }
+.boot .tag { margin: 0; font-size: 17px; color: var(--muted); }
+
+/* 프로필 */
+.pstage { flex: 1; display: grid; justify-items: center; align-content: start; gap: 16px; padding-top: 110px; }
+.pstage h1 { margin: 0; font-size: var(--size-title); font-weight: 700; letter-spacing: -0.01em; }
+.pgrid { display: flex; gap: 32px; justify-content: center; margin-top: 24px; }
+.tile { width: 148px; display: grid; justify-items: center; gap: 4px; padding: 8px; text-align: center; }
+.tile .ava, .tile .add { width: 132px; height: 132px; margin-bottom: 8px; border-radius: 10px; }
+.tile .ava { border-radius: 10px; }
+.tile.focus .ava { box-shadow: 0 0 0 3px var(--accent); }
+.tile .add { display: grid; place-items: center; border: 1.5px dashed var(--line); font-size: 40px; font-weight: 300; color: var(--muted); }
+.tile .nm { font-weight: 600; }
+.tile .memo { font-size: 13.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 새 프로필 */
+.newp { flex: 1; display: grid; justify-items: center; align-content: start; gap: 16px; padding-top: 80px; }
+.newp h1 { margin: 0; font-size: var(--size-title); font-weight: 700; }
+.bigava { position: relative; width: 150px; height: 150px; }
+.bigava .ava { width: 150px; height: 150px; border-radius: 12px; }
+.bigava .pen { position: absolute; right: -6px; bottom: -6px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--primary-bg); color: var(--primary-text); font-size: 15px; }
+.field { width: 420px; display: grid; gap: 6px; margin-top: 8px; }
+.field label { font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.field .input { height: 46px; display: flex; align-items: center; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.field .input.ph { color: var(--muted); }
+.field .input.typed { border-color: var(--accent); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 200px; height: 48px; padding: 0 28px; border: 1.5px solid var(--primary-border); border-radius: var(--radius); background: var(--primary-bg); color: var(--primary-text); font-weight: 700; font-size: 16px; }
+
+/* 쉐브론 단계 화면 */
+.stage { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.intro { padding: 56px var(--gutter) 0; }
+.intro h1 { margin: 0; font-size: var(--size-title); font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+.strip { --h: 300px; list-style: none; margin: 0; padding: 42px 72px 36px; display: flex; gap: 8px; }
+.cell { flex: 0 0 calc((100% - 32px) / 5); height: var(--h); position: relative; }
+.cell[data-cur="1"] { z-index: 1; transform: scale(1.2); }
+.cell svg.shape { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.cell svg.shape path { fill: var(--step-idle); stroke: transparent; stroke-width: 1.5; }
+.cell[data-st="pass"] svg.shape path { fill: var(--step-done); stroke: var(--step-done-line); }
+.cell[data-cur="1"] svg.shape path { fill: var(--primary-bg); }
+.cell[data-cur="1"][data-st="pass"] svg.shape path { stroke: var(--primary-border); }
+.cell .in { position: relative; height: 100%; display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center; row-gap: 14px; padding: 0 38px; text-align: center; color: var(--text); }
+.cell:not([data-st="pass"]):not([data-cur="1"]) .in { color: var(--muted); }
+.cell[data-cur="1"] .in { color: var(--primary-text); }
+.cell .ttl { grid-row: 2; font-size: 22px; font-weight: 700; line-height: 1.25; }
+.cell .ok { grid-row: 3; align-self: start; font-size: 48px; color: var(--pass); visibility: hidden; }
+.cell[data-st="pass"] .ok { visibility: visible; }
+.cell[data-cur="1"] .ok { color: var(--primary-text); }
+.cell .retry { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 22px; color: var(--primary-text); opacity: 0.85; }
+.panel-wrap { padding: 0 72px; }
+.panel { display: grid; justify-items: start; gap: 14px; padding: 22px 28px; border-radius: var(--radius); background: var(--surface); }
+.panel .hint { margin: 0; color: var(--muted); min-height: 3.2em; max-width: 70ch; }
+.panel .result { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; color: var(--fail); }
+.q { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid currentColor; border-radius: 50%; font-size: 13px; font-weight: 700; color: var(--muted); }
+.panel .link { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.complete { display: grid; justify-items: center; gap: 18px; padding: 22px 28px; text-align: center; }
+.complete p { margin: 0; font-size: 18px; font-weight: 700; }
+.temp { margin-top: auto; display: flex; justify-content: flex-end; padding: 20px var(--gutter); }
+.temp span { padding: 4px 10px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); font-size: var(--size-bar); }
+
+/* 원형 진행 표시 */
+.ringstage { flex: 1; display: grid; place-items: center; }
+.ring { position: relative; aspect-ratio: 1; display: grid; place-items: center; }
+.ring svg.arcs { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke-linecap: round; overflow: visible; }
+.ring .track { stroke: var(--line); stroke-width: 1; }
+.ring .a { stroke: var(--accent); transform-origin: 100px 100px; }
+.ring .o { stroke-width: 3; stroke-dasharray: 28 72; animation: spin 2.4s linear infinite; }
+.ring .m { stroke-width: 1.5; stroke-dasharray: 12 8 20 60; opacity: 0.7; animation: spin 3.6s linear infinite reverse; }
+.ring .n { stroke-width: 5; stroke-dasharray: 6 94; opacity: 0.5; animation: spin 1.6s linear infinite; }
+.ring[data-state="failed"] .a { stroke: var(--fail); animation: none; opacity: 0.5; }
+.ring .c { display: grid; justify-items: center; gap: 8px; padding: 0 14%; text-align: center; }
+.ring .c .ic { width: 1.9em; height: 1.9em; font-size: var(--rf, 19px); visibility: hidden; }
+.ring .c .ln { font-size: var(--rf, 19px); font-weight: 700; line-height: 1.35; }
+.ring[data-state="failed"] .c .ln { color: var(--fail); }
+.app[data-t="night"] .ring .o { animation-duration: 6s; }
+.app[data-t="night"] .ring .m { animation-duration: 9s; }
+.app[data-t="night"] .ring .n { animation-duration: 4s; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ring .a { animation: none; } }
+
+/* 장비 연결 */
+.graph { position: relative; flex: 1; margin: 24px var(--gutter) 0; }
+.graph svg.links { position: absolute; inset: 0; width: 100%; height: 100%; }
+.graph svg.links line { stroke: var(--step-done-line); stroke-width: 1.5; }
+.graph .center { position: absolute; transform: translate(-50%, -50%); }
+.node { position: absolute; aspect-ratio: 1; border-radius: 50%; display: grid; grid-template-rows: 1fr auto auto 1fr; justify-items: center; align-content: center; text-align: center; background: var(--step-idle); color: var(--muted); }
+.node .k { grid-row: 2; font-weight: 700; line-height: 1.2; }
+.node .nm { grid-row: 3; opacity: 0.8; }
+.node .mk { grid-row: 4; align-self: start; margin-top: 4px; }
+.node[data-st="pass"] { background: var(--step-done); box-shadow: inset 0 0 0 1.5px var(--step-done-line); color: var(--text); }
+.node[data-st="pass"] .mk { color: var(--pass); }
+.node[data-st="fail"] { box-shadow: inset 0 0 0 2px var(--fail); color: var(--text); }
+.node[data-st="fail"] .mk { color: var(--fail); }
+.node[data-sel="1"] { outline: 2px solid var(--focus, var(--accent)); outline-offset: 4px; }
+.estatus { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 64px; padding: 10px var(--gutter) 24px; }
+.estatus .en { display: inline-flex; align-items: baseline; gap: 8px; font-weight: 700; }
+.estatus .en small { font-weight: 500; color: var(--muted); }
+.estatus .et { color: var(--fail); font-weight: 700; }
+.estatus .rb { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1.5px solid var(--primary-border); border-radius: var(--radius); color: var(--text); font-weight: 600; }
+
+/* [시안] 출발 전 점검: 3×2 타일. 칸 모양 규칙은 쉐브론과 같다 (확인 전 흐림 / 확인됨 또렷+외곽선) */
+.sim-badge { display: inline-block; padding: 1px 8px; border: 1px dashed var(--page-accent); border-radius: 6px; color: var(--page-accent); font-size: 12px; font-weight: 700; }
+.hint-live { font-size: 13px; color: var(--page-accent); font-weight: 600; }
+.tiles { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 16px; padding: 28px var(--gutter) 0; min-height: 0; }
+.tile2 { position: relative; display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 20px; padding: 22px 52px 22px 24px; border: none; border-radius: 14px; background: var(--step-idle); color: var(--muted); text-align: left; font: inherit; cursor: pointer; box-shadow: inset 0 0 0 1.5px transparent; transition: background 200ms, box-shadow 200ms, color 200ms; }
+.tile2:hover { background: var(--surface); }
+.tile2[data-on="1"] { background: var(--step-done); color: var(--text); box-shadow: inset 0 0 0 1.5px var(--step-done-line); }
+.tile2:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.tile2 .pic { width: 108px; height: 108px; display: grid; place-items: center; border-radius: 12px; background: var(--surface-2); color: var(--muted); }
+.tile2[data-on="1"] .pic { color: var(--text); }
+.tile2 .pic svg { width: 80px; height: 80px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.tile2 .pic svg .acc { stroke: var(--accent); }
+.tile2 .pic svg .fillc { fill: currentColor; stroke: none; }
+.tile2 .txt { display: grid; gap: 6px; align-content: center; min-width: 0; }
+.tile2 .t { font-size: 21px; font-weight: 700; line-height: 1.3; color: inherit; }
+.tile2 .d { font-size: 14.5px; line-height: 1.5; color: var(--muted); }
+.tile2 .tag { justify-self: start; padding: 1px 8px; border: 1px dashed var(--line); border-radius: 6px; font-size: 12px; color: var(--muted); }
+.tile2 .ck { position: absolute; top: 16px; right: 16px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); color: transparent; }
+.tile2[data-on="1"] .ck { background: var(--pass); box-shadow: none; color: var(--bg); }
+.tile2 .ck svg { width: 18px; height: 18px; }
+.tile2 .q2 { position: absolute; right: 18px; bottom: 16px; }
+/* 확인 개수: 오른쪽 위 타일(케이블 정리)의 오른쪽 위 모서리 바로 위. 자리는 항상 있음 */
+.tilehead { display: flex; justify-content: flex-end; padding: 18px var(--gutter) 0; }
+.tilehead .cnt { font-size: 15px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1; }
+.tilehead .cnt b { color: var(--text); }
+.tiles { padding-top: 10px; }
+.tiles, .tilehead { transition: opacity 320ms ease; }
+.stage[data-leaving="1"] .tiles, .stage[data-leaving="1"] .tilehead { opacity: 0; }
+/* 하단: 버튼 하나(건너뛰기). 영역 높이는 고정이라 버튼이 사라져도 타일은 움직이지 않는다 */
+.cfoot { height: 132px; display: grid; place-items: center; padding: 0 var(--gutter); }
+.btn2 { min-width: 200px; height: 48px; padding: 0 28px; border: 1.5px solid var(--line); border-radius: var(--radius); background: transparent; color: var(--text); font: inherit; font-weight: 700; font-size: 16px; cursor: pointer; transition: transform 320ms ease-in, opacity 320ms ease-in; }
+.btn2:hover { border-color: var(--primary-border); }
+.btn2:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.btn2[data-sink="1"] { transform: translateY(28px); opacity: 0; pointer-events: none; }
+/* 목업 안의 "다음 단계" 자리 */
+.nextph { position: absolute; inset: 44px 0 0; display: grid; place-content: center; gap: 8px; text-align: center; opacity: 0; pointer-events: none; transition: opacity 320ms ease; }
+.nextph h1 { margin: 0; font-size: var(--size-title); font-weight: 700; }
+.nextph p { margin: 0; color: var(--muted); }
+.nextph[data-shown="1"] { opacity: 1; }
+.replay { padding: 4px 12px; border: 1px solid var(--page-line); border-radius: 8px; background: var(--page-surface); color: var(--page-text); font: inherit; font-size: 13px; cursor: pointer; }
+.replay:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .tile2, .btn2, .tiles, .tilehead, .nextph { transition: none; } }
+
+/* [시안] 촬영 계획: 왼쪽 1/3 대화 · 오른쪽 2/3 (위 1/4 오늘 밤 조건, 아래 3/4 계획 4칸 + 계획 카드 줄) */
+.plan { flex: 1; display: grid; grid-template-columns: 1fr 2fr; min-height: 0; }
+.chat { display: grid; grid-template-rows: 1fr auto; min-height: 0; border-right: 1px solid var(--line); }
+.msgs { display: flex; flex-direction: column; gap: 14px; padding: 22px 22px 12px; overflow: hidden; justify-content: flex-end; }
+.msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.55; }
+.msg.aa { align-self: flex-start; background: var(--surface); border-top-left-radius: 4px; }
+.msg.me { align-self: flex-end; background: var(--surface-2); border-top-right-radius: 4px; }
+.msg .who { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 700; color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }
+.chip { padding: 5px 12px; border: 1.5px solid var(--line); border-radius: 999px; font-size: 13.5px; color: var(--text); }
+.chip.pick { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.composer { display: flex; align-items: center; gap: 10px; margin: 0 18px 18px; padding: 10px 12px 10px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--muted); font-size: 14.5px; }
+.composer span:first-child { flex: 1; }
+.composer .send { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--surface-2); color: var(--text); }
+.right { display: grid; grid-template-rows: 1fr 3fr; min-height: 0; }
+.night { display: grid; grid-template-rows: auto 1fr; gap: 6px; padding: 14px 24px 10px; border-bottom: 1px solid var(--line); min-height: 0; }
+.night-head { display: flex; align-items: baseline; gap: 16px; font-size: 13px; color: var(--muted); }
+.night-head b { color: var(--text); font-size: 14.5px; }
+.night-head .lg { display: inline-flex; align-items: center; gap: 5px; }
+.night-head .sw { width: 12px; height: 8px; border-radius: 2px; }
+.night svg { width: 100%; height: 100%; overflow: visible; }
+.night svg text { font-family: var(--font); font-size: 11px; fill: var(--muted); }
+.lower { display: grid; grid-template-rows: 1fr auto; gap: 14px; padding: 18px 24px 18px; min-height: 0; }
+.cells { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; min-height: 0; }
+.pcell { position: relative; display: grid; grid-template-rows: auto 1fr; gap: 8px; padding: 14px 16px; border-radius: 12px; background: var(--step-idle); box-shadow: inset 0 0 0 1.5px transparent; min-height: 0; overflow: hidden; }
+.pcell h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.pcell h3 .st { margin-left: auto; font-weight: 600; }
+.pcell[data-st="done"] { background: var(--step-done); box-shadow: inset 0 0 0 1.5px var(--step-done-line); }
+.pcell[data-st="done"] h3 .st { color: var(--pass); }
+.pcell[data-st="now"] { background: var(--step-done); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.pcell[data-st="now"] h3 .st { color: var(--accent); }
+.pcell .empty { align-self: center; justify-self: center; color: var(--muted); font-size: 13.5px; }
+.pbody { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; min-height: 0; }
+.pbody .big { font-size: 19px; font-weight: 700; line-height: 1.3; color: var(--text); }
+.pbody .sub { font-size: 13px; color: var(--muted); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin-top: 8px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; color: var(--text); font-weight: 600; }
+.kv dd.wait { color: var(--accent); font-weight: 600; }
+.rec { margin-left: 6px; padding: 0 6px; border-radius: 5px; background: var(--surface-2); color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.fov { width: 118px; height: 80px; border-radius: 6px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.fov circle { fill: var(--text); }
+.fov .frame-rect { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.cardrow { display: flex; align-items: center; gap: 18px; min-height: 52px; padding: 0 4px; }
+.cardrow .sum { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cardrow .sum small { display: block; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.cardrow[data-shown="0"] > * { visibility: hidden; }
+.app[data-t="night"] .fov circle { fill: var(--text); }
+
+/* 단계 레일: 화면 맨 아래 가로 한 줄. 어느 화면이든 같은 자리·같은 높이 */
+.rail { flex: 0 0 38px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 var(--gutter); border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.rail .rs { display: inline-flex; align-items: center; gap: 6px; }
+.rail .rs .mk { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); }
+.rail .rs[data-s="done"] { color: var(--text); }
+.rail .rs[data-s="done"] .mk { box-shadow: none; color: var(--pass); }
+.rail .rs[data-s="done"] .mk svg { width: 14px; height: 14px; }
+.rail .rs[data-s="now"] { color: var(--text); font-weight: 700; }
+.rail .rs[data-s="now"] .mk { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.rail .rs[data-s="now"] .mk::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.rail .sep { width: 28px; height: 2px; border-radius: 1px; background: var(--line); }
+/* 처음부터 현재 단계까지의 선은 강조색 (온도계 게이지처럼 차오름) */
+.rail .sep[data-on="1"] { background: var(--accent); }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>AA 화면 모음</h1>
+    <p>2026-09-29 회사에서 만든 화면을 코드(<code>web/src</code>)의 색·크기·문구 그대로 옮긴 미리보기입니다. 지금 정해진 흐름 순서대로 놓았습니다. 장비 이름과 프로필은 예시입니다.</p>
+    <div class="controls" role="radiogroup" aria-label="앱 테마">
+      <span>앱 테마</span>
+      <div class="seg" id="themes">
+        <button type="button" role="radio" aria-checked="true" data-t="dark">어둡게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="light">밝게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="night">촬영</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 1</span><h2>부팅 로고</h2>
+      <p>앱을 켜면 1.2초 동안 보이고, 프로필 선택으로 넘어갑니다.</p></div>
+    <div class="frame"><div class="app">
+      <main class="boot"><p class="mark">AA</p><p class="tag">천체사진 촬영 비서</p></main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 2</span><h2>프로필 선택</h2>
+      <p>넷플릭스처럼 사람별 프로필을 고릅니다. 이 화면만 예외로 가운데 정렬이고, 마지막에 쓴 프로필에 초점이 있습니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="소프트웨어 준비"></div>
+      <main class="pstage">
+        <h1>프로필 선택</h1>
+        <div class="pgrid">
+          <div class="tile"><span class="add">+</span><span class="nm">새 프로필</span></div>
+          <div class="tile focus"><span class="ava" data-ava></span><span class="nm">별보는사람</span><span class="memo">주말 원정 촬영용</span></div>
+          <div class="tile"><span class="ava" data-ava></span><span class="nm">연습</span><span class="memo">집 마당 테스트</span></div>
+        </div>
+      </main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 2-1</span><h2>새 프로필 만들기</h2>
+      <p>이미지(오른쪽 아래 연필 버튼), 별명(최대 20byte), 메모(선택, 최대 120byte) 순서입니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="소프트웨어 준비" data-noprof></div>
+      <main class="newp">
+        <h1>프로필 선택</h1>
+        <div class="bigava"><span class="ava" data-ava></span><span class="pen"><svg class="i" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span></div>
+        <div class="field"><label>별명</label><div class="input typed">별보는사람</div></div>
+        <div class="field"><label>메모</label><div class="input ph">(선택) 최대 120byte</div></div>
+        <div style="margin-top:18px"><span class="btn">프로필 생성</span></div>
+      </main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 3</span><h2>0단계 소프트웨어 확인 · 빠진 게 있을 때</h2>
+      <p>빠진 첫 항목(N.I.N.A.)이 선택되어 커지고, 칸 안 아래에 "다시 확인" 아이콘이 있습니다. 하단 상자에는 설명, 상태, 해결 방법(?), 내려받기 링크만 씁니다. 모두 설치돼 있으면 이 화면은 건너뜁니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="소프트웨어 준비"></div>
+      <main class="stage">
+        <div class="intro"><h1>촬영 준비를 위한 소프트웨어 확인</h1></div>
+        <ol class="strip" data-strip='[["ASCOM Platform","pass"],["N.I.N.A.","fail",1],["Advanced API","fail"],["PHD2","fail"],["ASTAP","fail"]]'></ol>
+        <div class="panel-wrap"><div class="panel">
+          <p class="hint">실제로 장비를 움직이고 사진을 찍는 프로그램입니다. AA는 N.I.N.A.를 통해 장비를 다룹니다.</p>
+          <p class="result">설치되어 있지 않습니다 <span class="q">?</span></p>
+          <span class="link">N.I.N.A. 내려받기</span>
+        </div></div>
+        <div class="temp"><span>N.I.N.A. 설치 완료하기 (임시)</span></div>
+      </main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 3-1</span><h2>0단계 소프트웨어 확인 · 모두 설치됨</h2>
+      <p>칸은 모두 같은 "확인됨" 모양이 되고 더 누를 수 없습니다. 상자 대신 완료 문장과 "다음" 버튼이 나오고, 눌러야 넘어갑니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="소프트웨어 준비"></div>
+      <main class="stage">
+        <div class="intro"><h1>필요한 프로그램이 모두 설치되어 있어요</h1></div>
+        <ol class="strip" data-strip='[["ASCOM Platform","pass"],["N.I.N.A.","pass"],["Advanced API","pass"],["PHD2","pass"],["ASTAP","pass"]]'></ol>
+        <div class="complete"><p>모든 준비가 완료되어 다음 단계로 이동합니다.</p><span class="btn">다음</span></div>
+      </main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 4</span><h2>1단계 엔진 켜기</h2>
+      <p>고를 것이 없는 단계라 가운데 원형 진행 표시와 지금 하는 일 한 줄만 보입니다. 끝나면 초록 원과 체크를 잠깐 보여 주고 자동으로 넘어갑니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="소프트웨어 준비"></div>
+      <main class="ringstage"><div class="ring" style="width:300px;--rf:19px" data-ring="N.I.N.A. 연결 중입니다"></div></main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 5</span><h2>장비 연결 · 카메라 실패</h2>
+      <p>1단계의 원이 작아져 가운데에 남고, 장비 원들이 둘러쌉니다. 연결된 장비만 선으로 이어집니다. 아래 줄에 연결 안 된 장비의 상태, 해결 방법(?), "다시 연결"이 나옵니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="장비 연결"></div>
+      <main class="stage">
+        <div class="graph" data-graph='[["switch","전원 허브","WandererBox","pass"],["mount","적도의","OnStep","pass"],["camera","카메라","X-T5","fail"],["guider","가이딩","PHD2","pass"]]'></div>
+        <div class="estatus">
+          <span class="en">카메라 <small>X-T5</small></span>
+          <span class="et">연결되어 있지 않습니다</span><span class="q">?</span>
+          <span class="rb"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg>다시 연결</span>
+        </div>
+      </main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 6</span><h2>출발 전 점검</h2><span class="sim-badge">시안</span>
+      <p>AA가 스스로 알 수 없는 것만 묻는 체크리스트입니다. 타일을 눌러 확인 표시를 켜고 끌 수 있고, 확인 개수는 오른쪽 위에 n/6으로 보입니다. 여섯 개를 모두 확인하면 타일이 한꺼번에 투명해지며 자동으로 다음 단계로 넘어갑니다. "건너뛰기"를 누르면 버튼이 가라앉아 사라지고, 남은 타일이 왼쪽 위부터 하나씩 확인됨으로 바뀐 뒤 같은 방식으로 넘어갑니다.</p>
+      <span class="hint-live">이 화면은 직접 눌러 볼 수 있습니다</span>
+      <button type="button" class="replay" data-replay>처음부터 다시 보기</button></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="출발 전 점검" data-devbar></div>
+      <main class="stage">
+        <div class="intro"><h1>촬영 시작 전에 장비를 한 번 둘러봐 주세요</h1></div>
+        <div class="tilehead"><span class="cnt" data-cnt></span></div>
+        <div class="tiles" data-tiles="3"></div>
+        <div class="cfoot"><button type="button" class="btn2" data-skip>건너뛰기</button></div>
+      </main>
+      <div class="nextph" data-nextph><h1>촬영 계획</h1><p>다음 단계 자리입니다 (아직 시안 없음)</p></div>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 7</span><h2>촬영 계획 · 대화 중</h2><span class="sim-badge">시안</span>
+      <p>왼쪽 1/3은 AA와의 대화, 오른쪽 위 1/4은 오늘 밤 조건, 아래 3/4은 계획 네 칸입니다. 대상과 구도가 정해졌고 촬영 설정(필터)을 묻는 중입니다. 지금 묻는 칸은 강조색 외곽선, 정해진 칸은 확인됨 모양, 아직인 칸은 흐린 빈칸입니다. 계획 카드 줄은 자리만 잡혀 있고 비어 있습니다. 시각·고도·구름 값은 모두 예시입니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="촬영 계획" data-devbar></div>
+      <main class="plan" data-plan="mid"></main>
+    </div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">화면 7-1</span><h2>촬영 계획 · 모두 정해짐</h2><span class="sim-badge">시안</span>
+      <p>네 칸이 모두 채워지면 아래에 계획 카드 한 줄 요약과 주 버튼 "이 계획으로 준비 시작"이 나타납니다. 칸을 누르면 왼쪽 대화가 그 항목을 고치는 질문으로 이동합니다.</p></div>
+    <div class="frame"><div class="app">
+      <div class="bar" data-bar="촬영 계획" data-devbar></div>
+      <main class="plan" data-plan="done"></main>
+    </div></div>
+  </section>
+
+  <p class="note">실제 앱의 글꼴은 Pretendard인데, 이 미리보기는 비슷한 Noto Sans KR로 보입니다. 화면 크기는 1280×800 창 기준을 줄여서 보여 줍니다. 다음 차례인 "망원경 정렬" 화면은 아직 없습니다.</p>
+</div>
+
+<script>
+(function () {
+  var AVA = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c.8-4.4 4.3-7 8.5-7s7.7 2.6 8.5 7z"/></svg>';
+  var CHECK = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2.5"><path d="M20 6 9 17l-5-5"/></svg>';
+  var WARN = '<svg class="i" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+  var RETRY = '<svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg>';
+
+  document.querySelectorAll('[data-ava]').forEach(function (el) { el.innerHTML = AVA; });
+
+  // 상태 줄
+  document.querySelectorAll('.bar').forEach(function (bar) {
+    var devs = bar.closest('.app').querySelector('[data-graph]') ? null : '<span>' + bar.dataset.bar + '</span>';
+    bar.innerHTML =
+      '<span class="brand">AA</span>' +
+      (bar.hasAttribute('data-noprof') ? '' : '<span class="prof"><span class="ava sm">' + AVA + '</span>별보는사람</span>') +
+      '<span class="devs">' + (devs || '<span>' + bar.dataset.bar + '</span>') + '</span>' +
+      '<time class="clock">22:14</time>' +
+      '<span class="tsw"><span data-sw="dark">어둡게</span><span data-sw="light">밝게</span><span data-sw="night">촬영</span></span>';
+  });
+
+  // 쉐브론 (StepChevrons.tsx와 같은 모양 계산)
+  function rounded(pts, r) {
+    var n = pts.length, d = '';
+    for (var i = 0; i < n; i++) {
+      var p = pts[(i - 1 + n) % n], c = pts[i], q = pts[(i + 1) % n];
+      var tp = Math.hypot(p[0] - c[0], p[1] - c[1]), tn = Math.hypot(q[0] - c[0], q[1] - c[1]);
+      var k = Math.min(r, tp / 2, tn / 2);
+      var ax = c[0] + (p[0] - c[0]) / tp * k, ay = c[1] + (p[1] - c[1]) / tp * k;
+      var bx = c[0] + (q[0] - c[0]) / tn * k, by = c[1] + (q[1] - c[1]) / tn * k;
+      d += (i ? 'L' : 'M') + ax.toFixed(1) + ',' + ay.toFixed(1) + ' Q' + c[0] + ',' + c[1] + ' ' + bx.toFixed(1) + ',' + by.toFixed(1) + ' ';
+    }
+    return d + 'Z';
+  }
+  document.querySelectorAll('[data-strip]').forEach(function (ol) {
+    var steps = JSON.parse(ol.dataset.strip);
+    var w = (1280 - 144 - 32) / 5, h = 300, notch = 42;
+    ol.innerHTML = steps.map(function (s, i) {
+      var pts = i === 0
+        ? [[0, 0], [w - notch, 0], [w, h / 2], [w - notch, h], [0, h]]
+        : [[0, 0], [w - notch, 0], [w, h / 2], [w - notch, h], [0, h], [notch, h / 2]];
+      return '<li class="cell" data-st="' + s[1] + '" data-cur="' + (s[2] ? 1 : 0) + '">' +
+        '<svg class="shape" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none"><path d="' + rounded(pts, Math.min(14, h / 8)) + '"/></svg>' +
+        '<div class="in"><span class="ttl">' + s[0] + '</span><span class="ok">' + CHECK + '</span></div>' +
+        (s[2] && s[1] === 'fail' ? '<span class="retry">' + RETRY + '</span>' : '') + '</li>';
+    }).join('');
+  });
+
+  // 원형 진행 표시
+  function ringHTML(line) {
+    return '<svg class="arcs" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="92"/>' +
+      '<circle class="a o" cx="100" cy="100" r="92" pathLength="100"/>' +
+      '<circle class="a m" cx="100" cy="100" r="80" pathLength="100"/>' +
+      '<circle class="a n" cx="100" cy="100" r="70" pathLength="100"/></svg>' +
+      '<div class="c"><span class="ic"></span><div class="ln">' + line + '</div></div>';
+  }
+  document.querySelectorAll('[data-ring]').forEach(function (el) { el.innerHTML = ringHTML(el.dataset.ring); });
+
+  // 장비 원 배치 (EquipmentScreen.tsx의 layout과 같은 규칙)
+  function seeded(id, salt) {
+    var h = 2166136261 ^ salt;
+    for (var i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+    return ((h >>> 0) % 1000) / 1000;
+  }
+  function layout(ids, w, h) {
+    var cx = w / 2, cy = h / 2, base = Math.min(h, w * 0.75);
+    for (var scale = 1; scale > 0.4; scale *= 0.94) {
+      var cd = base * 0.38 * scale;
+      var sizes = ids.map(function (id) { return base * 0.23 * scale * (1 + (seeded(id, 1) * 2 - 1) * 0.27); });
+      var maxR = Math.max.apply(null, sizes) / 2;
+      var ry = h / 2 - maxR - 8, rx = Math.min(w / 2 - maxR - 8, ry * 1.5);
+      if (ry <= cd / 2) continue;
+      var nodes = ids.map(function (id, i) {
+        var a = (-90 + i * 360 / ids.length + (seeded(id, 2) * 2 - 1) * 14) * Math.PI / 180;
+        var f = 1 + (seeded(id, 3) * 2 - 1) * 0.08;
+        return { x: cx + Math.cos(a) * rx * f, y: cy + Math.sin(a) * ry * f, d: sizes[i] };
+      });
+      for (var pass = 0; pass < 60; pass++) {
+        var moved = false;
+        nodes.forEach(function (n) {
+          var dx = n.x - cx, dy = n.y - cy, dist = Math.hypot(dx, dy) || 1, need = cd / 2 + n.d / 2 + 40;
+          if (dist < need) { n.x = cx + dx / dist * need; n.y = cy + dy / dist * need; moved = true; }
+        });
+        for (var a = 0; a < nodes.length; a++) for (var b = a + 1; b < nodes.length; b++) {
+          var p = nodes[a], q = nodes[b], dx = q.x - p.x, dy = q.y - p.y, dist = Math.hypot(dx, dy) || 1, need = p.d / 2 + q.d / 2 + 14;
+          if (dist < need) { var push = (need - dist) / 2; p.x -= dx / dist * push; p.y -= dy / dist * push; q.x += dx / dist * push; q.y += dy / dist * push; moved = true; }
+        }
+        nodes.forEach(function (n) {
+          n.x = Math.min(w - n.d / 2 - 4, Math.max(n.d / 2 + 4, n.x));
+          n.y = Math.min(h - n.d / 2 - 4, Math.max(n.d / 2 + 4, n.y));
+        });
+        if (!moved) return { cx: cx, cy: cy, cd: cd, nodes: nodes };
+      }
+    }
+    return null;
+  }
+  document.querySelectorAll('[data-graph]').forEach(function (g) {
+    var items = JSON.parse(g.dataset.graph);
+    var w = 1280 - 192, h = 800 - 44 - 24 - 98 - 38; // 38: 단계 레일
+    var geo = layout(items.map(function (i) { return i[0]; }), w, h);
+    if (!geo) return;
+    var lines = '', nodes = '';
+    items.forEach(function (it, i) {
+      var n = geo.nodes[i], dx = n.x - geo.cx, dy = n.y - geo.cy, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+      if (it[3] === 'pass') lines += '<line x1="' + (geo.cx + ux * (geo.cd / 2 + 6)) + '" y1="' + (geo.cy + uy * (geo.cd / 2 + 6)) + '" x2="' + (n.x - ux * (n.d / 2 + 5)) + '" y2="' + (n.y - uy * (n.d / 2 + 5)) + '"/>';
+      var fs = Math.round(n.d * 0.13);
+      nodes += '<div class="node" data-st="' + it[3] + '" data-sel="' + (it[3] === 'fail' ? 1 : 0) + '" style="left:' + (n.x - n.d / 2) + 'px;top:' + (n.y - n.d / 2) + 'px;width:' + n.d + 'px;font-size:' + fs + 'px">' +
+        '<span class="k">' + it[1] + '</span><span class="nm" style="font-size:' + Math.round(fs * 0.8) + 'px">' + it[2] + '</span>' +
+        '<span class="mk" style="font-size:' + Math.round(fs * 1.4) + 'px">' + (it[3] === 'pass' ? CHECK : WARN) + '</span></div>';
+    });
+    g.style.height = h + 'px';
+    g.innerHTML = '<svg class="links" viewBox="0 0 ' + w + ' ' + h + '">' + lines + '</svg>' +
+      '<div class="center" style="left:' + geo.cx + 'px;top:' + geo.cy + 'px">' +
+      '<div class="ring" data-state="failed" style="width:' + geo.cd + 'px;--rf:' + Math.round(geo.cd * 0.075) + 'px">' + ringHTML('연결되지 않은 장비가 1개 있습니다') + '</div></div>' + nodes;
+  });
+
+  // [시안] 출발 전 점검 타일
+  var TILES = [
+    { t: '적도의 시작 위치', d: '경통은 북극성 쪽, 균형추는 아래를 향하게 두었나요?',
+      pic: '<svg viewBox="0 0 64 64"><path class="acc" d="M50 8l1.6 3.4 3.7.4-2.8 2.5.8 3.7-3.3-1.9-3.3 1.9.8-3.7-2.8-2.5 3.7-.4z"/><path d="M22 58l10-22 10 22"/><path d="M32 36v-6"/><path d="M26 34l20-20"/><rect x="30" y="12" width="20" height="8" rx="3" transform="rotate(-45 40 16)"/><path d="M32 30v12"/><circle cx="32" cy="46" r="4"/></svg>' },
+    { t: '경통 캡', d: '경통 앞 뚜껑과 가이드 경통 뚜껑을 모두 열었나요?',
+      pic: '<svg viewBox="0 0 64 64"><rect x="10" y="24" width="30" height="16" rx="3"/><path d="M40 22v20"/><rect x="48" y="20" width="6" height="24" rx="2.5"/><path class="acc" d="M44 32h-2"/><path class="acc" d="M58 14l-4 4"/><path class="acc" d="M58 50l-4-4"/></svg>' },
+    { t: '케이블 정리', d: '적도의가 한 바퀴 돌아도 케이블이 당기거나 걸리지 않나요?',
+      pic: '<svg viewBox="0 0 64 64"><path d="M8 44c8 0 8-14 16-14s8 14 16 14 8-14 16-14"/><rect x="20" y="26" width="8" height="8" rx="2" class="acc"/><rect x="36" y="40" width="8" height="8" rx="2" class="acc"/><path d="M8 44v8"/><path d="M56 30v-8"/></svg>' },
+    { t: '경통 밸런스', d: '클러치를 풀었을 때 경통이 어느 쪽으로도 쏠리지 않나요?',
+      pic: '<svg viewBox="0 0 64 64"><path d="M32 40l-7 12h14z"/><path d="M8 38h48"/><rect x="10" y="28" width="12" height="10" rx="2"/><circle cx="48" cy="32" r="6"/><path class="acc" d="M32 14v8"/><path class="acc" d="M28 18h8"/></svg>' },
+    { t: '삼각대 수평', d: '삼각대의 수평계 기포가 가운데에 있나요?',
+      pic: '<svg viewBox="0 0 64 64"><rect x="8" y="24" width="48" height="16" rx="8"/><path d="M26 24v16"/><path d="M38 24v16"/><circle class="acc" cx="32" cy="32" r="3.5"/><path d="M20 48l-6 10"/><path d="M44 48l6 10"/><path d="M32 48v10"/></svg>' },
+    { t: '이슬 방지 열선', d: '경통 끝과 가이드 경통에 열선을 감고 허브에 연결했나요?', tag: '제안 항목',
+      pic: '<svg viewBox="0 0 64 64"><rect x="8" y="24" width="40" height="16" rx="3"/><path class="acc" d="M34 22v20M40 22v20"/><path d="M37 42c0 6 6 6 6 12"/><path d="M52 16c2 2-2 4 0 6M58 16c2 2-2 4 0 6"/></svg>' },
+  ];
+  var CK = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:3"><path d="M20 6 9 17l-5-5"/></svg>';
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('[data-tiles]').forEach(function (box) {
+    var main = box.closest('main'), app = box.closest('.app');
+    var skip = main.querySelector('[data-skip]'), ph = app.querySelector('[data-nextph]');
+    var cnt = main.querySelector('[data-cnt]');
+    var pre = +box.dataset.tiles, locked = false, timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, reduce ? 0 : ms)); }
+
+    function render() {
+      box.innerHTML = TILES.map(function (x, i) {
+        return '<button type="button" class="tile2" data-on="' + (i < pre ? 1 : 0) + '" aria-pressed="' + (i < pre) + '">' +
+          '<span class="pic">' + x.pic + '</span>' +
+          '<span class="txt"><span class="t">' + x.t + '</span><span class="d">' + x.d + '</span>' + (x.tag ? '<span class="tag">' + x.tag + '</span>' : '') + '</span>' +
+          '<span class="ck" aria-hidden="true">' + CK + '</span></button>';
+      }).join('');
+    }
+    function setOn(t, on) { t.dataset.on = on ? '1' : '0'; t.setAttribute('aria-pressed', String(on)); }
+    function count() { return box.querySelectorAll('.tile2[data-on="1"]').length; }
+    function sync() {
+      var on = count();
+      cnt.innerHTML = '<b>' + on + '</b>/' + TILES.length;
+      if (on === TILES.length) finish();
+    }
+    // 6개가 모두 확인되는 순간: 타일이 한꺼번에 투명해지고 다음 단계로 (수동 체크·건너뛰기 공통)
+    function finish() {
+      if (locked && main.dataset.leaving === '1') return;
+      locked = true;
+      skip.dataset.sink = '1';
+      later(function () { main.dataset.leaving = '1'; }, 260);
+      later(function () { ph.dataset.shown = '1'; }, 600);
+    }
+    // 건너뛰기: 버튼이 가라앉아 사라지고, 남은 타일이 왼쪽 위부터 차례로 확인됨으로 바뀐다
+    skip.addEventListener('click', function () {
+      if (locked) return;
+      locked = true;
+      skip.dataset.sink = '1';
+      var rest = Array.prototype.filter.call(box.querySelectorAll('.tile2'), function (t) { return t.dataset.on !== '1'; });
+      rest.forEach(function (t, i) { later(function () { setOn(t, true); sync(); }, 320 + i * 220); });
+    });
+    box.addEventListener('click', function (e) {
+      var t = e.target.closest('.tile2');
+      if (!t || locked) return;
+      setOn(t, t.dataset.on !== '1');
+      sync();
+    });
+    function reset() {
+      timers.forEach(clearTimeout); timers = [];
+      locked = false;
+      delete main.dataset.leaving; delete skip.dataset.sink; delete ph.dataset.shown;
+      render(); sync();
+    }
+    var replay = box.closest('section').querySelector('[data-replay]');
+    if (replay) replay.addEventListener('click', reset);
+    reset();
+  });
+
+  // [시안] 촬영 계획 화면. 값은 모두 예시 (위도 37.5°, M45 적위 +24.1°, 자오선 통과 03:45로 계산한 고도)
+  (function () {
+    var LAT = 37.5 * Math.PI / 180, DEC = 24.1 * Math.PI / 180, TRANSIT = 27.75; // 03:45 = 27.75h (18시 기준 연속)
+    var DARK0 = 19.75, DARK1 = 28.9167; // 19:45 ~ 04:55
+    var MOONSET = 23.1667;
+    function alt(t) { var H = (t - TRANSIT) * 15 * Math.PI / 180; return Math.asin(Math.sin(LAT) * Math.sin(DEC) + Math.cos(LAT) * Math.cos(DEC) * Math.cos(H)) * 180 / Math.PI; }
+    function hhmm(t) { var m = Math.round(t * 60) % 1440; return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2); }
+    var t30 = 18; while (alt(t30) < 30 && t30 < 30) t30 += 1 / 60;
+    var start = Math.max(t30, DARK0), shots = Math.round((DARK1 - start) * 60 / 3.4); // 180초 + 디더·초점 여유
+    var maxAlt = Math.round(alt(TRANSIT));
+    var CLOUD = [10, 5, 0, 0, 5, 10, 20, 30, 15, 5, 0, 0];
+
+    function timeline(done) {
+      var L = 34, W = 756, px = W / 12, x = function (t) { return L + (t - 18) * px; }, y = function (a) { return 6 + (90 - a) * 1; };
+      var s = '<svg viewBox="0 0 800 136" role="img" aria-label="오늘 밤 조건 그래프">';
+      s += '<rect x="' + x(18) + '" y="6" width="' + (x(DARK0) - x(18)) + '" height="90" fill="var(--surface-2)"/>';
+      s += '<rect x="' + x(DARK1) + '" y="6" width="' + (x(30) - x(DARK1)) + '" height="90" fill="var(--surface-2)"/>';
+      if (done) s += '<rect x="' + x(start) + '" y="6" width="' + (x(DARK1) - x(start)) + '" height="90" fill="var(--accent)" opacity="0.12"/>';
+      [0, 30, 60, 90].forEach(function (a) {
+        s += '<line x1="' + L + '" x2="' + (L + W) + '" y1="' + y(a) + '" y2="' + y(a) + '" stroke="var(--line)" stroke-width="1"' + (a === 30 ? ' stroke-dasharray="4 4"' : '') + '/>';
+        s += '<text x="' + (L - 6) + '" y="' + (y(a) + 4) + '" text-anchor="end">' + a + '°</text>';
+      });
+      var d = '';
+      for (var t = 18; t <= 30.001; t += 0.25) { var a = Math.max(0, alt(t)); d += (d ? 'L' : 'M') + x(t).toFixed(1) + ',' + y(a).toFixed(1); }
+      s += '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>';
+      s += '<line x1="' + x(TRANSIT) + '" x2="' + x(TRANSIT) + '" y1="6" y2="96" stroke="var(--muted)" stroke-dasharray="2 3"/>';
+      s += '<text x="' + (x(TRANSIT) - 4) + '" y="18" text-anchor="end">자오선 ' + hhmm(TRANSIT) + '</text>';
+      s += '<text x="' + (x(22.3)) + '" y="' + (y(alt(22.3)) - 8) + '" style="fill:var(--accent);font-weight:700">M45</text>';
+      s += '<rect x="' + x(18) + '" y="101" width="' + (x(MOONSET) - x(18)) + '" height="4" rx="2" fill="var(--muted)"/>';
+      s += '<text x="' + (x(MOONSET) + 6) + '" y="106">달 ' + hhmm(MOONSET) + ' 짐</text>';
+      CLOUD.forEach(function (c, i) {
+        s += '<rect x="' + (x(18 + i) + 1) + '" y="110" width="' + (px - 2) + '" height="9" rx="2" fill="var(--text)" opacity="' + (0.06 + c / 100 * 1.6).toFixed(2) + '"/>';
+      });
+      s += '<text x="' + (L - 6) + '" y="118" text-anchor="end">구름</text>';
+      for (var h = 18; h <= 30; h += 2) s += '<text x="' + x(h) + '" y="133" text-anchor="middle">' + ('0' + (h % 24)).slice(-2) + '시</text>';
+      return s + '</svg>';
+    }
+
+    // 플레이아데스 모양의 별 배치 (예시)
+    function fov() {
+      var st = [[0.62, 0.36, 2.6], [0.52, 0.42, 2.2], [0.45, 0.33, 2], [0.4, 0.48, 1.8], [0.68, 0.46, 2.2], [0.56, 0.55, 1.7], [0.35, 0.4, 1.5], [0.5, 0.62, 1.3]];
+      var seed = 7, r = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      for (var i = 0; i < 26; i++) st.push([r(), r(), 0.5 + r() * 0.5]);
+      return '<svg class="fov" viewBox="0 0 118 80" aria-hidden="true">' + st.map(function (p) {
+        return '<circle cx="' + (p[0] * 118).toFixed(1) + '" cy="' + (p[1] * 80).toFixed(1) + '" r="' + p[2] + '" opacity="' + (p[2] > 1.2 ? 0.95 : 0.55) + '"/>';
+      }).join('') + '</svg>';
+    }
+
+    function cell(title, st, stText, body) {
+      return '<section class="pcell" data-st="' + st + '"><h3>' + title + '<span class="st">' + stText + '</span></h3>' + body + '</section>';
+    }
+    function kv(rows) { return '<dl class="kv">' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd' + (r[2] ? ' class="' + r[2] + '"' : '') + '>' + r[1] + '</dd>'; }).join('') + '</dl>'; }
+    var REC = '<span class="rec">추천</span>';
+
+    var chatMid = [
+      ['aa', '오늘 밤은 ' + hhmm(DARK0) + '부터 ' + hhmm(DARK1) + '까지 어두워요. 달은 ' + hhmm(MOONSET) + '에 져요. 무엇을 찍어 볼까요?'],
+      ['chips', ['오늘 밤 추천 보기', 'M45 플레이아데스', '지난번 대상 이어서']],
+      ['me', '플레이아데스 찍고 싶어'],
+      ['aa', 'M45 플레이아데스는 ' + hhmm(t30) + '부터 높이 30°를 넘고, ' + hhmm(TRANSIT) + '에 가장 높아요(' + maxAlt + '°). 지금 장비로는 화면의 절반쯤을 채워요. 가운데에 둘까요?'],
+      ['chips', ['가운데', '조금 비켜서'], 0],
+      ['me', '가운데'],
+      ['aa', '노출은 180초, ISO 800을 추천해요. 오늘 경통에 필터를 끼우셨나요?'],
+      ['chips', ['필터 없음', '광해 필터', '듀얼 내로우밴드']],
+    ];
+    var chatDone = chatMid.slice(0, 7).concat([
+      ['chips', ['필터 없음', '광해 필터', '듀얼 내로우밴드'], 1],
+      ['me', '광해 필터'],
+      ['aa', '좋아요. ' + hhmm(DARK1) + '에 새벽이 오면 끝내고 파킹할게요. 모두 정해졌어요. 오른쪽 계획을 확인해 주세요.'],
+    ]);
+
+    function chatHTML(list) {
+      return list.map(function (m) {
+        if (m[0] === 'chips') return '<div class="chips">' + m[1].map(function (c, i) { return '<span class="chip' + (m[2] === i ? ' pick' : '') + '">' + c + '</span>'; }).join('') + '</div>';
+        return '<div class="msg ' + m[0] + '">' + (m[0] === 'aa' ? '<span class="who">AA</span>' : '') + m[1] + '</div>';
+      }).join('');
+    }
+
+    document.querySelectorAll('[data-plan]').forEach(function (main) {
+      var done = main.dataset.plan === 'done';
+      var target = cell('대상', 'done', '정해짐', '<div class="pbody"><div><div class="big">M45 플레이아데스</div><div class="sub">황소자리 · 산개성단</div>' +
+        kv([['30° 넘는 시각', hhmm(t30) + '부터'], ['가장 높을 때', hhmm(TRANSIT) + ' · ' + maxAlt + '°'], ['달과 거리', '95°']]) + '</div>' + fov() + '</div>');
+      var frame = cell('구도', 'done', '정해짐', '<div class="pbody"><div><div class="big">가운데</div>' +
+        kv([['회전', '0° (손으로 맞춤)'], ['대상 크기', '화면의 약 45%']]) + '</div>' + fov() + '</div>');
+      var settings = done
+        ? cell('촬영 설정', 'done', '정해짐', kv([['노출', '180초 ' + REC], ['감도', 'ISO 800 ' + REC], ['필터', '광해 필터'], ['끝나는 조건', '대상이 낮아지거나 새벽이 올 때까지'], ['예상 장수', '약 ' + shots + '장 (' + hhmm(start) + '–' + hhmm(DARK1) + ')']]))
+        : cell('촬영 설정', 'now', '묻는 중', kv([['노출', '180초 ' + REC], ['감도', 'ISO 800 ' + REC], ['필터', '대답을 기다리는 중', 'wait'], ['끝나는 조건', '대상이 낮아지거나 새벽이 올 때까지']]));
+      var after = done
+        ? cell('끝난 뒤', 'done', '정해짐', kv([['적도의', '파킹'], ['다크·플랫', '찍지 않음'], ['장비', '연결 해제']]))
+        : cell('끝난 뒤', 'idle', '', '<p class="empty">대화를 진행하면 채워집니다</p>');
+
+      main.innerHTML =
+        '<aside class="chat"><div class="msgs">' + chatHTML(done ? chatDone : chatMid) + '</div>' +
+        '<div class="composer"><span>AA에게 말하기</span><span class="send"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></div></aside>' +
+        '<div class="right">' +
+          '<section class="night"><div class="night-head"><b>오늘 밤</b><span>어두운 시간 ' + hhmm(DARK0) + '–' + hhmm(DARK1) + '</span><span>구름 예보 18:00 받음</span>' +
+            (done ? '<span class="lg"><span class="sw" style="background:var(--accent);opacity:.35"></span>촬영 시간</span>' : '') + '</div>' + timeline(done) + '</section>' +
+          '<div class="lower"><div class="cells">' + target + frame + settings + after + '</div>' +
+            '<div class="cardrow" data-shown="' + (done ? 1 : 0) + '"><div class="sum">M45 플레이아데스 · 180초 × 약 ' + shots + '장 · ISO 800 · 광해 필터' +
+            '<small>' + hhmm(start) + ' 시작 가능 · ' + hhmm(DARK1) + ' 종료 후 파킹</small></div><span class="btn">이 계획으로 준비 시작</span></div>' +
+          '</div>' +
+        '</div>';
+    });
+  })();
+
+  // 단계 레일: 설치 확인부터 모든 화면의 맨 아래 (부팅·프로필 화면에는 없음)
+  var STAGES = ['연결', '점검', '계획', '준비', '촬영', '마무리'];
+  document.querySelectorAll('.app').forEach(function (app) {
+    var now = app.querySelector('[data-plan]') ? 2 : app.querySelector('[data-tiles]') ? 1
+      : app.querySelector('[data-strip],[data-ring],[data-graph]') ? 0 : -1;
+    if (now < 0) return;
+    var rail = document.createElement('nav');
+    rail.className = 'rail';
+    rail.setAttribute('aria-label', '촬영 단계');
+    rail.innerHTML = STAGES.map(function (s, i) {
+      var st = i < now ? 'done' : i === now ? 'now' : 'todo';
+      return (i ? '<span class="sep" data-on="' + (i <= now ? 1 : 0) + '" aria-hidden="true"></span>' : '') +
+        '<span class="rs" data-s="' + st + '"' + (st === 'now' ? ' aria-current="step"' : '') + '><span class="mk">' + (st === 'done' ? CHECK : '') + '</span>' + s + '</span>';
+    }).join('');
+    app.appendChild(rail);
+  });
+
+  // 장비 연결 이후 화면의 상태 줄에는 장비 점을 보여 준다
+  document.querySelectorAll('[data-devbar] .devs').forEach(function (d) {
+    d.innerHTML = ['WandererBox', 'OnStep', 'X-T5', 'PHD2'].map(function (n) {
+      return '<span class="dev"><span class="dot"></span>' + n + '</span>';
+    }).join('');
+  });
+
+  // 테마 전환
+  var apps = document.querySelectorAll('.app');
+  function setTheme(t) {
+    apps.forEach(function (a) {
+      a.dataset.t = t;
+      a.querySelectorAll('[data-sw]').forEach(function (s) { s.classList.toggle('on', s.dataset.sw === t); });
+    });
+    document.querySelectorAll('#themes button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.t === t)); });
+    try { localStorage.setItem('aa-theme', t); } catch (e) {}
+  }
+  document.querySelectorAll('#themes button').forEach(function (b) {
+    b.addEventListener('click', function () { setTheme(b.dataset.t); });
+  });
+  var saved = 'dark';
+  try { saved = localStorage.getItem('aa-theme') || 'dark'; } catch (e) {}
+  setTheme(saved);
+
+  // 1280×800 목업을 틀 폭에 맞춰 줄이기
+  function fit() {
+    document.querySelectorAll('.frame').forEach(function (f) { f.firstElementChild.style.setProperty('--s', f.clientWidth / 1280); });
+  }
+  fit();
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(document.body); else window.addEventListener('resize', fit);
+})();
+</script>

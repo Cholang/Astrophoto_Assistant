@@ -22,6 +22,8 @@ N.I.N.A. 위에서 동작하는 천체사진 촬영 비서. 개인용 프로토�
 - 구조와 온보딩: [onboarding-and-architecture.md](onboarding-and-architecture.md)
 - NINA 사전 준비: [nina-prerequisites.md](nina-prerequisites.md)
 - API 대응표: [api-coverage.md](api-coverage.md)
+- 화면 시안: [mockups/aa-screens.html](mockups/aa-screens.html) (브라우저로 열기)
+- 대화 기록: [conversations/](conversations/) — 새 세션은 가장 최근 파일의 "다음 세션에서 이어서 하려면"부터
 
 ## 구성
 
