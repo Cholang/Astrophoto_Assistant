@@ -9,12 +9,11 @@
   padding: 16px 16px 64px;
 }
 
-/* 정사각형 그래프. 안의 모든 크기·위치는 한 변에 대한 % (EquipmentScreen.tsx의 CENTER·ORBIT·NODE) */
+/* 그래프 영역. 안의 원 자리·크기는 이 영역을 재서 px로 계산한다 (EquipmentScreen.tsx의 layout) */
 .graph {
   position: relative;
-  width: min(640px, 68vh, 92vw);
-  aspect-ratio: 1;
-  container-type: inline-size;
+  width: min(1100px, calc(100vw - 32px));
+  height: clamp(380px, calc(100vh - 230px), 680px);
 }
 
 .links {
@@ -28,7 +27,7 @@
 /* 연결 선: 연결에 성공하면 가운데에서 장비 쪽으로 그려진다 */
 .link {
   stroke: var(--pass);
-  stroke-width: 0.45;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -42,16 +41,13 @@
 /* 가운데 원: 1단계 크기에서 작아지며 시작 */
 .center {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 28%;
   transform: translate(-50%, -50%);
   animation: shrink 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .ring {
   width: 100%;
-  --ring-font: clamp(11px, 2.4cqw, 15px);
+  --ring-font: clamp(11px, calc(var(--cd) * 0.06), 16px);
 }
 
 @keyframes shrink {
@@ -84,14 +80,14 @@
 
 .kind {
   grid-row: 2;
-  font-size: clamp(11px, 2.3cqw, 16px);
+  font-size: clamp(12px, calc(var(--d) * 0.12), 20px);
   font-weight: 700;
   line-height: 1.2;
 }
 
 .name {
   grid-row: 3;
-  font-size: clamp(9px, 1.6cqw, 12px);
+  font-size: clamp(10px, calc(var(--d) * 0.085), 14px);
   opacity: 0.8;
   overflow-wrap: anywhere;
 }
@@ -99,8 +95,8 @@
 .mark {
   grid-row: 4;
   align-self: start;
-  width: clamp(14px, 2.6cqw, 20px);
-  height: clamp(14px, 2.6cqw, 20px);
+  width: clamp(14px, calc(var(--d) * 0.13), 24px);
+  height: clamp(14px, calc(var(--d) * 0.13), 24px);
   margin-top: 4px;
 }
 

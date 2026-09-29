@@ -39,6 +39,7 @@ public static class AppServer
         builder.Services.AddTransient<SetupChecker>();
         builder.Services.AddTransient<EngineStarter>();
         builder.Services.AddTransient<EquipmentConnector>();
+        builder.Services.AddSingleton<EquipmentSimulation>();
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));

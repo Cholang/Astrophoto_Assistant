@@ -13,14 +13,52 @@ public sealed class EquipmentOptions
     /// 실제 연결은 하지 않는다. 장비를 연결할 수 있게 되면 false.
     /// </summary>
     public bool Simulate { get; set; }
+
+    /// <summary>
+    /// [임시] 시뮬레이션에서 연결 실패로 시작할 장비 (switch, mount, camera, focuser, guider). "*"는 전부.
+    /// 화면에 들어올 때마다 이 목록으로 다시 시작하고, 장비별 "다시 연결"을 누르면 그 장비는 성공한다.
+    /// </summary>
+    public string[] SimulateFailing { get; set; } = [];
+}
+
+/// <summary>
+/// [임시] 시뮬레이션의 "아직 해결 안 된 장비" 목록. 화면이 여러 번 요청해도 유지되도록 서버에 하나만 둔다.
+/// </summary>
+public sealed class EquipmentSimulation
+{
+    private readonly Lock _gate = new();
+    private HashSet<string> _failing = [];
+    private readonly HashSet<string> _fixed = [];
+    private bool _failAll;
+
+    /// <summary>화면에 들어올 때: 실패로 시작할 장비를 다시 정하고, 해결 기록은 지운다.</summary>
+    public void Reset(string[] failing)
+    {
+        lock (_gate)
+        {
+            _failAll = failing.Contains("*");
+            _failing = [.. failing];
+            _fixed.Clear();
+        }
+    }
+
+    public bool IsFailing(string id)
+    {
+        lock (_gate) return !_fixed.Contains(id) && (_failAll || _failing.Contains(id));
+    }
+
+    /// <summary>"다시 연결"을 누르면 그 장비는 해결된 것으로 본다.</summary>
+    public void Fix(string id)
+    {
+        lock (_gate) _fixed.Add(id);
+    }
 }
 
 /// <summary>
 /// 장비 연결. 지금 쓰는 N.I.N.A. 프로필에서 장비 목록을 읽어, 전원 허브부터 차례로 연결한다.
 /// 프로필에서 "없음"으로 된 장비(필터휠 등)는 건너뛴다.
-/// 결과 형식은 0·1단계와 같아서 화면이 같은 쉐브론·공통 영역을 쓴다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options)
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim)
 {
     /// <summary>연결 순서: 허브가 다른 장비에 전원을 주므로 가장 먼저 (onboarding-and-architecture.md 4.2).</summary>
     // Fix: 연결에 실패했을 때 상태 옆 ? 툴팁에 보여 줄 해결 방법 (장비마다 다르게)
@@ -46,8 +84,12 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     private const string WaitingForHub = "전원 허브가 연결되면 확인합니다";
 
     /// <summary>화면에 미리 칸을 그릴 수 있게, 연결할 장비 목록만 먼저 알려 준다.</summary>
-    public async Task<IReadOnlyList<CheckResult>> PlanAsync(CancellationToken ct = default) =>
-        (await ReadDevicesAsync(ct)).Select(d => Pending(d)).ToList();
+    /// 화면에 들어올 때마다 부르므로, 시뮬레이션의 실패 목록도 여기서 처음 상태로 되돌린다.
+    public async Task<IReadOnlyList<CheckResult>> PlanAsync(CancellationToken ct = default)
+    {
+        if (options.Value.Simulate) sim.Reset(options.Value.SimulateFailing);
+        return (await ReadDevicesAsync(ct)).Select(d => Pending(d)).ToList();
+    }
 
     public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -82,7 +124,10 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     public async Task<CheckResult?> RetryAsync(string id, bool simulateFail = false, CancellationToken ct = default)
     {
         var d = (await ReadDevicesAsync(ct)).FirstOrDefault(x => x.Slot.Kind == id);
-        return d is null ? null : await ConnectOneAsync(d, ct, simulateFail && options.Value.Simulate);
+        if (d is null) return null;
+        // [임시] 시뮬레이션: 사용자가 원인을 해결하고 "다시 연결"을 눌렀다고 보고, 이 장비는 이제 성공한다
+        if (options.Value.Simulate && !simulateFail) sim.Fix(id);
+        return await ConnectOneAsync(d, ct, simulateFail && options.Value.Simulate);
     }
 
     private async Task<CheckResult> ConnectOneAsync(Device d, CancellationToken ct, bool forceFail = false)
@@ -95,7 +140,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         else if (options.Value.Simulate)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(450), ct); // 연결되는 모습이 보이게 잠깐 기다린다
-            connected = true;
+            connected = !sim.IsFailing(d.Slot.Kind);
         }
         else
         {

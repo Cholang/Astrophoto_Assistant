@@ -84,7 +84,8 @@ dotnet run --project src/Astro.Server
 
 | 키 | 기본값 | 설명 |
 |---|---|---|
-| `Simulate` | `true` **[임시]** | 장비 없이 개발할 때. 지금 N.I.N.A. 프로필에 있는 장비가 모두 연결된 것으로 간주한다(실제 연결 안 함). 장비를 연결할 수 있으면 `false` — 실제 연결 경로는 아직 실기 미검증 |
+| `Simulate` | `true` **[임시]** | 장비 없이 개발할 때. 실제 연결은 하지 않고 N.I.N.A. 프로필의 장비로 연결 과정을 흉내 낸다. 장비를 연결할 수 있으면 `false` — 실제 연결 경로는 아직 실기 미검증 |
+| `SimulateFailing` | `["*"]` **[임시]** | 시뮬레이션에서 연결 실패로 시작할 장비 (`switch`, `mount`, `camera`, `focuser`, `guider`, `*`=전부). 화면에 들어올 때마다 이 상태로 시작하고, 장비별 "다시 연결"을 누르면 그 장비는 성공한다. `[]`이면 모두 바로 연결됨 |
 
 `App:DataDir`: 프로필 등 데이터 폴더 (기본 `%LOCALAPPDATA%\<product.json의 dataFolder>`). 테스트할 때 다른 폴더로 바꾼다.
 
