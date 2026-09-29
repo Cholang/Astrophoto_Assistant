@@ -1,38 +1,35 @@
 import type { CheckItem } from '../checks'
-import DiagnosisBody from './DiagnosisCard'
+import InfoTip from './InfoTip'
 import ProgressLine from './ProgressLine'
 import StatusIcon from './StatusIcon'
 import styles from './StepPanel.module.css'
 
 /**
- * 단계 화면 하단의 공통 영역: 현재 항목의 이름(원어), 한 줄 설명, 결과.
- * 실패하면 같은 자리에 진단(무슨 일 / 왜 / 이렇게 / 원본)을 보여 준다.
+ * 쉐브론 띠 아래의 공통 영역. 항목 이름은 쉐브론에 이미 있으므로 다시 쓰지 않는다.
+ * 한 줄 설명 → 상태 한 문장(+ 해결 방법 ? 툴팁) → (있으면) 설치 링크.
  */
-export default function StepPanel({ item, index, total }: { item: CheckItem; index: number; total: number }) {
+export default function StepPanel({ item, statusText }: { item: CheckItem; statusText: string }) {
+  const problem = item.status === 'Fail' || item.status === 'Warn'
+  const how = problem ? item.diagnosis : null
+
   return (
     <section className={styles.panel} data-status={item.status} aria-live="polite">
-      <header className={styles.head}>
-        <p className={styles.position}>
-          {index + 1} / {total}
-        </p>
-        <h2>
-          {item.title}
-          {item.term && <span className={styles.term}> ({item.term})</span>}
-        </h2>
-        {item.hint && <p className={styles.hint}>{item.hint}</p>}
-      </header>
+      {item.hint && <p className={styles.hint}>{item.hint}</p>}
 
-      {item.status === 'Running' && <ProgressLine indeterminate label={`${item.title} 진행 중`} />}
+      {item.status === 'Running' && <ProgressLine indeterminate label={`${item.title} 확인 중`} />}
 
-      {item.message && (
+      {statusText && (
         <p className={styles.result}>
           <StatusIcon status={item.status} />
-          {item.message}
+          <span>{statusText}</span>
+          {how?.fix && <InfoTip label="해결 방법" text={how.fix} />}
         </p>
       )}
 
-      {item.diagnosis && (item.status === 'Fail' || item.status === 'Warn') && (
-        <DiagnosisBody diagnosis={item.diagnosis} tone={item.status === 'Fail' ? 'fail' : 'warn'} />
+      {how?.actionUrl && (
+        <a className={styles.link} href={how.actionUrl} target="_blank" rel="noreferrer">
+          {how.actionLabel ?? '설치 페이지'}
+        </a>
       )}
     </section>
   )

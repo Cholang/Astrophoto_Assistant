@@ -1,29 +1,26 @@
+/* 프로필 화면은 가운데 한 줄 배치 (사용자 요청, DESIGN.md의 왼쪽 정렬 예외) */
 .stage {
   flex: 1;
-  display: flex;
+  display: grid;
+  justify-items: center;
+  padding: clamp(28px, 7vh, 72px) 16px 48px;
 }
 
 .form {
-  flex: 1;
+  width: min(100%, 360px);
   display: grid;
-  grid-template-rows: 1fr auto;
+  justify-items: center;
+  gap: 28px;
 }
 
-.content {
-  width: min(100%, 680px);
-  padding: clamp(32px, 8vh, 80px) var(--gutter) 32px;
+/* 제목과 이미지 사이는 다른 간격(28px)의 40% */
+.head {
   display: grid;
-  align-content: start;
-  gap: 32px;
-  animation: enter 200ms ease-out both;
+  justify-items: center;
+  gap: 11px;
 }
 
-.intro {
-  display: grid;
-  gap: 10px;
-}
-
-.intro h1 {
+.title {
   margin: 0;
   font-size: var(--size-title);
   font-weight: 700;
@@ -31,76 +28,78 @@
   letter-spacing: -0.01em;
 }
 
-.intro p {
-  margin: 0;
-  color: var(--muted);
+.imageSlot {
+  position: relative;
+}
+
+/* 이미지 오른쪽 아래 모서리에 걸친 정사각형 연필 버튼. 한 변 = 이미지(168px)의 약 1/6 */
+.editImage {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.editImage:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.editImage svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
 .fields {
+  width: 100%;
   display: grid;
-  gap: 24px;
-  max-width: 460px;
-}
-
-.imageField {
-  display: flex;
-  align-items: center;
   gap: 20px;
-}
-
-.imageActions {
-  display: grid;
-  gap: 4px;
-}
-
-.imageLabel {
-  font-weight: 600;
-}
-
-.optional {
-  margin-left: 8px;
-  font-size: var(--size-bar);
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.imageHelp {
-  margin: 0;
-  font-size: var(--size-small);
-  color: var(--muted);
-}
-
-.imageButtons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 .error {
   margin: 0;
   color: var(--fail);
   font-weight: 600;
+  text-align: center;
 }
 
-.footer {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px var(--gutter) 24px;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
+.actions {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
 }
 
-@keyframes enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+.actions > :first-child {
+  min-width: 180px;
 }
 
-:global(:root[data-theme='night']) .content { animation: none; }
-
-@media (max-width: 520px) {
-  .imageField { align-items: flex-start; flex-direction: column; }
+.back {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--size-small);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
+
+.back:hover {
+  color: var(--text);
+}
+
+

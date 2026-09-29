@@ -13,8 +13,10 @@ public sealed record NewProfile(string? Nickname, string? Memo);
 /// </summary>
 public sealed class ProfileStore
 {
-    public const int NicknameMaxLength = 20;
-    public const int MemoMaxLength = 60;
+    // 글자 수는 byte로 센다: 한글 등은 2, 영문·숫자·기호는 1 (web/src/profiles.ts의 textBytes와 같은 규칙).
+    // 별명 20byte = 한글 10자, 메모 120byte = 한글 60자.
+    public const int NicknameMaxBytes = 20;
+    public const int MemoMaxBytes = 120;
     /// <summary>화면이 256×256 WebP로 줄여서 보내므로 넉넉한 상한.</summary>
     public const int ImageMaxBytes = 1024 * 1024;
 
@@ -30,21 +32,23 @@ public sealed class ProfileStore
         _imageDir = Path.Combine(root, "profile-images");
     }
 
-    /// <summary>마지막으로 쓴 프로필이 맨 앞.</summary>
+    /// <summary>만든 순서대로. 화면은 이 순서로 왼쪽부터 놓는다.</summary>
     public IReadOnlyList<Profile> List()
     {
         lock (_gate)
-            return Load().OrderByDescending(p => p.LastUsedAt ?? p.CreatedAt).ToList();
+            return Load().OrderBy(p => p.CreatedAt).ToList();
     }
+
+    public static int TextBytes(string text) => text.Sum(c => c < 0x80 ? 1 : 2);
 
     /// <returns>만든 프로필, 또는 입력이 잘못됐을 때 오류 문구</returns>
     public (Profile? Profile, string? Error) Create(NewProfile input)
     {
         var nickname = input.Nickname?.Trim() ?? "";
         var memo = string.IsNullOrWhiteSpace(input.Memo) ? null : input.Memo.Trim();
-        if (nickname.Length == 0) return (null, "닉네임을 입력해 주세요.");
-        if (nickname.Length > NicknameMaxLength) return (null, $"닉네임은 {NicknameMaxLength}자까지 쓸 수 있습니다.");
-        if (memo?.Length > MemoMaxLength) return (null, $"메모는 {MemoMaxLength}자까지 쓸 수 있습니다.");
+        if (nickname.Length == 0) return (null, "별명을 입력해 주세요.");
+        if (TextBytes(nickname) > NicknameMaxBytes) return (null, $"별명은 최대 {NicknameMaxBytes}byte(한글 {NicknameMaxBytes / 2}자)까지 쓸 수 있습니다.");
+        if (memo is not null && TextBytes(memo) > MemoMaxBytes) return (null, $"메모는 최대 {MemoMaxBytes}byte(한글 {MemoMaxBytes / 2}자)까지 쓸 수 있습니다.");
 
         lock (_gate)
         {

@@ -4,6 +4,7 @@ import styles from './ProfileScreen.module.css'
 
 /**
  * 프로필 선택 (넷플릭스·유튜브 프로필 화면 방식).
+ * 화면 가운데에 첫 칸 "새 프로필", 그 오른쪽으로 만든 순서대로 놓는다.
  * 프로필이 하나여도 항상 보여 주고, 마지막에 쓴 프로필에 초점을 둔다 (Enter 한 번으로 시작).
  */
 export default function ProfileScreen({
@@ -15,25 +16,17 @@ export default function ProfileScreen({
   onSelect: (p: Profile) => void
   onNew: () => void
 }) {
+  const lastUsed = profiles.reduce<Profile | null>(
+    (best, p) => (!best || (p.lastUsedAt ?? '') > (best.lastUsedAt ?? '') ? p : best),
+    null,
+  )
+
   return (
     <main className={styles.stage}>
       <div className={styles.content}>
-        <div className={styles.intro}>
-          <h1>누구로 시작할까요?</h1>
-          <p>프로필을 고르면 이 PC의 촬영 준비 상태를 확인합니다.</p>
-        </div>
+        <h1 className={styles.title}>프로필 선택</h1>
 
         <ul className={styles.grid}>
-          {profiles.map((p, i) => (
-            <li key={p.id}>
-              {/* 목록은 마지막 사용 순이라 첫 칸이 마지막에 쓴 프로필 */}
-              <button type="button" className={styles.tile} onClick={() => onSelect(p)} autoFocus={i === 0}>
-                <ProfileAvatar src={p.hasImage ? profileImageUrl(p) : null} name={p.nickname} size="large" />
-                <span className={styles.name}>{p.nickname}</span>
-                {p.memo && <span className={styles.memo}>{p.memo}</span>}
-              </button>
-            </li>
-          ))}
           <li>
             <button type="button" className={styles.tile} onClick={onNew}>
               <span className={styles.add} aria-hidden="true">
@@ -42,6 +35,15 @@ export default function ProfileScreen({
               <span className={styles.name}>새 프로필</span>
             </button>
           </li>
+          {profiles.map((p) => (
+            <li key={p.id}>
+              <button type="button" className={styles.tile} onClick={() => onSelect(p)} autoFocus={p.id === lastUsed?.id}>
+                <ProfileAvatar src={p.hasImage ? profileImageUrl(p) : null} size="large" />
+                <span className={styles.name}>{p.nickname}</span>
+                {p.memo && <span className={styles.memo}>{p.memo}</span>}
+              </button>
+            </li>
+          ))}
         </ul>
       </div>
     </main>

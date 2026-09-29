@@ -3,28 +3,8 @@
   gap: 6px;
 }
 
-.labelLine {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.labelLine label {
+.label {
   font-weight: 600;
-}
-
-.optional {
-  margin-left: 8px;
-  font-size: var(--size-bar);
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.count {
-  font-size: var(--size-bar);
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .input {

@@ -1,8 +1,25 @@
-﻿.shell {
+.shell {
   min-height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
+}
+
+/* 상태 줄은 부팅이 끝나고 처음 나타날 때 한 번 페이드인하고, 그 뒤 화면 전환에는 그대로 있는다 */
+.bar {
+  animation: barIn 280ms ease-out both;
+}
+
+/* 화면 전환: 앞 화면 페이드아웃 → 다음 화면 페이드인 (App.tsx FADE_MS와 같은 시간) */
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  transition: opacity 280ms ease;
+}
+
+.screen[data-shown='false'] {
+  opacity: 0;
 }
 
 .placeholder {
@@ -22,4 +39,9 @@
 .placeholder p {
   margin: 0;
   color: var(--muted);
+}
+
+@keyframes barIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

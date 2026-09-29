@@ -56,10 +56,17 @@ export function useCheckStream(url: string, initial: CheckItem[]) {
     return () => source.close()
   }, [url, run])
 
+  /** [임시] 화면 설계용: 항목 하나를 통과한 것으로 바꾼다 (0단계 "설치 완료하기" 버튼). */
+  const markPassed = useCallback(
+    (id: string, message: string) =>
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'Pass' as const, message, diagnosis: null } : i))),
+    [],
+  )
+
   const finals = items.filter((i) => isFinal(i.status)).length
   const done = finals === items.length || closed
   const interrupted = done && finals < items.length
   const failed = items.some((i) => i.severity === 'Required' && i.status !== 'Pass')
 
-  return { items, done, interrupted, failed, allPass: done && !interrupted && !failed, restart, run }
+  return { items, done, interrupted, failed, allPass: done && !interrupted && !failed, restart, run, markPassed }
 }

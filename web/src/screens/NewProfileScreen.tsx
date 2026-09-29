@@ -2,22 +2,15 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Button from '../components/Button'
 import ProfileAvatar from '../components/ProfileAvatar'
 import TextField from '../components/TextField'
-import { createProfile, MEMO_MAX, NICKNAME_MAX, toSquareProfileImage, uploadProfileImage, type Profile } from '../profiles'
+import { createProfile, MEMO_MAX_BYTES, NICKNAME_MAX_BYTES, toSquareProfileImage, uploadProfileImage, type Profile } from '../profiles'
 import styles from './NewProfileScreen.module.css'
 
 /**
- * 새 프로필 만들기: 닉네임(필수), 메모(선택), 프로필 이미지(선택, PC의 이미지 파일).
+ * 새 프로필 만들기 (화면 가운데 한 줄 배치):
+ * 프로필 이미지 → [이미지 변경] → 닉네임(필수) → 메모(선택) → [프로필 생성].
  * 만들면 선택 화면을 거치지 않고 바로 그 프로필로 다음 단계로 간다.
  */
-export default function NewProfileScreen({
-  firstTime,
-  onCreated,
-  onCancel,
-}: {
-  firstTime: boolean
-  onCreated: (p: Profile) => void
-  onCancel?: () => void
-}) {
+export default function NewProfileScreen({ onCreated, onCancel }: { onCreated: (p: Profile) => void; onCancel?: () => void }) {
   const [nickname, setNickname] = useState('')
   const [memo, setMemo] = useState('')
   const [image, setImage] = useState<Blob | null>(null)
@@ -39,13 +32,9 @@ export default function NewProfileScreen({
       setPreview(URL.createObjectURL(square))
     } catch (e) {
       setError((e as Error).message)
+    } finally {
+      if (fileInput.current) fileInput.current.value = ''
     }
-  }
-
-  const clearImage = () => {
-    setImage(null)
-    setPreview(null)
-    if (fileInput.current) fileInput.current.value = ''
   }
 
   const submit = async (e: FormEvent) => {
@@ -66,69 +55,69 @@ export default function NewProfileScreen({
   return (
     <main className={styles.stage}>
       <form className={styles.form} onSubmit={submit} noValidate>
-        <div className={styles.content}>
-          <div className={styles.intro}>
-            <h1>{firstTime ? 'AA를 처음 쓰시는군요' : '새 프로필을 만들어요'}</h1>
-            <p>{firstTime ? '이 PC에서 쓸 프로필을 만들어 주세요. 닉네임만 있으면 됩니다.' : '닉네임만 있으면 됩니다. 메모와 이미지는 나중에 넣어도 됩니다.'}</p>
-          </div>
+        <div className={styles.head}>
+          <h1 className={styles.title}>프로필 선택</h1>
 
-          <div className={styles.fields}>
-            <div className={styles.imageField}>
-              <ProfileAvatar src={preview} name={nickname || '?'} size="large" />
-              <div className={styles.imageActions}>
-                <span className={styles.imageLabel}>
-                  프로필 이미지<span className={styles.optional}>선택</span>
-                </span>
-                <p className={styles.imageHelp}>사진의 가운데를 정사각형으로 맞춰 넣습니다.</p>
-                <div className={styles.imageButtons}>
-                  <Button onClick={() => fileInput.current?.click()}>{preview ? '다른 이미지 고르기' : '이미지 고르기'}</Button>
-                  {preview && <Button onClick={clearImage}>이미지 빼기</Button>}
-                </div>
-                <input
-                  ref={fileInput}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
-                  hidden
-                  onChange={(e) => pickImage(e.target.files?.[0])}
-                />
-              </div>
-            </div>
-
-            <TextField
-              id="nickname"
-              label="닉네임"
-              maxLength={NICKNAME_MAX}
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              autoFocus
-              autoComplete="off"
-              required
-            />
-            <TextField
-              id="memo"
-              label="메모"
-              optional
-              maxLength={MEMO_MAX}
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              placeholder="예: 주말 원정용, 베란다 촬영"
-              autoComplete="off"
-            />
-
-            {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            )}
+          <div className={styles.imageSlot}>
+            <ProfileAvatar src={preview} size="hero" />
+            {/* 이미지 변경: 이미지 오른쪽 아래의 정사각형 연필 버튼 (이미지 한 변의 약 1/6) */}
+            <button type="button" className={styles.editImage} aria-label="이미지 변경" title="이미지 변경" onClick={() => fileInput.current?.click()}>
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M11.2 2.3l2.5 2.5-7.9 7.9-3.2.7.7-3.2z" />
+                <path d="M9.8 3.7l2.5 2.5" />
+              </svg>
+            </button>
           </div>
         </div>
+        <div hidden>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+            hidden
+            onChange={(e) => pickImage(e.target.files?.[0])}
+          />
+        </div>
 
-        <footer className={styles.footer}>
-          {onCancel && <Button onClick={onCancel}>취소</Button>}
+        <div className={styles.fields}>
+          <TextField
+            id="nickname"
+            label="별명"
+            maxBytes={NICKNAME_MAX_BYTES}
+            placeholder={`최대 ${NICKNAME_MAX_BYTES}byte`}
+            value={nickname}
+            onValueChange={setNickname}
+            autoFocus
+            autoComplete="off"
+            required
+          />
+          <TextField
+            id="memo"
+            label="메모"
+            maxBytes={MEMO_MAX_BYTES}
+            placeholder={`(선택) 최대 ${MEMO_MAX_BYTES}byte`}
+            value={memo}
+            onValueChange={setMemo}
+            autoComplete="off"
+          />
+        </div>
+
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className={styles.actions}>
           <Button variant="primary" type="submit" disabled={!nickname.trim() || saving}>
-            {saving ? '만드는 중' : '만들기'}
+            {saving ? '생성 중' : '프로필 생성'}
           </Button>
-        </footer>
+          {onCancel && (
+            <button type="button" className={styles.back} onClick={onCancel}>
+              프로필 목록으로 돌아가기
+            </button>
+          )}
+        </div>
       </form>
     </main>
   )

@@ -18,18 +18,21 @@ const STATUS_WORD: Record<Status, string> = {
 }
 
 /**
- * 한 단계 안의 하위 항목을 가로 화살표 띠로 보여 준다 (설치 확인, 엔진 켜기 등).
- * 현재 칸은 채워서 강조하고, 칸을 누르면 그 항목이 현재가 되어 아래 공통 영역 설명이 바뀐다.
+ * 한 단계 안의 하위 항목을 화면 폭을 가득 채우는 큰 화살표 띠로 보여 준다 (설치 확인, 엔진 켜기 등).
+ * 현재 칸은 채우고 120%로 키운다 (전환은 애니메이션). 칸을 누르면 그 항목이 현재가 된다.
+ * onRetry가 있으면 현재 칸 안에 새로고침(다시 확인) 버튼을 둔다.
  */
 export default function StepChevrons({
   steps,
   current,
   onSelect,
+  onRetry,
   label,
 }: {
   steps: ChevronStep[]
   current: string
   onSelect: (id: string) => void
+  onRetry?: () => void
   label: string
 }) {
   return (
@@ -37,25 +40,33 @@ export default function StepChevrons({
       {steps.map((s, i) => {
         const isCurrent = s.id === current
         return (
-          <li key={s.id} className={styles.item}>
-            <button
-              type="button"
-              className={styles.chevron}
-              data-status={s.status}
-              data-current={isCurrent}
-              aria-current={isCurrent ? 'step' : undefined}
-              aria-label={`${i + 1}. ${s.title}${s.term ? ` (${s.term})` : ''}: ${STATUS_WORD[s.status]}`}
-              onClick={() => onSelect(s.id)}
-            >
-              <StatusIcon status={s.status} />
-              <span className={styles.text}>
-                <span className={styles.title}>{s.title}</span>
-                {s.term && <span className={styles.term}>{s.term}</span>}
-              </span>
-              <span className={styles.number} aria-hidden="true">
-                {i + 1}
-              </span>
-            </button>
+          <li key={s.id} className={styles.item} data-status={s.status} data-current={isCurrent}>
+            <div className={styles.shape}>
+              <button
+                type="button"
+                className={styles.select}
+                aria-current={isCurrent ? 'step' : undefined}
+                aria-label={`${i + 1}. ${s.title}${s.term ? ` (${s.term})` : ''}: ${STATUS_WORD[s.status]}`}
+                onClick={() => onSelect(s.id)}
+              >
+                <StatusIcon status={s.status} />
+                <span className={styles.text}>
+                  <span className={styles.title}>{s.title}</span>
+                  {s.term && <span className={styles.term}>{s.term}</span>}
+                </span>
+                <span className={styles.number} aria-hidden="true">
+                  {i + 1}
+                </span>
+              </button>
+              {isCurrent && onRetry && (
+                <button type="button" className={styles.retry} aria-label="다시 확인" title="다시 확인" onClick={onRetry}>
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M16 10a6 6 0 1 1-1.8-4.3" />
+                    <path d="M16.2 3.2v3.3h-3.3" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </li>
         )
       })}

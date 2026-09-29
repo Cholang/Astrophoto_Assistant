@@ -1,23 +1,16 @@
-/* OOBE 구조: 왼쪽 정렬, 제목 → 쉐브론 띠 → 공통 영역, 오른쪽 아래 주 버튼 하나 */
+/* 제목 → 화면 폭을 채우는 쉐브론 띠 → 공통 영역, 오른쪽 아래 주 버튼 하나 */
 .stage {
   flex: 1;
   display: grid;
-  grid-template-rows: 1fr auto;
-  min-height: 0;
-}
-
-.content {
-  width: min(100%, 1120px);
-  padding: clamp(32px, 8vh, 80px) var(--gutter) 32px;
-  display: grid;
+  grid-template-rows: auto auto 1fr auto;
   align-content: start;
-  gap: 28px;
-  animation: enter 200ms ease-out both;
+  min-height: 0;
 }
 
 .intro {
   display: grid;
   gap: 10px;
+  padding: clamp(28px, 6vh, 64px) var(--gutter) 0;
 }
 
 .intro h1 {
@@ -35,22 +28,33 @@
   max-width: 56ch;
 }
 
+.panel {
+  padding: 0 clamp(24px, 5vw, 72px) 28px;
+}
+
 .footer {
   position: sticky;
   bottom: 0;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  align-items: center;
+  gap: 16px;
   padding: 16px var(--gutter) 24px;
   border-top: 1px solid var(--line);
   background: var(--bg);
 }
 
-@keyframes enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+/* [임시] 화면 설계용 버튼: 작고 눈에 띄지 않게, 주 버튼 왼쪽 */
+.temp {
+  padding: 4px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--size-bar);
+  cursor: pointer;
 }
 
-:global(:root[data-theme='night']) .content {
-  animation: none;
+.temp:hover {
+  color: var(--text);
 }

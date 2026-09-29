@@ -8,9 +8,26 @@ export interface Profile {
   lastUsedAt: string | null
 }
 
-export const NICKNAME_MAX = 20
-export const MEMO_MAX = 60
+// 글자 수는 byte로 센다: 한글 등은 2, 영문·숫자·기호는 1 (서버 ProfileStore.TextBytes와 같은 규칙).
+export const NICKNAME_MAX_BYTES = 20 // 한글 10자
+export const MEMO_MAX_BYTES = 120 // 한글 60자
 const IMAGE_SIZE = 256
+
+export function textBytes(text: string) {
+  let n = 0
+  for (let i = 0; i < text.length; i++) n += text.charCodeAt(i) < 0x80 ? 1 : 2
+  return n
+}
+
+/** 최대 byte를 넘는 뒷부분을 잘라 낸다. */
+export function clampBytes(text: string, max: number) {
+  let n = 0
+  for (let i = 0; i < text.length; i++) {
+    n += text.charCodeAt(i) < 0x80 ? 1 : 2
+    if (n > max) return text.slice(0, i)
+  }
+  return text
+}
 
 export async function listProfiles(): Promise<Profile[]> {
   const res = await fetch('/api/profiles')

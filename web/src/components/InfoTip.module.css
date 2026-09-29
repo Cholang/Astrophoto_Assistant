@@ -1,0 +1,41 @@
+.anchor {
+  position: relative;
+  display: inline-flex;
+  align-self: center;
+}
+
+.q {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 17px;
+  opacity: 0.8;
+  cursor: help;
+}
+
+.q:hover {
+  opacity: 1;
+}
+
+.tip {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  left: -8px;
+  width: max-content;
+  max-width: min(360px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--size-small);
+  font-weight: 400;
+  line-height: 1.5;
+}

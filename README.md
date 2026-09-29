@@ -59,4 +59,12 @@ dotnet run --project src/Astro.Server
 | `LaunchIfNotRunning` | `true` | 0단계 체크에서 NINA가 꺼져 있으면 AA가 켬 |
 | `StartupTimeoutSeconds` | `90` | NINA를 켠 뒤 API 응답을 기다리는 시간 |
 
-환경 변수로도 바꿀 수 있다. 예: `Nina__LaunchIfNotRunning=false`
+`Setup` 항목:
+
+| 키 | 기본값 | 설명 |
+|---|---|---|
+| `SimulateMissing` | `true` **[임시]** | 화면 설계용. 실제 설치 여부와 관계없이 0단계 5개를 모두 "설치되어 있지 않음"으로 보고. 화면의 임시 "○○ 설치 완료하기" 버튼과 함께 쓴다. 설계가 끝나면 `false` |
+
+`AA:DataDir`: 프로필 등 데이터 폴더 (기본 `%LOCALAPPDATA%\AA`). 테스트할 때 다른 폴더로 바꾼다.
+
+환경 변수로도 바꿀 수 있다. 예: `Nina__LaunchIfNotRunning=false`, `AA__DataDir=D:\temp\aa-data`

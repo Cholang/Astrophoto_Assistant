@@ -29,6 +29,7 @@ public static class AaServer
         if (url is not null) builder.WebHost.UseUrls(url);
 
         builder.Services.Configure<NinaOptions>(builder.Configuration.GetSection("Nina"));
+        builder.Services.Configure<SetupOptions>(builder.Configuration.GetSection("Setup"));
         builder.Services.AddHttpClient<NinaApiClient>((sp, http) =>
         {
             http.BaseAddress = new Uri(sp.GetRequiredService<IOptions<NinaOptions>>().Value.BaseUrl);

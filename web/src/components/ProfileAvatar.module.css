@@ -1,11 +1,15 @@
 .avatar {
   display: grid;
-  place-items: center;
+  place-items: end center;
   overflow: hidden;
   flex: none;
   aspect-ratio: 1;
   background: var(--surface-2);
-  color: var(--text);
+}
+
+.avatar[data-size='hero'] {
+  width: 168px;
+  border-radius: 14px;
 }
 
 .avatar[data-size='large'] {
@@ -23,12 +27,12 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  align-self: stretch;
 }
 
-.initial {
-  font-weight: 700;
-  line-height: 1;
+.fallback {
+  width: 78%;
+  height: 78%;
+  fill: var(--muted);
+  opacity: 0.55;
 }
-
-.avatar[data-size='large'] .initial { font-size: 52px; }
-.avatar[data-size='small'] .initial { font-size: 12px; }

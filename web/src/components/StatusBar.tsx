@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { profileImageUrl, type Profile } from '../profiles'
 import type { Theme } from '../theme'
 import ProfileAvatar from './ProfileAvatar'
@@ -33,7 +33,7 @@ export default function StatusBar({
 
       {profile && (
         <span className={styles.profile}>
-          <ProfileAvatar src={profile.hasImage ? profileImageUrl(profile) : null} name={profile.nickname} size="small" />
+          <ProfileAvatar src={profile.hasImage ? profileImageUrl(profile) : null} size="small" />
           {profile.nickname}
         </span>
       )}

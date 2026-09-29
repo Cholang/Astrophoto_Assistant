@@ -9,26 +9,31 @@ export interface StepScreenText {
   running: [string, string]
   failed: [string, string]
   passed: [string, string]
-  retry: string
   stripLabel: string
 }
 
 /**
  * 0단계(설치 확인)와 1단계(엔진 켜기)가 함께 쓰는 화면 틀:
- * 제목·설명 → 가로 쉐브론 띠 → 하단 공통 영역 → 오른쪽 아래 주 버튼 하나.
+ * 제목·설명 → 화면 폭을 채우는 큰 쉐브론 띠(현재 칸 안에 새로고침) → 하단 공통 영역 → 오른쪽 아래 "다음".
  */
 export default function CheckStepsScreen({
   url,
   initial,
   text,
   onContinue,
+  statusText = (item) => item.message,
+  tempComplete,
 }: {
   url: string
   initial: CheckItem[]
   text: StepScreenText
   onContinue: () => void
+  /** 공통 영역에 보여 줄 상태 문장. 기본은 서버가 보낸 문장 */
+  statusText?: (item: CheckItem) => string
+  /** [임시] 화면 설계용 버튼: 누르면 선택된 항목 하나를 통과한 것으로 간주. label의 {title}은 항목 이름으로 바뀐다 */
+  tempComplete?: { label: string; passMessage: string }
 }) {
-  const { items, done, interrupted, failed, allPass, restart, run } = useCheckStream(url, initial)
+  const { items, done, interrupted, failed, allPass, restart, run, markPassed } = useCheckStream(url, initial)
   const [picked, setPicked] = useState<string | null>(null)
 
   // 다시 확인하면 사용자가 고른 칸을 풀고 자동으로 따라가게 한다.
@@ -48,36 +53,45 @@ export default function CheckStepsScreen({
     (done ? items[items.length - 1] : items.find((i) => i.status === 'Pending')) ??
     items[items.length - 1]
   const current = items.find((i) => i.id === picked) ?? auto
-  const index = items.indexOf(current)
 
   const [title, description] = !done ? text.running : interrupted || failed ? text.failed : text.passed
 
   return (
     <main className={styles.stage}>
-      <div className={styles.content}>
-        <div className={styles.intro}>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
+      <div className={styles.intro}>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
 
-        <StepChevrons steps={items} current={current.id} onSelect={setPicked} label={text.stripLabel} />
-        <StepPanel item={current} index={index} total={items.length} />
+      <StepChevrons
+        steps={items}
+        current={current.id}
+        onSelect={setPicked}
+        onRetry={done && !allPass ? restart : undefined}
+        label={text.stripLabel}
+      />
+
+      <div className={styles.panel}>
+        <StepPanel item={current} statusText={statusText(current)} />
       </div>
 
       <footer className={styles.footer}>
-        {!done ? (
-          <Button variant="primary" disabled>
-            다음
-          </Button>
-        ) : allPass ? (
-          <Button variant="primary" onClick={onContinue}>
-            다음
-          </Button>
-        ) : (
-          <Button variant="primary" onClick={restart}>
-            {text.retry}
-          </Button>
+        {/* 지금 선택된 칸 하나만 설치된 것으로 바꾸고, 다음 미설치 칸으로 자동으로 옮겨 간다 */}
+        {tempComplete && done && current.status !== 'Pass' && (
+          <button
+            type="button"
+            className={styles.temp}
+            onClick={() => {
+              markPassed(current.id, tempComplete.passMessage)
+              setPicked(null)
+            }}
+          >
+            {tempComplete.label.replace('{title}', current.title)}
+          </button>
         )}
+        <Button variant="primary" disabled={!allPass} onClick={onContinue}>
+          다음
+        </Button>
       </footer>
     </main>
   )

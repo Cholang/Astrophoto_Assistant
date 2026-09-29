@@ -35,7 +35,7 @@ public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> opti
             {
                 yield return Launch.Fail("N.I.N.A.가 꺼져 있습니다.", new Diagnosis(
                     ninaExe is null ? ["N.I.N.A. 실행 파일을 찾지 못했습니다."] : ["설정에서 AA가 N.I.N.A.를 자동으로 켜지 않도록 해 두었습니다."],
-                    "N.I.N.A.를 직접 실행한 뒤 다시 시도를 눌러 주세요."));
+                    "N.I.N.A.를 직접 실행한 뒤 새로고침을 눌러 주세요."));
                 yield return Connect.Skip("N.I.N.A.가 켜지면 확인합니다.");
                 yield break;
             }
@@ -53,7 +53,7 @@ public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> opti
             {
                 yield return Launch.Fail("N.I.N.A.를 켜지 못했습니다.", new Diagnosis(
                     ["N.I.N.A. 설치 파일이 손상되었습니다.", "보안 프로그램이 실행을 막았습니다."],
-                    "N.I.N.A.를 직접 실행해 보고, 켜지면 다시 시도를 눌러 주세요.",
+                    "N.I.N.A.를 직접 실행해 보고, 켜지면 새로고침을 눌러 주세요.",
                     Detail: $"{ninaExe}\n{error}"));
                 yield return Connect.Skip("N.I.N.A.가 켜지면 확인합니다.");
                 yield break;
@@ -78,7 +78,7 @@ public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> opti
                 ["N.I.N.A.의 옵션에서 Advanced API가 꺼져 있습니다.",
                  "Advanced API의 포트가 1888이 아닙니다.",
                  "플러그인을 설치한 뒤 N.I.N.A.를 다시 시작하지 않았습니다."],
-                "N.I.N.A.의 옵션(Options) 탭에서 Advanced API가 켜져 있는지와 포트 번호(1888)를 확인한 뒤 다시 시도를 눌러 주세요.",
+                "N.I.N.A.의 옵션(Options) 탭에서 Advanced API가 켜져 있는지와 포트 번호(1888)를 확인한 뒤 새로고침을 눌러 주세요.",
                 Detail: $"GET {opt.BaseUrl}version 응답 없음"));
     }
 }
