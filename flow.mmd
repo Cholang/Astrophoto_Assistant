@@ -6,8 +6,11 @@ flowchart TB
 %%               필수 장비는 선택한 촬영 구성에 따라 판단
 %%               사용하지 않는 장비는 연결 검사에서 제외
 %%               선택 장비 연결 실패는 경고만, 촬영 가능 여부는 준비상태 평가에서 판단
-%%  [앱 초기 화면 제공 기능]  날씨 새로고침 · 장비 연결 새로고침 · 저장 데이터 불러오기
-%%               비서 초기화 · 장비 재선택 · 과거 기록 보기
+%%  [앱 초기 화면 → 출발 전 점검으로 대체 (2026-09-30)]  초기 화면에 있던 기능은 옮김
+%%               날씨: 예보는 온라인 API로 자동(인터넷 될 때 미리 받아 저장, 받은 시각 표시). 현재 기온·습도는 NINA weather
+%%                     상태 줄에 지금 구름양, 촬영 계획 화면에 오늘 밤 시간대별 구름
+%%               장비 새로고침·재선택: 이 단계에서는 없음. 상태 줄 장비 점을 누르면 다시 연결, 촬영 중 끊김은 ⑥ 이상 복구
+%%               과거 기록 보기·저장 데이터 불러오기: 촬영 계획 화면에. 비서 초기화: AI 비서를 만들 때 정함
 %%  [촬영 중 상시 처리]  촬영 결과·분석·설정 변경마다 자동 저장
 %%               장비 연결 끊김은 '이상 감지' 경로로 이동
 %%               사용자 중단은 '시퀀스 종료' 경로로 이동
@@ -26,14 +29,11 @@ flowchart TB
     ENGOK{"연결 통로<br/>응답?"}
     ENGFIX["원인 안내·[다시 시도]<br/>(Advanced API 꺼짐·포트)"]
     B{"저장된<br/>장비 구성 있음?"}
-    C["장비 세팅 화면"]:::screen
-    D["장비 선택 및 연결<br/>허브·적도의·포커서·카메라·열선·가이드카메라"]
-    E1{"필수 장비<br/>연결 성공?"}
-    F["연결 실패 안내 화면"]:::screen
-    R["연결 재시도·장비 재선택"]
-    L["로딩<br/>날씨·저장 장비·연결 상태·누적 데이터·AI 비서"]
-    E2{"필수 장비<br/>연결 성공?"}
-    H["앱 초기 화면"]:::screen
+    C["장비 세팅 (마법사)<br/>배포 단계에서 구현"]:::screen
+    D["장비 연결 화면<br/>허브부터 차례로 · 냉각 카메라면 냉각은 뒤에서 시작"]:::screen
+    E1{"모든 장비<br/>연결 성공?"}
+    R["장비별 원인 안내·다시 연결"]
+    H["출발 전 점검<br/>시작 위치·경통 캡·케이블·밸런스·수평·열선<br/>6개 체크 또는 건너뛰기 → 자동 진행"]:::screen
   end
 
   subgraph S2["② 촬영 계획"]
@@ -89,18 +89,15 @@ flowchart TB
   ENG --> ENGOK
   ENGOK -->|"예"| B
   ENGOK -->|"아니오"| ENGFIX --> ENG
-  B -->|"아니오"| C --> D --> E1
-  E1 -->|"예"| L
-  E1 -->|"아니오"| F
-  B -->|"예"| L
-  L --> E2
-  E2 -->|"예"| H
-  E2 -->|"아니오"| F
-  F --> R --> D
+  B -->|"아니오"| C --> D
+  B -->|"예"| D
+  D --> E1
+  E1 -->|"아니오"| R --> D
+  E1 -->|"예 (자동 진행)"| H
 
-  %% ② 촬영 계획
-  H --> P
-  H -->|"기록 보기"| HIS
+  %% ② 촬영 계획 (계획 화면이 초기 화면을 겸함)
+  H -->|"자동 진행"| P
+  P -->|"기록 보기"| HIS
   HIS -->|"참고"| P
   P --> T
   T -->|"아니오 (후보 비교)"| CAND
@@ -138,7 +135,7 @@ flowchart TB
   classDef default fill:#FFFFFF,stroke:#6E6A80,color:#1E1C26
   classDef screen fill:#F24E1E,stroke:#B8330F,color:#FFFFFF
   classDef decide fill:#E8DEFF,stroke:#7B61FF,color:#221A40
-  class PROF,ENVOK,ENGOK,B,E1,E2,T,OK,AN,DONE,RES,WAIT,POST decide
+  class PROF,ENVOK,ENGOK,B,E1,T,OK,AN,DONE,RES,WAIT,POST decide
   style S1 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S2 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S3 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
