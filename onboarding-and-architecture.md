@@ -198,9 +198,30 @@ web/            React + TypeScript 화면
 
 ## 6. 다음 할 일
 
-1. **(회사 노트북) 개발 도구 설치**: .NET 10 SDK, Node.js LTS — 집 PC에는 아직 설치하지 않음
-   - 2026-09-29 변경: .NET 8 대신 .NET 10. .NET 8은 2026-11 지원 종료이고, NINA 개발 브랜치(develop)도 이미 .NET 10으로 이동함. 현재 NINA 배포판은 .NET 8이라 `Astro.Core`만 .NET 8·10 동시 빌드
-2. **프로젝트 뼈대 만들기**: 5.3의 구조
-3. **0단계 환경 체크 화면 구현**: 촬영 PC에서는 ✅, NINA 없는 PC에서는 ❌ 화면 확인
-4. **API 실기 점검 1단계**: `node tools/api-check.mjs --listen 120` (장비 연결된 PC에서)
-   - 추가 확인: Wanderer Box가 WandererEmpire 없이 동작하는지, 첫 연결 시 드라이버 설정 창이 뜨는지
+### 완료 (2026-09-29)
+- 개발 도구 설치 (.NET 10 SDK, Node.js LTS — 집 PC에는 없음)
+  - .NET 8 대신 .NET 10. .NET 8은 2026-11 지원 종료이고, NINA 개발 브랜치(develop)도 이미 .NET 10으로 이동함. 현재 NINA 배포판은 .NET 8이라 `Astro.Core`만 .NET 8·10 동시 빌드
+- 프로젝트 뼈대 (5.3의 구조)
+- 부팅 → 프로필 → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결 (시뮬레이션)
+
+### 진행 방침 (2026-09-29 사용자 결정)
+**시뮬레이션을 켠 채로 전체 플로우를 끝까지 먼저 만든다.** 실제 장비 연결 테스트는 플로우가 완성된 뒤 한꺼번에 한다 (실기를 붙이며 진행하면 너무 느림).
+→ `appsettings.json`의 `Setup:SimulateMissing`, `Equipment:Simulate`는 **그때까지 `true` 유지**
+
+### 바로 고칠 것 (회사 노트북에서, 2026-09-29 집 PC 검토)
+- [ ] **장비 연결 대기 시간이 5초로 짧음**
+  - 위치: `src/Astro.Server/AppServer.cs`의 `NinaApiClient` 설정 `http.Timeout = TimeSpan.FromSeconds(5)`
+  - 문제: 모든 NINA 요청이 5초 제한을 공유함. 적도의·카메라 연결(`equipment/{kind}/connect`)은 5초 넘게 걸리는 경우가 흔해서, 실제로는 연결되는 중인데 "연결 실패"로 표시될 수 있음
+  - 수정 방향: 짧은 조회(`version`, `info`, `profile`)는 5초 유지, `ConnectAsync`만 긴 제한(예: 60초). 예) `HttpClient.Timeout`은 넉넉히 두고 요청마다 `CancellationTokenSource.CancelAfter`로 제한
+  - 시뮬레이션 중에도 코드로 고칠 수 있음 (실기 검증은 나중)
+
+### 실기 테스트 때 확인할 것 (플로우 완성 후)
+- [ ] **시뮬레이션 끄기**: `Setup:SimulateMissing=false`, `Equipment:Simulate=false`, `Equipment:SimulateFailing=[]`. 화면의 임시 "○○ 설치 완료하기" 버튼도 제거
+- [ ] **실제 장비 연결 경로 검증**: `EquipmentConnector.ConnectOneAsync`의 실기 경로는 아직 한 번도 실행되지 않음. 특히 NINA 프로필의 장비 `Id`를 `connect?to=`에 그대로 넣어도 되는지 (`list-devices`의 id와 같은지)
+- [ ] **PHD2는 누가 켜나**: 1단계는 NINA만 켬. 가이딩 연결 전에 PHD2가 꺼져 있으면 "가이딩" 칸이 실패함. NINA가 가이더 연결 시 PHD2를 자동 실행하는지 확인하고, 안 하면 1단계에 "PHD2 켜기" 추가
+- [ ] **API 실기 점검 1단계**: `node tools/api-check.mjs --listen 120` (장비 연결된 PC에서)
+  - Wanderer Box가 WandererEmpire 없이 동작하는지, 첫 연결 시 드라이버 설정 창이 뜨는지
+
+### 나중에 (폰 동기화를 만들 때)
+- [ ] **폰 접속 열기**: 지금 서버는 `http://localhost:5210`이라 촬영 PC 자신만 접속 가능. 현장 와이파이의 폰이 접속하려면 LAN 주소로 열어야 함 (`appsettings.json`의 `Urls`)
+- [ ] **폰 권한 구분**: 폰에서는 보기·중지만, 첫 슬루 같은 물리 동작 시작은 장비 옆 PC에서만 (5.5)
