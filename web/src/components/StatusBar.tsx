@@ -18,11 +18,14 @@ export interface DeviceState {
 export default function StatusBar({
   profile,
   devices,
+  label,
   theme,
   onThemeChange,
 }: {
   profile: Profile | null
   devices: DeviceState[] | null
+  /** 장비 연결 전에 점 대신 보여 줄 지금 단계 이름 */
+  label: string
   theme: Theme
   onThemeChange: (t: Theme) => void
 }) {
@@ -41,7 +44,7 @@ export default function StatusBar({
 
       <span className={styles.devices}>
         {devices === null ? (
-          <span className={styles.muted}>소프트웨어 준비</span>
+          <span className={styles.muted}>{label}</span>
         ) : (
           devices.map((d) => (
             <span key={d.name} className={styles.device} data-connected={d.connected}>

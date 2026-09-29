@@ -46,7 +46,8 @@ export function useCheckStream(url: string, initial: CheckItem[]) {
     const source = new EventSource(url)
     source.addEventListener('check', (e) => {
       const result = JSON.parse((e as MessageEvent).data) as CheckItem
-      setItems((prev) => prev.map((item) => (item.id === result.id ? result : item)))
+      // 미리 그린 칸에 없는 결과(예: 장비 목록을 못 읽음)는 뒤에 붙인다
+      setItems((prev) => (prev.some((i) => i.id === result.id) ? prev.map((i) => (i.id === result.id ? result : i)) : [...prev, result]))
     })
     // 서버가 다 보내고 연결을 닫으면 브라우저는 재연결을 시도한다. 여기서 끊는다.
     source.onerror = () => {
@@ -63,10 +64,26 @@ export function useCheckStream(url: string, initial: CheckItem[]) {
     [],
   )
 
+  /** 한 항목만 다시 확인한다 (쉐브론 안의 새로고침). 서버가 그 항목의 결과 하나를 돌려준다. */
+  const recheckOne = useCallback(async (id: string, oneUrl: string) => {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'Running' as const, diagnosis: null } : i)))
+    try {
+      const res = await fetch(oneUrl)
+      if (!res.ok) throw new Error()
+      const result = (await res.json()) as CheckItem
+      setItems((prev) => prev.map((i) => (i.id === id ? result : i)))
+    } catch {
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, status: 'Fail' as const, message: '다시 확인하지 못했습니다' } : i)),
+      )
+    }
+  }, [])
+
   const finals = items.filter((i) => isFinal(i.status)).length
   const done = finals === items.length || closed
   const interrupted = done && finals < items.length
   const failed = items.some((i) => i.severity === 'Required' && i.status !== 'Pass')
+  const allPass = done && !interrupted && !failed && items.length > 0
 
-  return { items, done, interrupted, failed, allPass: done && !interrupted && !failed, restart, run, markPassed }
+  return { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne }
 }

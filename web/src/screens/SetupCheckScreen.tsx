@@ -36,6 +36,8 @@ export default function SetupCheckScreen({ onContinue }: { onContinue: () => voi
       text={TEXT}
       onContinue={onContinue}
       statusText={statusText}
+      // 새로고침은 그 항목의 설치 여부만 다시 확인한다
+      recheckUrl={(id) => `/api/setup/check/${id}`}
       // [임시] 화면 설계 중에는 서버가 모두 "설치 안 됨"으로 보고한다 (appsettings Setup:SimulateMissing).
       tempComplete={{ label: '{title} 설치 완료하기 (임시)', passMessage: INSTALLED }}
     />

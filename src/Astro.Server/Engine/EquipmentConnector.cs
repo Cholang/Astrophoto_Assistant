@@ -1,0 +1,125 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using Astro.Core.Setup;
+using Astro.Nina;
+using Microsoft.Extensions.Options;
+
+namespace Astro.Server.Engine;
+
+public sealed class EquipmentOptions
+{
+    /// <summary>
+    /// [임시] 장비 없이 개발할 때: 지금 N.I.N.A. 프로필에 있는 장비가 모두 연결된 것으로 간주한다.
+    /// 실제 연결은 하지 않는다. 장비를 연결할 수 있게 되면 false.
+    /// </summary>
+    public bool Simulate { get; set; }
+}
+
+/// <summary>
+/// 장비 연결. 지금 쓰는 N.I.N.A. 프로필에서 장비 목록을 읽어, 전원 허브부터 차례로 연결한다.
+/// 프로필에서 "없음"으로 된 장비(필터휠 등)는 건너뛴다.
+/// 결과 형식은 0·1단계와 같아서 화면이 같은 쉐브론·공통 영역을 쓴다.
+/// </summary>
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options)
+{
+    /// <summary>연결 순서: 허브가 다른 장비에 전원을 주므로 가장 먼저 (onboarding-and-architecture.md 4.2).</summary>
+    private static readonly Slot[] Slots =
+    [
+        new("switch", "SwitchSettings", "전원 허브", "망원경·카메라·열선에 전원을 나눠 주는 장치입니다. 다른 장비보다 먼저 연결합니다."),
+        new("mount", "TelescopeSettings", "적도의", "망원경을 움직이고 별을 따라 돌려 주는 받침대입니다."),
+        new("camera", "CameraSettings", "카메라", "사진을 찍는 카메라입니다."),
+        new("focuser", "FocuserSettings", "포커서", "초점을 자동으로 맞춰 주는 모터입니다."),
+        new("filterwheel", "FilterWheelSettings", "필터휠", "촬영 중에 필터를 바꿔 끼워 주는 장치입니다."),
+        new("guider", "GuiderSettings", "가이딩", "보조 카메라로 별을 지켜보며 흔들림을 바로잡습니다. N.I.N.A.가 PHD2를 거쳐 가이드 카메라와 실제로 연결되는지 확인합니다."),
+    ];
+
+    private sealed record Slot(string Kind, string ProfileKey, string Role, string Hint);
+
+    /// <summary>화면에 미리 칸을 그릴 수 있게, 연결할 장비 목록만 먼저 알려 준다.</summary>
+    public async Task<IReadOnlyList<CheckResult>> PlanAsync(CancellationToken ct = default) =>
+        (await ReadDevicesAsync(ct)).Select(d => Pending(d)).ToList();
+
+    public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var devices = await ReadDevicesAsync(ct);
+        if (devices.Count == 0)
+        {
+            yield return new CheckResult("profile", "N.I.N.A. 프로필", null, null, CheckSeverity.Required, CheckStatus.Fail,
+                "장비 설정을 읽지 못했습니다", new Diagnosis([], "N.I.N.A.가 켜져 있고 장비가 프로필에 등록되어 있는지 확인한 뒤 새로고침을 눌러 주세요."));
+            yield break;
+        }
+
+        foreach (var d in devices)
+        {
+            yield return Make(d, CheckStatus.Running, "연결하는 중입니다");
+            yield return await ConnectOneAsync(d, ct);
+        }
+    }
+
+    /// <summary>장비 하나만 다시 연결한다 (쉐브론 안의 새로고침).</summary>
+    public async Task<CheckResult?> RetryAsync(string id, CancellationToken ct = default)
+    {
+        var d = (await ReadDevicesAsync(ct)).FirstOrDefault(x => x.Slot.Kind == id);
+        return d is null ? null : await ConnectOneAsync(d, ct);
+    }
+
+    private async Task<CheckResult> ConnectOneAsync(Device d, CancellationToken ct)
+    {
+        bool connected;
+        if (options.Value.Simulate)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(450), ct); // 연결되는 모습이 보이게 잠깐 기다린다
+            connected = true;
+        }
+        else
+        {
+            // 실기 미검증: 장비를 연결할 수 있는 환경에서 확인 필요
+            connected = await nina.IsConnectedAsync(d.Slot.Kind, ct)
+                || (await nina.ConnectAsync(d.Slot.Kind, d.Id, ct) && await nina.IsConnectedAsync(d.Slot.Kind, ct));
+        }
+
+        return connected
+            ? Make(d, CheckStatus.Pass, "연결되어 있습니다")
+            : Make(d, CheckStatus.Fail, "연결되어 있지 않습니다", new Diagnosis([],
+                $"장비 전원과 USB 케이블을 확인한 뒤 새로고침을 눌러 주세요. 처음 쓰는 장비라면 N.I.N.A.의 장비 탭에서 드라이버 설정(톱니바퀴)을 먼저 해 주세요. (드라이버: {d.DriverName})"));
+    }
+
+    private sealed record Device(Slot Slot, string Id, string Name, string DriverName);
+
+    private async Task<List<Device>> ReadDevicesAsync(CancellationToken ct)
+    {
+        if (await nina.GetActiveProfileAsync(ct) is not { ValueKind: JsonValueKind.Object } profile) return [];
+        var list = new List<Device>();
+        foreach (var slot in Slots)
+        {
+            if (!profile.TryGetProperty(slot.ProfileKey, out var s)) continue;
+            // 가이더는 Id 대신 GuiderName에 들어 있다 (예: PHD2_Single)
+            var id = Text(s, slot.Kind == "guider" ? "GuiderName" : "Id");
+            if (id is null || id is "No_Device" or "No_Guider") continue;
+            var last = Text(s, "LastDeviceName");
+            list.Add(new Device(slot, id, ShortName(slot.Kind, id, last), last ?? id));
+        }
+        return list;
+    }
+
+    /// <summary>쉐브론에 쓸 짧은 이름: "WandererEmpire WandererBox 1 (ASCOM)" → "WandererBox", "X-T5 (gin_X-T5)" → "X-T5"</summary>
+    private static string ShortName(string kind, string id, string? last)
+    {
+        if (kind == "guider") return id.StartsWith("PHD2", StringComparison.OrdinalIgnoreCase) ? "PHD2" : id;
+        var name = last ?? id;
+        var paren = name.IndexOf(" (", StringComparison.Ordinal);
+        if (paren > 0) name = name[..paren];
+        foreach (var noise in new[] { "WandererEmpire ", "ASCOM " }) name = name.Replace(noise, "");
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+\d+$", ""); // "WandererBox 1" → "WandererBox"
+        return name.Trim();
+    }
+
+    private static string? Text(JsonElement obj, string key) =>
+        obj.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : null;
+
+    private static CheckResult Pending(Device d) => Make(d, CheckStatus.Pending, "");
+
+    private static CheckResult Make(Device d, CheckStatus status, string message, Diagnosis? diagnosis = null) =>
+        // 칸 가운데에는 장비 종류(적도의 등), 그 아래 작게 장비 이름(OnStep 등)
+        new(d.Slot.Kind, d.Slot.Role, d.Name, d.Slot.Hint, CheckSeverity.Required, status, message, diagnosis);
+}

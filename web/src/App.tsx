@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import StatusBar from './components/StatusBar'
+import StatusBar, { type DeviceState } from './components/StatusBar'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
 import EngineStartScreen from './screens/EngineStartScreen'
+import EquipmentScreen from './screens/EquipmentScreen'
 import NewProfileScreen from './screens/NewProfileScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import SetupCheckScreen from './screens/SetupCheckScreen'
@@ -11,9 +12,9 @@ import { useTheme } from './theme'
 import styles from './App.module.css'
 
 // flow.mmd ① 시작 · 연결:
-// 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결
-// 여기까지는 단계 레일 없이 화면 전체를 쓰고, 장비 연결부터 레일이 있는 본 화면이 된다.
-type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'next'
+// 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결 → (다음: 정렬)
+// 단계 레일이 있는 본 화면은 흐름을 끝까지 이은 뒤에 만든다.
+type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'next'
 
 /** 화면 전환 페이드 한쪽 시간. App.module.css의 .screen transition과 같은 값 */
 const FADE_MS = 280
@@ -55,10 +56,21 @@ export default function App() {
     return () => clearTimeout(t)
   }, [phase, profiles, fadeTo])
 
+  // 프로필을 고르면 설치 상태를 바로 확인한다.
+  // 모두 설치돼 있으면 0단계 화면은 건너뛰고(누를 필요 없는 "다음"을 없앤다), 빠진 게 있으면 0단계로.
+  // 0단계는 빠진 첫 항목이 선택된 상태로 시작한다. 확인에 실패하면 안전하게 0단계로.
   const start = useCallback(
-    (p: Profile) => {
+    async (p: Profile) => {
       setProfile(p)
-      fadeTo('check')
+      let allInstalled = false
+      try {
+        const res = await fetch('/api/setup/status')
+        const items = res.ok ? ((await res.json()) as { status: string }[]) : []
+        allInstalled = items.length > 0 && items.every((i) => i.status === 'Pass')
+      } catch {
+        /* 0단계에서 다시 확인한다 */
+      }
+      fadeTo(allInstalled ? 'engine' : 'check')
     },
     [fadeTo],
   )
@@ -81,13 +93,26 @@ export default function App() {
   )
 
   const toEngine = useCallback(() => setPhase('engine'), [])
-  const toNext = useCallback(() => setPhase('next'), [])
+  const toEquipment = useCallback(() => setPhase('equipment'), [])
+  // 장비 연결이 끝나면 상태 줄에 장비별 연결 점을 보여 준다
+  const [devices, setDevices] = useState<DeviceState[] | null>(null)
+  const toNext = useCallback((items: { title: string; term: string | null; status: string }[]) => {
+    // 상태 줄에는 장비 이름(OnStep 등)을 쓴다. 칸의 큰 글씨는 장비 종류, 작은 글씨(term)가 장비 이름
+    setDevices(items.map((i) => ({ name: i.term ?? i.title, connected: i.status === 'Pass' })))
+    setPhase('next')
+  }, [])
 
   return (
     <div className={styles.shell}>
       {phase !== 'boot' && (
         <div className={styles.bar}>
-          <StatusBar profile={profile} devices={null} theme={theme} onThemeChange={setTheme} />
+          <StatusBar
+            profile={profile}
+            devices={devices}
+            label={phase === 'equipment' ? '장비 연결' : '소프트웨어 준비'}
+            theme={theme}
+            onThemeChange={setTheme}
+          />
         </div>
       )}
       <div className={styles.screen} data-shown={shown}>
@@ -97,11 +122,12 @@ export default function App() {
           <NewProfileScreen onCreated={created} onCancel={(profiles ?? []).length > 0 ? () => setPhase('profiles') : undefined} />
         )}
         {phase === 'check' && <SetupCheckScreen onContinue={toEngine} />}
-        {phase === 'engine' && <EngineStartScreen onContinue={toNext} />}
+        {phase === 'engine' && <EngineStartScreen onContinue={toEquipment} />}
+        {phase === 'equipment' && <EquipmentScreen onContinue={toNext} />}
         {phase === 'next' && (
           <main className={styles.placeholder}>
-            <h1>망원경과 카메라를 연결할까요?</h1>
-            <p>장비 연결 화면은 다음에 만들 차례입니다.</p>
+            <h1>망원경을 정렬할까요?</h1>
+            <p>정렬 화면은 다음에 만들 차례입니다.</p>
           </main>
         )}
       </div>

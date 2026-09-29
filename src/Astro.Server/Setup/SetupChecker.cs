@@ -61,13 +61,30 @@ public sealed class SetupChecker(IOptions<NinaOptions> nina, IOptions<SetupOptio
     public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
         foreach (var (item, howToInstall) in Items)
-        {
-            var installed = !setup.Value.SimulateMissing && IsInstalled(item.Id);
-            yield return installed
-                ? item.Pass("설치되어 있습니다")
-                : item.Fail("설치되어 있지 않습니다", howToInstall);
-        }
+            yield return Check(item, howToInstall);
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 전체를 한 번에 확인한다 (프로필을 고른 직후). 모두 설치돼 있으면 화면은 0단계를 건너뛴다.
+    /// 파일·레지스트리만 보므로 순식간에 끝난다.
+    /// </summary>
+    public IReadOnlyList<CheckResult> CheckAll() => Items.Select(x => Check(x.Item, x.HowToInstall)).ToList();
+
+    /// <summary>한 항목만 다시 확인한다 (쉐브론 안의 새로고침). 없는 id면 null.</summary>
+    public CheckResult? CheckOne(string id)
+    {
+        foreach (var (item, howToInstall) in Items)
+            if (item.Id == id) return Check(item, howToInstall);
+        return null;
+    }
+
+    private CheckResult Check(CheckItem item, Diagnosis howToInstall)
+    {
+        var installed = !setup.Value.SimulateMissing && IsInstalled(item.Id);
+        return installed
+            ? item.Pass("설치되어 있습니다")
+            : item.Fail("설치되어 있지 않습니다", howToInstall);
     }
 
     private bool IsInstalled(string id) => id switch

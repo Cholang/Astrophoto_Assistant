@@ -16,21 +16,33 @@ public static class InstallLocator
         return Directory.Exists(folder) ? "버전 확인 불가" : null;
     }
 
+    /// <summary>
+    /// NINA 실행 파일. 반드시 파일 이름이 NINA.exe인 것만 돌려준다.
+    /// 주의: 설치 정보의 DisplayIcon은 설치 프로그램(Package Cache\...\NINASetupBundle.exe)을 가리킬 수 있다.
+    /// 그걸 실행하면 "Modify Setup"(Repair/Uninstall) 창이 뜬다 — 절대 실행하면 안 된다.
+    /// </summary>
     public static string? NinaExe(string? configuredPath)
     {
-        if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath)) return configuredPath;
+        if (IsNinaExe(configuredPath)) return configuredPath;
+
+        var programFiles = new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 }
+            .Select(f => Path.Combine(Environment.GetFolderPath(f), "N.I.N.A. - Nighttime Imaging 'N' Astronomy", "NINA.exe"));
+        foreach (var path in programFiles)
+            if (IsNinaExe(path)) return path;
 
         foreach (var entry in UninstallEntries())
         {
             if (!entry.DisplayName.StartsWith("N.I.N.A", StringComparison.OrdinalIgnoreCase)) continue;
-            if (entry.InstallLocation is { } dir && File.Exists(Path.Combine(dir, "NINA.exe"))) return Path.Combine(dir, "NINA.exe");
-            if (entry.DisplayIcon is { } icon && icon.Split(',')[0].Trim('"') is var exe && File.Exists(exe)) return exe;
+            if (entry.InstallLocation is { Length: > 0 } dir && IsNinaExe(Path.Combine(dir, "NINA.exe"))) return Path.Combine(dir, "NINA.exe");
+            if (entry.DisplayIcon is { } icon && icon.Split(',')[0].Trim('"') is var exe && IsNinaExe(exe)) return exe;
         }
-
-        var fallback = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            "N.I.N.A. - Nighttime Imaging 'N' Astronomy", "NINA.exe");
-        return File.Exists(fallback) ? fallback : null;
+        return null;
     }
+
+    private static bool IsNinaExe(string? path) =>
+        !string.IsNullOrWhiteSpace(path)
+        && string.Equals(Path.GetFileName(path), "NINA.exe", StringComparison.OrdinalIgnoreCase)
+        && File.Exists(path);
 
     /// <summary>
     /// NINA 플러그인은 %LOCALAPPDATA%\NINA\Plugins\&lt;NINA 버전&gt;\&lt;플러그인 이름&gt;에 설치된다.

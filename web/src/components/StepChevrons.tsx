@@ -1,13 +1,18 @@
 import { Check, RotateCw } from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Status } from './StatusIcon'
 import styles from './StepChevrons.module.css'
 
 export interface ChevronStep {
   id: string
   title: string
+  /** 이름 아래 작게 (예: 장비 종류 "적도의" 아래의 장비 이름 "OnStep") */
+  term?: string | null
   status: Status
 }
+
+/** 칸 수가 달라도 칸 크기는 같게: 항상 이 칸 수 기준으로 너비를 나누고, 남는 오른쪽은 비워 둔다 */
+const SLOTS = 5
 
 const STATUS_WORD: Record<Status, string> = {
   Pending: '대기',
@@ -30,18 +35,27 @@ export default function StepChevrons({
   current,
   onSelect,
   onRetry,
+  disabled = false,
   label,
 }: {
   steps: ChevronStep[]
   current: string
   onSelect: (id: string) => void
   onRetry?: () => void
+  /** 더 고를 수 없는 상태 (모두 통과해 다음 단계만 남음). 칸은 초점도 받지 않는다 */
+  disabled?: boolean
   label: string
 }) {
   const size = useCellSize()
 
   return (
-    <ol className={styles.strip} aria-label={label} ref={size.ref}>
+    <ol
+      className={styles.strip}
+      aria-label={label}
+      ref={size.ref}
+      data-disabled={disabled}
+      style={{ '--slots': Math.max(SLOTS, steps.length) } as CSSProperties}
+    >
       {steps.map((s, i) => {
         const isCurrent = s.id === current
         return (
@@ -55,10 +69,14 @@ export default function StepChevrons({
               type="button"
               className={styles.select}
               aria-current={isCurrent ? 'step' : undefined}
-              aria-label={`${i + 1}. ${s.title}: ${STATUS_WORD[s.status]}`}
+              disabled={disabled}
+              aria-label={`${i + 1}. ${s.title}${s.term ? ` ${s.term}` : ''}: ${STATUS_WORD[s.status]}`}
               onClick={() => onSelect(s.id)}
             >
-              <span className={styles.title}>{s.title}</span>
+              <span className={styles.title}>
+                {s.title}
+                {s.term && <small className={styles.sub}>{s.term}</small>}
+              </span>
               <span className={styles.number} aria-hidden="true">
                 {i + 1}
               </span>

@@ -80,6 +80,12 @@ dotnet run --project src/Astro.Server
 |---|---|---|
 | `SimulateMissing` | `true` **[임시]** | 화면 설계용. 실제 설치 여부와 관계없이 0단계 5개를 모두 "설치되어 있지 않음"으로 보고. 화면의 임시 "○○ 설치 완료하기" 버튼과 함께 쓴다. 설계가 끝나면 `false` |
 
+`Equipment` 항목:
+
+| 키 | 기본값 | 설명 |
+|---|---|---|
+| `Simulate` | `true` **[임시]** | 장비 없이 개발할 때. 지금 N.I.N.A. 프로필에 있는 장비가 모두 연결된 것으로 간주한다(실제 연결 안 함). 장비를 연결할 수 있으면 `false` — 실제 연결 경로는 아직 실기 미검증 |
+
 `App:DataDir`: 프로필 등 데이터 폴더 (기본 `%LOCALAPPDATA%\<product.json의 dataFolder>`). 테스트할 때 다른 폴더로 바꾼다.
 
 환경 변수로도 바꿀 수 있다. 예: `Nina__LaunchIfNotRunning=false`, `App__DataDir=D:\temp\test-data`

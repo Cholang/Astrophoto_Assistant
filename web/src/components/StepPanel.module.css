@@ -7,10 +7,23 @@
   background: var(--surface);
 }
 
+/* 진행 중 표시: 공통 영역 가운데의 짧은 막대 */
+.throbber {
+  justify-self: center;
+  width: min(320px, 60%);
+  visibility: hidden;
+}
+
+.throbber[data-shown='true'] {
+  visibility: visible;
+}
+
+/* 설명은 항목마다 길이가 달라 줄 수가 바뀐다 → 두 줄 높이를 항상 확보해 아래 상태 줄이 움직이지 않게 */
 .hint {
   margin: 0;
   color: var(--muted);
   max-width: 70ch;
+  min-height: calc(2 * 1.6em);
 }
 
 .result {

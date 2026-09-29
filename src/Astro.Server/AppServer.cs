@@ -30,6 +30,7 @@ public static class AppServer
 
         builder.Services.Configure<NinaOptions>(builder.Configuration.GetSection("Nina"));
         builder.Services.Configure<SetupOptions>(builder.Configuration.GetSection("Setup"));
+        builder.Services.Configure<EquipmentOptions>(builder.Configuration.GetSection("Equipment"));
         builder.Services.AddHttpClient<NinaApiClient>((sp, http) =>
         {
             http.BaseAddress = new Uri(sp.GetRequiredService<IOptions<NinaOptions>>().Value.BaseUrl);
@@ -37,6 +38,7 @@ public static class AppServer
         });
         builder.Services.AddTransient<SetupChecker>();
         builder.Services.AddTransient<EngineStarter>();
+        builder.Services.AddTransient<EquipmentConnector>();
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -52,6 +54,20 @@ public static class AppServer
             TypedResults.ServerSentEvents(checker.RunAsync(ct), eventType: "check"));
         api.MapGet("/engine/start", (EngineStarter starter, CancellationToken ct) =>
             TypedResults.ServerSentEvents(starter.RunAsync(ct), eventType: "check"));
+
+        // 전체를 한 번에 (프로필을 고른 직후: 모두 설치돼 있으면 0단계 화면을 건너뛴다)
+        api.MapGet("/setup/status", (SetupChecker checker) => checker.CheckAll());
+
+        // 한 항목만 다시 확인 (쉐브론 안의 새로고침)
+        api.MapGet("/setup/check/{id}", (string id, SetupChecker checker) =>
+            checker.CheckOne(id) is { } result ? Results.Ok(result) : Results.NotFound());
+
+        // 장비 연결: 연결할 장비 목록(칸을 미리 그리기 용) → 차례로 연결 → 한 장비만 다시 연결
+        api.MapGet("/equipment/plan", (EquipmentConnector connector, CancellationToken ct) => connector.PlanAsync(ct));
+        api.MapGet("/equipment/connect", (EquipmentConnector connector, CancellationToken ct) =>
+            TypedResults.ServerSentEvents(connector.RunAsync(ct), eventType: "check"));
+        api.MapGet("/equipment/connect/{id}", async (string id, EquipmentConnector connector, CancellationToken ct) =>
+            await connector.RetryAsync(id, ct) is { } result ? Results.Ok(result) : Results.NotFound());
 
         MapProfiles(api.MapGroup("/profiles"));
 

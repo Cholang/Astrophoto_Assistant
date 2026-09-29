@@ -27,17 +27,21 @@ export default function CheckStepsScreen({
   onContinue,
   statusText = (item) => item.message,
   tempComplete,
+  recheckUrl,
 }: {
   url: string
   initial: CheckItem[]
   text: StepScreenText
-  onContinue: () => void
+  /** "다음"을 누르면 최종 결과와 함께 부른다 */
+  onContinue: (items: CheckItem[]) => void
   /** 공통 영역에 보여 줄 상태 문장. 기본은 서버가 보낸 문장 */
   statusText?: (item: CheckItem) => string
   /** [임시] 화면 설계용 버튼: 누르면 선택된 항목 하나를 통과한 것으로 간주. label의 {title}은 항목 이름으로 바뀐다 */
   tempComplete?: { label: string; passMessage: string }
+  /** 있으면 새로고침이 현재 항목 하나만 다시 확인한다. 없으면 전체를 처음부터 (차례가 중요한 단계) */
+  recheckUrl?: (id: string) => string
 }) {
-  const { items, done, interrupted, failed, allPass, restart, run, markPassed } = useCheckStream(url, initial)
+  const { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne } = useCheckStream(url, initial)
   const [picked, setPicked] = useState<string | null>(null)
 
   // 다시 확인하면 사용자가 고른 칸을 풀고 자동으로 따라가게 한다.
@@ -53,6 +57,12 @@ export default function CheckStepsScreen({
 
   const [title, description] = !done ? text.running : interrupted || failed ? text.failed : text.passed
 
+  if (!current) return <main className={styles.stage} />
+
+  // 새로고침: 현재 칸이 확인을 마쳤는데 통과하지 못했을 때만. 가능하면 그 항목 하나만 다시 확인한다.
+  const canRetry = done && !allPass && (current.status === 'Fail' || current.status === 'Warn')
+  const retry = recheckUrl ? () => recheckOne(current.id, recheckUrl(current.id)) : restart
+
   return (
     <main className={styles.stage}>
       <div className={styles.intro}>
@@ -62,9 +72,12 @@ export default function CheckStepsScreen({
 
       <StepChevrons
         steps={items}
-        current={current.id}
+        // 모두 통과하면 선택 상태를 풀어, 모든 칸이 같은 "확인됨" 모양으로 보이게 한다
+        current={allPass ? '' : current.id}
         onSelect={setPicked}
-        onRetry={done && !allPass ? restart : undefined}
+        onRetry={canRetry ? retry : undefined}
+        // 모두 통과하면 칸은 더 고를 수 없고, 초점은 "다음"에만 간다
+        disabled={allPass}
         label={text.stripLabel}
       />
 
@@ -73,7 +86,7 @@ export default function CheckStepsScreen({
         {allPass ? (
           <div className={styles.complete}>
             <p>{text.completed}</p>
-            <Button variant="primary" onClick={onContinue} autoFocus>
+            <Button variant="primary" onClick={() => onContinue(items)} autoFocus>
               다음
             </Button>
           </div>

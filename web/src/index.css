@@ -21,6 +21,11 @@
   --primary-bg: var(--accent);
   --primary-border: var(--accent);
   --primary-text: var(--on-accent);
+  /* 쉐브론: 확인 전·미설치는 배경에 가깝게(덜 주목), 확인된 칸은 또렷하게 + 외곽선 */
+  --step-idle: #242528;
+  --step-hover: #2a2c30;
+  --step-done: #303337;
+  --step-done-line: #5e8f6f;
   color-scheme: dark;
 }
 
@@ -41,6 +46,10 @@
   --primary-bg: var(--accent);
   --primary-border: var(--accent);
   --primary-text: var(--on-accent);
+  --step-idle: #e7e7e4;
+  --step-hover: #e0e0dc;
+  --step-done: #ffffff;
+  --step-done-line: #8fb89d;
   color-scheme: light;
 }
 
@@ -63,6 +72,10 @@
   --primary-bg: #260000;
   --primary-border: #8a0000;
   --primary-text: #d00000;
+  --step-idle: #060000;
+  --step-hover: #0e0000;
+  --step-done: #150000;
+  --step-done-line: #6a0000;
   color-scheme: dark;
 }
 

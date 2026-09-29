@@ -10,8 +10,9 @@
   gap: 8px;
 }
 
+/* 칸 수와 관계없이 같은 크기: --slots(기본 5)칸 기준으로 너비를 나누고, 칸이 적으면 오른쪽은 비워 둔다 */
 .item {
-  flex: 1 1 0;
+  flex: 0 0 calc((100% - (var(--slots, 5) - 1) * 8px) / var(--slots, 5));
   min-width: 0;
   height: var(--h);
   position: relative;
@@ -29,35 +30,49 @@
   overflow: visible;
 }
 
+/* 모양 규칙 (세 테마 공통, 색은 index.css의 --step-* 토큰):
+   - 기본은 외곽선 없음
+   - 아직 확인 전·미설치 칸: 배경에 가까운 흐린 면 (덜 주목)
+   - 확인된(통과) 칸: 더 또렷한 면 + 외곽선
+   - 현재 칸: 강조색 면
+   선은 도형 크기를 바꾸지 않으므로 다른 요소의 위치는 그대로다. */
 .shape path {
-  fill: var(--surface);
+  fill: var(--step-idle);
   stroke: transparent;
-  stroke-width: 2;
-  transition: fill 260ms;
+  stroke-width: 1.5;
+  transition: fill 260ms, stroke 260ms;
 }
 
-.item:not([data-current='true']):hover .shape path {
-  fill: var(--surface-2);
+.item[data-status='Pass'] .shape path {
+  fill: var(--step-done);
+  stroke: var(--step-done-line);
+}
+
+.strip:not([data-disabled='true']) .item:not([data-current='true']):hover .shape path {
+  fill: var(--step-hover);
 }
 
 .item[data-current='true'] .shape path {
   fill: var(--primary-bg);
 }
 
-/* 촬영(적색) 테마: 면의 명도 차이만으로는 경계가 잘 안 보여 외곽선을 그린다.
-   선은 도형 크기를 바꾸지 않으므로 다른 요소의 위치는 그대로다. */
-:global(:root[data-theme='night']) .shape path {
-  stroke: var(--muted);
-  stroke-width: 1.5;
-}
-
-:global(:root[data-theme='night']) .item[data-current='true'] .shape path {
+.item[data-current='true'][data-status='Pass'] .shape path {
   stroke: var(--primary-border);
 }
 
-/* 키보드 초점은 화살표 테두리로 보여 준다 (촬영 테마의 외곽선보다 우선) */
-.item:has(.select:focus-visible) .shape path,
-:global(:root[data-theme='night']) .item:has(.select:focus-visible) .shape path {
+/* 확인 전·미설치 칸의 이름도 한 단계 흐리게 */
+.item:not([data-status='Pass']):not([data-current='true']) .title,
+.item:not([data-status='Pass']):not([data-current='true']) .number {
+  color: var(--muted);
+}
+
+/* 모두 통과해 더 고를 수 없을 때: 누를 수 없다는 것만 보이고 모양은 그대로 */
+.strip[data-disabled='true'] .select {
+  cursor: default;
+}
+
+/* 키보드 초점은 화살표 테두리로 보여 준다 */
+.item:has(.select:focus-visible) .shape path {
   stroke: var(--focus);
   stroke-width: 2;
 }
@@ -91,20 +106,26 @@
   color: var(--primary-text);
 }
 
-.item[data-status='Pending'] .title {
-  opacity: 0.6;
-}
-
 .title,
 .number {
   grid-row: 2;
 }
 
 .title {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
   font-size: clamp(15px, 1.6vw, 24px);
   font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+/* 이름 아래 작은 글씨 (장비 이름 등). 이름과 한 묶음이라 체크 자리와 따로 논다 */
+.sub {
+  font-size: clamp(12px, 0.95vw, 14px);
+  font-weight: 500;
+  opacity: 0.8;
 }
 
 /* 설치 완료: 이름 아래 가운데 큰 체크. 자리는 항상 있고, 보이기만 바뀐다 */

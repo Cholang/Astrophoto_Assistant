@@ -18,7 +18,10 @@ export default function StepPanel({ item, statusText }: { item: CheckItem; statu
       <h2 className={styles.narrowTitle}>{item.title}</h2>
       {item.hint && <p className={styles.hint}>{item.hint}</p>}
 
-      {item.status === 'Running' && <ProgressLine indeterminate label={`${item.title} 확인 중`} />}
+      {/* 진행 중 표시는 가운데에. 자리는 항상 두고 진행 중일 때만 보인다 (아래 줄이 움직이지 않게) */}
+      <div className={styles.throbber} data-shown={item.status === 'Running'}>
+        <ProgressLine indeterminate label={`${item.title} 진행 중`} />
+      </div>
 
       {statusText && (
         <p className={styles.result}>

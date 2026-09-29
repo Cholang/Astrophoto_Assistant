@@ -3,6 +3,8 @@ namespace Astro.Core.Setup;
 /// <summary>0단계 기본 환경 체크 항목 하나의 결과.</summary>
 public enum CheckStatus
 {
+    /// <summary>아직 확인 전 (화면이 칸을 미리 그릴 때)</summary>
+    Pending,
     /// <summary>확인 중</summary>
     Running,
     Pass,

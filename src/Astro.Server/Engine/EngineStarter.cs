@@ -15,8 +15,8 @@ namespace Astro.Server.Engine;
 public sealed class EngineStarter(NinaApiClient nina, IOptions<NinaOptions> options)
 {
     private static readonly CheckItem Launch = new("launch", "N.I.N.A. 켜기", null,
-        $"N.I.N.A.가 꺼져 있으면 {Product.Ga} 대신 켭니다.");
-    private static readonly CheckItem Connect = new("connect", "연결 통로 응답", "Advanced API",
+        $"N.I.N.A.가 꺼져 있으면 {Product.Ga} 대신 켭니다. 처음 켤 때는 1분쯤 걸릴 수 있습니다.");
+    private static readonly CheckItem Connect = new("connect", "N.I.N.A. 연결", "Advanced API",
         $"{Product.Ga} N.I.N.A.에 말을 걸고 대답을 받는지 확인합니다.");
 
     public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
