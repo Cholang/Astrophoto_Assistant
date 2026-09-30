@@ -65,14 +65,20 @@ export function useCheckStream(url: string, initial: CheckItem[]) {
     [],
   )
 
-  /** 한 항목만 다시 확인한다 (쉐브론 안의 새로고침). 서버가 그 항목의 결과 하나를 돌려준다. */
-  const recheckOne = useCallback(async (id: string, oneUrl: string) => {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'Running' as const, diagnosis: null } : i)))
+  /**
+   * 한 항목만 다시 확인한다 (쉐브론 안의 새로고침). 서버가 그 항목의 결과 하나를 돌려준다.
+   * quiet: 확인하는 동안 "확인 중"으로 바꾸지 않고, 결과가 그대로면(상태·문장이 같으면) 항목을 건드리지 않는다
+   *        (빠른 재확인이 번쩍이며 화면을 흔들지 않게 — 0단계 설치 확인)
+   */
+  const recheckOne = useCallback(async (id: string, oneUrl: string, quiet = false) => {
+    if (!quiet) setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'Running' as const, diagnosis: null } : i)))
     try {
       const res = await fetch(oneUrl)
       if (!res.ok) throw new Error()
       const result = (await res.json()) as CheckItem
-      setItems((prev) => prev.map((i) => (i.id === id ? result : i)))
+      setItems((prev) =>
+        prev.map((i) => (i.id !== id ? i : quiet && i.status === result.status && i.message === result.message ? i : result)),
+      )
     } catch {
       setItems((prev) =>
         prev.map((i) => (i.id === id ? { ...i, status: 'Fail' as const, message: '다시 확인하지 못했습니다' } : i)),

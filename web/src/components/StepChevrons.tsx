@@ -36,6 +36,8 @@ export default function StepChevrons({
   current,
   onSelect,
   onRetry,
+  retrying = false,
+  leaving = false,
   disabled = false,
   label,
 }: {
@@ -43,6 +45,10 @@ export default function StepChevrons({
   current: string
   onSelect: (id: string) => void
   onRetry?: () => void
+  /** 다시 확인하는 중: 새로고침 아이콘이 돈다 */
+  retrying?: boolean
+  /** 다음 단계로 떠나는 중: 칸이 왼쪽부터 차례로 흐려지며 사라진다 */
+  leaving?: boolean
   /** 더 고를 수 없는 상태 (모두 통과해 다음 단계만 남음). 칸은 초점도 받지 않는다 */
   disabled?: boolean
   label: string
@@ -55,12 +61,13 @@ export default function StepChevrons({
       aria-label={label}
       ref={size.ref}
       data-disabled={disabled}
+      data-leaving={leaving}
       style={{ '--slots': Math.max(SLOTS, steps.length) } as CSSProperties}
     >
       {steps.map((s, i) => {
         const isCurrent = s.id === current
         return (
-          <li key={s.id} className={styles.item} data-status={s.status} data-current={isCurrent}>
+          <li key={s.id} className={styles.item} data-status={s.status} data-current={isCurrent} style={{ '--i': i } as CSSProperties}>
             {size.w > 0 && (
               <svg className={styles.shape} width={size.w} height={size.h} aria-hidden="true">
                 <path d={chevronPath(size.w, size.h, i === 0, size.notch)} />
@@ -84,10 +91,29 @@ export default function StepChevrons({
               {/* 체크 자리는 처음부터 확보해 두고 통과하면 보이기만 한다 — 이름 위치가 움직이지 않게 */}
               <Check className={styles.check} data-shown={s.status === 'Pass'} strokeWidth={2.5} aria-hidden="true" />
             </button>
+            {/* 새로고침(다시 확인): 통과 체크가 놓이는 바로 그 자리·크기에. 이름 칸과 같은 그리드를 겹쳐 놓아 자리를 맞춘다
+                (통과하지 못한 칸에만 보이므로 체크와 겹치지 않는다) */}
             {isCurrent && onRetry && (
-              <button type="button" className={styles.retry} aria-label="다시 확인" title="다시 확인" onClick={onRetry}>
-                <RotateCw strokeWidth={2} aria-hidden="true" />
-              </button>
+              <span className={styles.retryLayer}>
+                <span className={styles.title} aria-hidden="true">
+                  {s.title}
+                  {s.term && <small className={styles.sub}>{s.term}</small>}
+                </span>
+                <span className={styles.number} aria-hidden="true">
+                  {i + 1}
+                </span>
+                <button
+                  type="button"
+                  className={styles.retry}
+                  data-spinning={retrying}
+                  aria-label="다시 확인"
+                  title="다시 확인"
+                  onClick={onRetry}
+                  aria-busy={retrying}
+                >
+                  <RotateCw strokeWidth={2.5} aria-hidden="true" />
+                </button>
+              </span>
             )}
           </li>
         )

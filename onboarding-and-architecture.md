@@ -226,7 +226,8 @@ web/            React + TypeScript 화면
 - [ ] **장비 변경 모드의 쓰기 경로** (`RigSetup.SelectAsync`, 시뮬레이션에서는 AA의 `rig-overrides.json`에만 저장):
   - `connect?to=<id>`로 고르면 N.I.N.A.가 그 장비를 프로필에 저장하는지
   - 제거: `disconnect` 뒤 `profile/change-value?settingpath=FilterWheelSettings-Id&newValue=No_Device` — settingpath 형식이 맞는지
-  - N.I.N.A.에 쓰기에 성공하면 AA 쪽 `rig-overrides.json`의 그 장비 값이 지워지는지
+  - (2026-09-30 리뷰 반영) 바꾸기: 지금 장비를 끊고 → 새 장비 연결 → 확인될 때만 저장, 실패하면 원래 장비를 다시 연결. 제거: 연결 해제가 확인될 때만. 연결 확인은 AA가 연결한 장비(`LiveDevices`)만 "이미 연결됨"으로 믿는다 — 가짜 N.I.N.A.로는 확인, 실기에서 한 번 더
+  - `equipment/{종류}/info`에 연결된 장비의 이름·Id가 나오는지 (나오면 "같은 장비인지" 비교로 더 정확하게)
   - 처음 쓰는 드라이버의 설정 창(포트 등)을 N.I.N.A. 장비 탭에서 열어야 하는 안내가 자연스러운지
 - [ ] **PHD2는 누가 켜나**: 1단계는 NINA만 켬. 가이딩 연결 전에 PHD2가 꺼져 있으면 "가이딩" 칸이 실패함. NINA가 가이더 연결 시 PHD2를 자동 실행하는지 확인하고, 안 하면 1단계에 "PHD2 켜기" 추가
 - [ ] **API 실기 점검 1단계**: `node tools/api-check.mjs --listen 120` (장비 연결된 PC에서)

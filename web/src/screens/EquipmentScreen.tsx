@@ -56,7 +56,8 @@ export default function EquipmentScreen({ onContinue }: { onContinue: (items: Ch
 
   if (plan === null)
     return (
-      <main className={engineStyles.stage}>
+      // 1단계 화면을 그대로 이어 보여 주는 자리라 나타나는 효과 없이 바로
+      <main className={engineStyles.stage} style={{ animation: 'none' }}>
         <div ref={holdRing}>
           <JarvisRing state="done" className={engineStyles.ring}>
             준비되었습니다
@@ -182,17 +183,21 @@ function EquipmentGraph({
   }
 
   // 장비 고르기·제거: 서버에 저장하고 그 원의 칸을 바꾼다
+  // 실제 모드에서 N.I.N.A.가 바꾸기·제거에 실패하면 서버는 원래 장비를 그대로 두고 error를 돌려준다 → 그 원 아래에 보여 준다
+  const [editError, setEditError] = useState<{ kind: string; message: string } | null>(null)
   const select = async (kind: string, device: { id: string; name: string } | null) => {
     setListKind(null)
+    setEditError(null)
     const res = await fetch('/api/equipment/select', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ kind, deviceId: device?.id ?? null, name: device?.name ?? null }),
     })
     if (!res.ok) return
-    const result = (await res.json()) as CheckItem
-    changed.current.add(kind)
-    patch((prev) => prev.map((i) => (i.id === kind ? result : i)))
+    const { item, error } = (await res.json()) as { item: CheckItem; error: string | null }
+    patch((prev) => prev.map((i) => (i.id === kind ? item : i)))
+    if (error) setEditError({ kind, message: error })
+    else changed.current.add(kind)
   }
 
   // ── 가운데 문장 ─────────
@@ -334,7 +339,11 @@ function EquipmentGraph({
                     // 목록(약 300px)은 오른쪽으로 열되, 창 오른쪽에 자리가 없으면 왼쪽으로
                     left={box.left + n.x + n.d / 2 + LIST_ROOM > box.vw}
                     listOpen={listKind === item.id}
-                    onToggleList={() => setListKind((k) => (k === item.id ? null : item.id))}
+                    error={editError?.kind === item.id ? editError.message : null}
+                    onToggleList={() => {
+                      setEditError(null)
+                      setListKind((k) => (k === item.id ? null : item.id))
+                    }}
                     onCloseList={() => setListKind(null)}
                     onSelect={(device) => select(item.id, device)}
                   />
@@ -450,6 +459,7 @@ function EditNode({
   style,
   left,
   listOpen,
+  error,
   onToggleList,
   onCloseList,
   onSelect,
@@ -459,6 +469,8 @@ function EditNode({
   /** 오른쪽에 자리가 없으면 목록을 왼쪽으로 연다 */
   left: boolean
   listOpen: boolean
+  /** 바꾸기·제거에 실패했을 때 원 아래에 보여 줄 문장 (원래 장비는 그대로) */
+  error: string | null
   onToggleList: () => void
   onCloseList: () => void
   onSelect: (device: { id: string; name: string } | null) => void
@@ -486,6 +498,11 @@ function EditNode({
             제거
           </button>
         </div>
+      )}
+      {error && (
+        <p className={styles.editError} role="alert">
+          {error}
+        </p>
       )}
       {listOpen && <DeviceList kind={item.id} left={left} current={item.term} onPick={onSelect} onClose={onCloseList} />}
     </div>

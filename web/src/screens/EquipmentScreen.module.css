@@ -699,3 +699,22 @@
     opacity: 0.8;
   }
 }
+
+/* 바꾸기·제거 실패: 원 아래(이름 밑)에 오류 색 문장. 원래 장비는 그대로다 */
+.editError {
+  position: absolute;
+  top: calc(100% + 44px);
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  width: 240px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--fail);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fail);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: center;
+}

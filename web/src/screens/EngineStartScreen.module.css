@@ -6,6 +6,17 @@
   justify-items: center;
   gap: 28px;
   padding: 24px 16px 64px;
+  /* 0단계 쉐브론이 사라진 자리에 천천히 나타난다 */
+  animation: stageIn 420ms ease-out both;
+}
+
+@keyframes stageIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage { animation: none; }
 }
 
 /* 2단계(장비 연결)는 이 크기에서 작아지며 시작한다 — EquipmentScreen의 --engine-ring와 같은 값 */

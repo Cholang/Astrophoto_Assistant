@@ -47,10 +47,12 @@ public static class AppServer
         builder.Services.AddHttpClient<InternetCheck>();
         builder.Services.AddTransient<SetupChecker>();
         builder.Services.AddTransient<EngineStarter>();
+        builder.Services.AddSingleton<NinaWatcher>();
         builder.Services.AddTransient<EquipmentConnector>();
         builder.Services.AddSingleton<EquipmentSimulation>();
         builder.Services.AddSingleton<EquipmentChoices>();
         builder.Services.AddSingleton(new RigOverrides(builder.Configuration["App:DataDir"]));
+        builder.Services.AddSingleton<LiveDevices>();
         builder.Services.AddTransient<RigSetup>();
 
         // 촬영 계획: 대상 목록(N.I.N.A. 데이터베이스), 오늘 밤 정보, AI 비서 (회사는 Assistant:Provider로 고름)
@@ -74,6 +76,16 @@ public static class AppServer
         // 항목이 확인될 때마다 한 건씩 보낸다 (Server-Sent Events).
         api.MapGet("/setup/check", (SetupChecker checker, CancellationToken ct) =>
             TypedResults.ServerSentEvents(checker.RunAsync(ct), eventType: "check"));
+        // N.I.N.A. 감시: 지금 상태를 먼저, 바뀔 때마다 (Running · Exited · NotResponding)
+        api.MapGet("/nina/watch", (NinaWatcher watcher, CancellationToken ct) =>
+            TypedResults.ServerSentEvents(watcher.WatchAsync(ct).Select(s => s.ToString()), eventType: "nina"));
+        // [임시] 화면 설계용: N.I.N.A.가 꺼진 것처럼 (Equipment:Simulate일 때만)
+        api.MapPost("/nina/simulate-exit", (NinaWatcher watcher, IOptions<EquipmentOptions> eq) =>
+        {
+            if (!eq.Value.Simulate) return Results.NotFound();
+            watcher.SimulateExit();
+            return Results.NoContent();
+        });
         api.MapGet("/engine/start", (EngineStarter starter, CancellationToken ct) =>
             TypedResults.ServerSentEvents(starter.RunAsync(ct), eventType: "check"));
 

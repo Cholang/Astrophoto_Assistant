@@ -77,3 +77,20 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* "다음"을 누르면: 완료 문장·버튼은 바로 사라지고(쉐브론은 StepChevrons가 왼쪽부터 차례로),
+   제목은 마지막 칸과 함께 흐려진다 */
+.stage[data-leaving='true'] .complete {
+  visibility: hidden;
+}
+
+.stage[data-leaving='true'] .intro {
+  opacity: 0;
+  transition: opacity var(--leave-fade, 320ms) ease calc(var(--leave-step, 110ms) * 4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage[data-leaving='true'] .intro {
+    transition: none;
+  }
+}

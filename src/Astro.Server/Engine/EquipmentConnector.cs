@@ -93,7 +93,7 @@ public sealed class EquipmentChoices
 ///   단 전원 허브는 다른 장비에 전원을 주므로, 있으면 맨 먼저 연결하고 실패하면 뒤 장비는 보류한다
 /// 돔·안전 모니터·날씨 장치는 다루지 않는다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides)
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live)
 {
     private const CheckSeverity Required = CheckSeverity.Required;
     private const CheckSeverity Recommended = CheckSeverity.Recommended;
@@ -190,6 +190,10 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             ? d.Absent ? Make(d, CheckStatus.Absent, "") : Pending(d)
             : null;
 
+    /// <summary>지금 이 종류로 쓰는 장비의 드라이버 Id (AA에서 고른 것 → 프로필). 없으면 null</summary>
+    public async Task<string?> CurrentIdAsync(string kind, CancellationToken ct = default) =>
+        (await ReadDevicesAsync(ct)).FirstOrDefault(x => x.Slot.Kind == kind)?.Id;
+
     /// <summary>준필수 장비를 "없이 진행". 필수·선택 장비는 대상이 아니다.</summary>
     public async Task<CheckResult?> GoWithoutAsync(string id, CancellationToken ct = default)
     {
@@ -221,8 +225,25 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         else
         {
             // 실기 미검증: 장비를 연결할 수 있는 환경에서 확인 필요
-            connected = await nina.IsConnectedAsync(d.Slot.Kind, ct)
-                || (await nina.ConnectAsync(d.Slot.Kind, d.Id, ct) && await nina.IsConnectedAsync(d.Slot.Kind, ct));
+            // N.I.N.A.의 "연결됨"은 어떤 장비인지 알려 주지 않는다. 그래서 "이미 연결됨"을 믿는 것은
+            //  - AA가 이 장비를 연결했다고 기록해 둔 경우, 또는
+            //  - AA에서 따로 고른 적이 없어 N.I.N.A. 프로필 그대로인 경우(N.I.N.A.가 연결한 것 = 프로필 장비)만.
+            // 그 밖에는(AA에서 다른 장비를 골랐는데 확인된 적 없음) 지금 연결을 끊고 고른 장비로 새로 연결한다 (2026-09-30 리뷰)
+            var kind = d.Slot.Kind;
+            var connectedNow = await nina.IsConnectedAsync(kind, ct);
+            var known = live.Get(kind);
+            var trust = connectedNow && (known == d.Id || (known is null && !d.Chosen));
+            if (trust)
+            {
+                connected = true;
+            }
+            else
+            {
+                if (connectedNow) await nina.DisconnectAsync(kind, ct);
+                connected = await nina.ConnectAsync(kind, d.Id, ct) && await nina.IsConnectedAsync(kind, ct);
+            }
+            if (connected) live.Set(kind, d.Id);
+            else live.Forget(kind);
         }
 
         if (connected)
@@ -240,7 +261,8 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     }
 
     /// <summary>Id가 null이면 등록되지 않은 장비. 필수 장비면 실패, 나머지는 Absent(작은 원)</summary>
-    private sealed record Device(Slot Slot, string? Id, string Name, string DriverName)
+    /// <summary>Chosen: AA의 장비 변경에서 고른 장비 (N.I.N.A. 프로필과 다를 수 있다)</summary>
+    private sealed record Device(Slot Slot, string? Id, string Name, string DriverName, bool Chosen = false)
     {
         public bool Absent => Id is null && Slot.Tier != Required;
     }
@@ -256,7 +278,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             {
                 list.Add(chosen is null
                     ? new Device(slot, null, "등록 안 됨", "")
-                    : new Device(slot, chosen.Id, ShortName(slot.Kind, chosen.Id, chosen.Name), chosen.Name));
+                    : new Device(slot, chosen.Id, ShortName(slot.Kind, chosen.Id, chosen.Name), chosen.Name, Chosen: true));
                 continue;
             }
             // 가이더는 Id 대신 GuiderName에 들어 있다 (예: PHD2_Single)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import StatusBar, { type DeviceState } from './components/StatusBar'
+import NinaLostCard, { type NinaState } from './components/NinaLostCard'
 import StepRail, { type Stage } from './components/StepRail'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
@@ -28,6 +29,9 @@ const STAGE_OF: Partial<Record<Phase, Stage>> = {
   plan: '계획',
   prepare: '준비',
 }
+
+/** N.I.N.A.가 켜져 있어야 하는 화면 (1단계 엔진 켜기 이후). 여기서 N.I.N.A.가 꺼지면 알린다 */
+const WATCHED: Phase[] = ['equipment', 'preflight', 'plan', 'prepare']
 
 /** 상단 상태 줄의 지금 단계 이름 */
 const LABEL_OF: Partial<Record<Phase, string>> = {
@@ -117,11 +121,36 @@ export default function App() {
   const toEquipment = useCallback(() => setPhase('equipment'), [])
   // 장비 연결이 끝나면 상태 줄에 장비별 연결 점을 보여 준다
   const [devices, setDevices] = useState<DeviceState[] | null>(null)
+  // N.I.N.A.가 꺼져 다시 켠 경우: 장비를 다시 연결한 뒤 원래 있던 화면으로 돌아간다 (점검을 다시 묻지 않는다)
+  const resumeTo = useRef<Phase | null>(null)
   const toNext = useCallback((items: { title: string; term: string | null; status: string }[]) => {
     // 상태 줄에는 장비 이름(OnStep 등)을 쓴다. 칸의 큰 글씨는 장비 종류, 작은 글씨(term)가 장비 이름
     setDevices(items.filter((i) => i.status !== 'Absent').map((i) => ({ name: i.term ?? i.title, connected: i.status === 'Pass' })))
-    fadeTo('preflight')
+    const back = resumeTo.current
+    resumeTo.current = null
+    fadeTo(back ?? 'preflight')
   }, [fadeTo])
+
+  // ── N.I.N.A. 감시: 장비 연결 이후 화면에서 N.I.N.A.가 꺼지거나 멈추면 알린다 ─────────
+  const [nina, setNina] = useState<NinaState>('Unknown')
+  const watching = WATCHED.includes(phase)
+  useEffect(() => {
+    if (!watching) return
+    const source = new EventSource('/api/nina/watch')
+    // 서버는 상태 이름을 글자 그대로 보낸다 (Running · Exited · NotResponding)
+    source.addEventListener('nina', (e) => setNina(String((e as MessageEvent).data).replace(/"/g, '') as NinaState))
+    return () => source.close()
+  }, [watching])
+  const ninaLost = watching && (nina === 'Exited' || nina === 'NotResponding')
+  useEffect(() => {
+    // 끊기면 상태 줄의 장비 점도 모두 꺼진다
+    if (ninaLost) setDevices((d) => d?.map((x) => ({ ...x, connected: false })) ?? d)
+  }, [ninaLost])
+  const restartNina = useCallback(() => {
+    if (phase === 'preflight' || phase === 'plan' || phase === 'prepare') resumeTo.current = phase
+    setNina('Unknown')
+    fadeTo('engine')
+  }, [phase, fadeTo])
   const toPlan = useCallback(() => fadeTo('plan'), [fadeTo])
   const toPrepare = useCallback(() => fadeTo('prepare'), [fadeTo])
 
@@ -156,6 +185,7 @@ export default function App() {
           </main>
         )}
       </div>
+      {ninaLost && <NinaLostCard state={nina} onRestart={restartNina} />}
       {/* 레일은 화면 전환 페이드 밖에 둔다: 화면이 바뀌어도 같은 자리에 그대로 */}
       {STAGE_OF[phase] && (
         <div className={styles.rail}>

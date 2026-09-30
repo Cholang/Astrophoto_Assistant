@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { useEffect, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import Button from '../components/Button'
 import StepChevrons from '../components/StepChevrons'
 import StepPanel from '../components/StepPanel'
@@ -6,6 +6,12 @@ import { useCheckStream, type CheckItem } from '../checks'
 import styles from './CheckStepsScreen.module.css'
 
 /** [임시] 화면 설계용 버튼을 화면마다 따로 그릴 때 쓰는 손잡이 */
+/** 새로고침 아이콘이 적어도 도는 시간 (한 바퀴) */
+const RETRY_SPIN_MS = 700
+/** "다음"을 누르면 쉐브론이 왼쪽부터 차례로 사라진다: 칸 사이 간격 · 한 칸이 사라지는 시간 */
+const LEAVE_STEP_MS = 110
+const LEAVE_FADE_MS = 320
+
 export interface TempApi {
   items: CheckItem[]
   done: boolean
@@ -56,6 +62,8 @@ export default function CheckStepsScreen({
 }) {
   const { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne, patch } = useCheckStream(url, initial)
   const [picked, setPicked] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false) // 한 항목 재확인 중 (새로고침 아이콘이 돈다)
+  const [leaving, setLeaving] = useState(false) // "다음"을 눌러 떠나는 중
 
   // 다시 확인하면 사용자가 고른 칸을 풀고 자동으로 따라가게 한다.
   useEffect(() => setPicked(null), [run])
@@ -73,11 +81,36 @@ export default function CheckStepsScreen({
   if (!current) return <main className={styles.stage} />
 
   // 새로고침: 현재 칸이 확인을 마쳤는데 통과하지 못했을 때만. 가능하면 그 항목 하나만 다시 확인한다.
+  // 한 항목 재확인은 조용히: 아래 공통 영역은 결과가 바뀔 때만 바뀌고, 확인하는 동안은 새로고침 아이콘만 돈다
   const canRetry = done && !allPass && (current.status === 'Fail' || current.status === 'Warn')
-  const retry = recheckUrl && !restartWhen?.(current) ? () => recheckOne(current.id, recheckUrl(current.id)) : restart
+  const retry =
+    recheckUrl && !restartWhen?.(current)
+      ? async () => {
+          if (checking) return
+          setChecking(true)
+          const started = performance.now()
+          await recheckOne(current.id, recheckUrl(current.id), true)
+          // 아이콘이 적어도 한 바퀴는 돌게 (눌렀다는 것이 보이게)
+          await new Promise((r) => setTimeout(r, Math.max(0, RETRY_SPIN_MS - (performance.now() - started))))
+          setChecking(false)
+        }
+      : restart
+
+  // "다음": 완료 문장·버튼은 바로 사라지고, 쉐브론이 왼쪽부터 차례로 흐려지며 사라진 뒤 다음 단계로
+  const leave = () => {
+    if (leaving) return
+    setLeaving(true)
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const total = reduce ? 0 : (items.length - 1) * LEAVE_STEP_MS + LEAVE_FADE_MS + 80
+    setTimeout(() => onContinue(items), total)
+  }
 
   return (
-    <main className={styles.stage}>
+    <main
+      className={styles.stage}
+      data-leaving={leaving}
+      style={{ '--leave-step': `${LEAVE_STEP_MS}ms`, '--leave-fade': `${LEAVE_FADE_MS}ms` } as CSSProperties}
+    >
       <div className={styles.intro}>
         <h1>{title}</h1>
         {description && <p>{description}</p>}
@@ -89,6 +122,8 @@ export default function CheckStepsScreen({
         current={allPass ? '' : current.id}
         onSelect={setPicked}
         onRetry={canRetry ? retry : undefined}
+        retrying={checking}
+        leaving={leaving}
         // 모두 통과하면 칸은 더 고를 수 없고, 초점은 "다음"에만 간다
         disabled={allPass}
         label={text.stripLabel}
@@ -99,7 +134,7 @@ export default function CheckStepsScreen({
         {allPass ? (
           <div className={styles.complete}>
             <p>{text.completed}</p>
-            <Button variant="primary" onClick={() => onContinue(items)} autoFocus>
+            <Button variant="primary" onClick={leave} autoFocus>
               다음
             </Button>
           </div>
