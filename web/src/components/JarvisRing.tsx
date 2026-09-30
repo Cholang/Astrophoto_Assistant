@@ -59,7 +59,11 @@ function useSmoothContent(content: ReactNode, immediate = false) {
   }, [])
 
   useEffect(() => {
-    if (key !== null && key === shownKey) return
+    // 바뀌려던 글자가 도로 원래 글자로 돌아온 경우(예: 다시 연결이 빨리 실패): 흐려지던 중이면 다시 밝게
+    if (key !== null && key === shownKey) {
+      setVisible(true)
+      return
+    }
     if (key === null) {
       setShown(content)
       return

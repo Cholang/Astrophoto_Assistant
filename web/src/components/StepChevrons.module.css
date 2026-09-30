@@ -3,8 +3,14 @@
 .strip {
   --notch-px: 42;
   --h: clamp(170px, 38vh, 380px);
+  /* 칸 너비 상한. 현재 칸을 120%로 키우면 양옆으로 칸 너비의 10%씩 커지는데,
+     (10% - 칸 사이 8px)가 화살표 들어간 곳(--notch-px 42px)보다 크면 옆 칸을 덮는다 → 칸은 480px까지.
+     울트라와이드(3440px 등)에서는 띠 전체를 가운데에 둔다 */
+  --cell-max: 480px;
+  width: 100%;
+  max-width: calc(var(--slots, 5) * var(--cell-max) + (var(--slots, 5) - 1) * 8px + 2 * clamp(24px, 5vw, 72px));
   list-style: none;
-  margin: 0;
+  margin: 0 auto;
   padding: calc(var(--h) * 0.14) clamp(24px, 5vw, 72px) calc(var(--h) * 0.12);
   display: flex;
   gap: 8px;

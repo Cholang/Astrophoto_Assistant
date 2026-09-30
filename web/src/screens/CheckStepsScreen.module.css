@@ -4,6 +4,10 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* 쉐브론 띠의 최대 너비(StepChevrons.module.css)에 맞춰 제목·아래 영역도 함께 가운데로 (울트라와이드에서 줄이 어긋나지 않게) */
+  width: 100%;
+  max-width: calc(5 * 480px + 4 * 8px + 2 * 72px);
+  margin-inline: auto;
 }
 
 .intro {

@@ -261,7 +261,9 @@ function EquipmentGraph({
 
   // ── 자리 계산 ─────────
   const connectGeo = connectLayout(items, box.w, box.h)
-  const editGeo = editLayout(items, box.w, box.h, (frac) => frac * box.vw - box.left)
+  // 0~10 가로 자리는 창 너비 기준이되, 그래프 너비의 1.25배까지만 (울트라와이드에서 그래프 밖으로 나가 가장자리에 한 줄로 몰리지 않게).
+  // 그래프는 창 가운데에 있으므로 노트북 크기 창에서는 예전(frac × 창 너비 − 그래프 왼쪽)과 같은 자리
+  const editGeo = editLayout(items, box.w, box.h, (frac) => box.w / 2 + (frac - 0.5) * Math.min(box.vw, box.w / 0.8))
   const geo = mode === 'edit' ? editGeo : connectGeo
   const centerOf = connectGeo
 
@@ -708,6 +710,7 @@ function mulberry32(seed: number) {
  */
 /**
  * 변경 모드 원의 가로 자리 (2026-09-30 사용자 지정): 창 전체 너비를 0~10으로 나눈 값, 원 중심 기준.
+ * 단 기준 너비는 그래프 너비의 1.25배까지 (2026-10-01, 3440px 울트라와이드에서 원들이 양 끝에 한 줄로 몰리던 문제).
  * 오른쪽 넷을 정하고, 왼쪽은 같은 겹에서 마주 보는 원을 좌우 대칭(10 - x)으로 둔다.
  * 세로 자리는 등급별 궤도 계산을 그대로 쓴다.
  */
