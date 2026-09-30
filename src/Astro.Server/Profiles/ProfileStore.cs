@@ -3,10 +3,15 @@ using Astro.Core;
 
 namespace Astro.Server.Profiles;
 
-/// <summary>넷플릭스식 사용자 프로필 (사람 단위). 장비 구성과는 별개.</summary>
-public sealed record Profile(string Id, string Nickname, string? Memo, bool HasImage, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt);
+/// <summary>넷플릭스식 사용자 프로필 (사람 단위). 장비 구성과는 별개. Sites: 이 사람의 관측지 목록 (최대 10개, 없던 예전 파일은 null)</summary>
+public sealed record Profile(string Id, string Nickname, string? Memo, bool HasImage, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt, List<ObservingSite>? Sites = null);
+
+/// <summary>관측지 하나: 이름 + 위도·경도(도) + 고도(m)</summary>
+public sealed record ObservingSite(string Id, string Name, double Latitude, double Longitude, double Elevation);
 
 public sealed record NewProfile(string? Nickname, string? Memo);
+
+public sealed record NewSite(string? Name, double Latitude, double Longitude, double? Elevation);
 
 /// <summary>
 /// 프로필 목록은 %LOCALAPPDATA%\<데이터 폴더>\profiles.json, 이미지는 profile-images\{id}.webp에 둔다.
@@ -64,6 +69,69 @@ public sealed class ProfileStore
     }
 
     public bool Select(string id) => Update(id, p => p with { LastUsedAt = DateTimeOffset.Now });
+
+    public const int SitesMax = 10;
+    public const int SiteNameMaxBytes = 30;
+
+    /// <summary>별명·메모 고치기 (프로필 선택 화면의 편집)</summary>
+    public (Profile? Profile, string? Error) Edit(string id, NewProfile input)
+    {
+        var nickname = input.Nickname?.Trim() ?? "";
+        var memo = string.IsNullOrWhiteSpace(input.Memo) ? null : input.Memo.Trim();
+        if (nickname.Length == 0) return (null, "별명을 입력해 주세요.");
+        if (TextBytes(nickname) > NicknameMaxBytes) return (null, $"별명은 최대 {NicknameMaxBytes}byte(한글 {NicknameMaxBytes / 2}자)까지 쓸 수 있습니다.");
+        if (memo is not null && TextBytes(memo) > MemoMaxBytes) return (null, $"메모는 최대 {MemoMaxBytes}byte(한글 {MemoMaxBytes / 2}자)까지 쓸 수 있습니다.");
+        Profile? changed = null;
+        Update(id, p => changed = p with { Nickname = nickname, Memo = memo });
+        return changed is null ? (null, "프로필을 찾지 못했습니다.") : (changed, null);
+    }
+
+    /// <summary>관측지 추가 (최대 10개). 고도는 부른 쪽이 채워 준다</summary>
+    public (Profile? Profile, string? Error) AddSite(string id, string name, double latitude, double longitude, double elevation)
+    {
+        name = name.Trim();
+        if (name.Length == 0) return (null, "관측지 이름을 입력해 주세요.");
+        if (TextBytes(name) > SiteNameMaxBytes) return (null, $"관측지 이름은 최대 {SiteNameMaxBytes}byte(한글 {SiteNameMaxBytes / 2}자)까지 쓸 수 있습니다.");
+        if (latitude is < -90 or > 90 || longitude is < -180 or > 180 || (latitude == 0 && longitude == 0)) return (null, "좌표가 올바르지 않습니다.");
+        Profile? changed = null;
+        string? error = null;
+        Update(id, p =>
+        {
+            var sites = p.Sites ?? [];
+            if (sites.Count >= SitesMax)
+            {
+                error = $"관측지는 {SitesMax}개까지 저장할 수 있습니다. 하나를 지운 뒤 추가해 주세요.";
+                return changed = p;
+            }
+            var site = new ObservingSite(Guid.NewGuid().ToString("N"), name, Math.Round(latitude, 6), Math.Round(longitude, 6), Math.Round(elevation));
+            return changed = p with { Sites = [.. sites, site] };
+        });
+        if (error is not null) return (null, error);
+        return changed is null ? (null, "프로필을 찾지 못했습니다.") : (changed, null);
+    }
+
+    /// <summary>관측지 이름 고치기 (좌표는 고치지 않는다 — 2026-10-01 사용자 결정)</summary>
+    public (Profile? Profile, string? Error) RenameSite(string id, string siteId, string name)
+    {
+        name = name.Trim();
+        if (name.Length == 0) return (null, "관측지 이름을 입력해 주세요.");
+        if (TextBytes(name) > SiteNameMaxBytes) return (null, $"관측지 이름은 최대 {SiteNameMaxBytes}byte(한글 {SiteNameMaxBytes / 2}자)까지 쓸 수 있습니다.");
+        Profile? changed = null;
+        Update(id, p => changed = p with { Sites = (p.Sites ?? []).Select(s => s.Id == siteId ? s with { Name = name } : s).ToList() });
+        return changed is null ? (null, "프로필을 찾지 못했습니다.") : (changed, null);
+    }
+
+    public Profile? RemoveSite(string id, string siteId)
+    {
+        Profile? changed = null;
+        Update(id, p => changed = p with { Sites = (p.Sites ?? []).Where(s => s.Id != siteId).ToList() });
+        return changed;
+    }
+
+    public Profile? Get(string id)
+    {
+        lock (_gate) return Load().FirstOrDefault(p => p.Id == id);
+    }
 
     public bool SaveImage(string id, byte[] webp)
     {

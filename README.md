@@ -115,6 +115,14 @@ dotnet user-secrets set "Assistant:ApiKeys:gemini" "키" --project src/Astro.Ser
 
 환경 변수 `Assistant__ApiKeys__gemini`로도 된다.
 
+**카카오맵 키** (관측지 고르기 화면의 지도·장소 검색). developers.kakao.com → 내 애플리케이션 → 앱 키의 **JavaScript 키**. 그 키의 **JavaScript SDK 도메인**에 `http://localhost:5210`(앱)과 `http://localhost:5211`(테스트 서버)을 등록한다. PC마다 한 번:
+
+```
+dotnet user-secrets set "Map:KakaoJavaScriptKey" "키" --project src/Astro.Server
+```
+
+키가 없거나 인터넷이 안 되면 지도 자리에 안내가 나오고, 좌표 붙여넣기로 관측지를 추가할 수 있다.
+
 키가 없거나, 오늘 무료 한도를 다 썼거나(모든 모델이 429), 키가 틀리면 계획 화면은 **자동으로 연습 대화로 넘어간다** (대화 안에 한 줄 안내). 한도는 다시 차는 시각(미국 태평양 자정, 한국 오후 4~5시)까지, 키 문제는 앱을 다시 켤 때까지 연습 대화로 둔다. 시연 때 처음부터 연습 대화만 쓰려면:
 
 ```

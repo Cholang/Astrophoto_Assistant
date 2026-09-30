@@ -13,7 +13,7 @@
 .intro {
   display: grid;
   gap: 10px;
-  padding: clamp(28px, 6vh, 64px) var(--gutter) 0;
+  padding: clamp(28px, 6cqh, 64px) var(--gutter) 0;
 }
 
 .intro h1 {
@@ -32,7 +32,7 @@
 }
 
 .panel {
-  padding: 0 clamp(24px, 5vw, 72px);
+  padding: 0 clamp(24px, 5cqw, 72px);
 }
 
 /* 모두 통과: 공통 영역 상자는 없애고, 그 자리에 완료 문장 + 바로 아래 다음 버튼 */

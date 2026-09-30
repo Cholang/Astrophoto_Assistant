@@ -114,6 +114,15 @@
   opacity: 0;
 }
 
+/* 글자 아래 버튼 자리: 흐름에서 빼서 글자는 항상 원의 세로 가운데 (체크 아이콘이 위에 겹치는 것과 짝) */
+.action {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 .ring[data-state='failed'] .line {
   color: var(--fail);
 }

@@ -6,6 +6,59 @@ export interface Profile {
   hasImage: boolean
   createdAt: string
   lastUsedAt: string | null
+  /** 이 사람의 관측지 목록 (최대 SITES_MAX). 예전 파일은 null */
+  sites: ObservingSite[] | null
+}
+
+/** 서버 ObservingSite와 같은 모양. 위도·경도는 도, 고도는 m */
+export interface ObservingSite {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+  elevation: number
+}
+
+export const SITES_MAX = 10
+export const SITE_NAME_MAX_BYTES = 30 // 한글 15자
+
+async function profileResult(res: Response, fallback: string): Promise<Profile> {
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error ?? fallback)
+  return body
+}
+
+export async function editProfile(id: string, nickname: string, memo: string): Promise<Profile> {
+  const res = await fetch(`/api/profiles/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nickname, memo }),
+  })
+  return profileResult(res, '프로필을 고치지 못했습니다.')
+}
+
+/** 관측지 추가. 고도를 모르면 비워 두면 서버가 좌표로 조회한다 */
+export async function addSite(id: string, site: { name: string; latitude: number; longitude: number; elevation?: number }): Promise<Profile> {
+  const res = await fetch(`/api/profiles/${id}/sites`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(site),
+  })
+  return profileResult(res, '관측지를 저장하지 못했습니다.')
+}
+
+/** 관측지 이름 고치기 (좌표는 고치지 않는다) */
+export async function renameSite(id: string, siteId: string, name: string): Promise<Profile> {
+  const res = await fetch(`/api/profiles/${id}/sites/${siteId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, latitude: 0, longitude: 0 }),
+  })
+  return profileResult(res, '관측지 이름을 고치지 못했습니다.')
+}
+
+export async function removeSite(id: string, siteId: string): Promise<Profile> {
+  return profileResult(await fetch(`/api/profiles/${id}/sites/${siteId}`, { method: 'DELETE' }), '관측지를 지우지 못했습니다.')
 }
 
 // 글자 수는 byte로 센다: 한글 등은 2, 영문·숫자·기호는 1 (서버 ProfileStore.TextBytes와 같은 규칙).

@@ -53,6 +53,7 @@ public static class AppServer
         builder.Services.AddSingleton<EquipmentChoices>();
         builder.Services.AddSingleton(new RigOverrides(builder.Configuration["App:DataDir"]));
         builder.Services.AddSingleton<LiveDevices>();
+        builder.Services.AddSingleton(new OpticsStore(builder.Configuration["App:DataDir"]));
         builder.Services.AddTransient<RigSetup>();
 
         // 촬영 계획: 대상 목록(N.I.N.A. 데이터베이스), 오늘 밤 정보, AI 비서 (회사는 Assistant:Provider로 고름)
@@ -65,6 +66,7 @@ public static class AppServer
         builder.Services.AddSingleton<PlanAssistant>();
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
+        builder.Services.AddTransient<SiteService>();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
         var app = builder.Build();
@@ -110,9 +112,39 @@ public static class AppServer
         api.MapPost("/equipment/select", async (RigSelect input, RigSetup rig, CancellationToken ct) =>
             await rig.SelectAsync(input.Kind, input.DeviceId, input.Name, ct) is { } result ? Results.Ok(result) : Results.BadRequest());
 
+        // 경통 목록 (장비 변경 모드의 경통 원). 고르기는 /equipment/select (kind=scope)
+        api.MapGet("/optics", (OpticsStore optics) =>
+        {
+            var (scopes, currentId) = optics.List();
+            return new { scopes = scopes.Select(ScopeView), currentId, max = OpticsStore.Max };
+        });
+        api.MapPost("/optics", (NewScope input, OpticsStore optics) =>
+        {
+            var (scope, error) = optics.Add(input);
+            return scope is null ? Results.BadRequest(new { error }) : Results.Ok(ScopeView(scope));
+        });
+        api.MapPut("/optics/{id}", (string id, NewScope input, OpticsStore optics) =>
+        {
+            var (scope, error) = optics.Edit(id, input);
+            return scope is null ? Results.BadRequest(new { error }) : Results.Ok(ScopeView(scope));
+        });
+        api.MapDelete("/optics/{id}", (string id, OpticsStore optics) =>
+            optics.Remove(id) is { } error ? Results.BadRequest(new { error }) : Results.NoContent());
+
         // 준필수 장비(포커서·가이더)를 "없이 진행"
         api.MapPost("/equipment/skip/{id}", async (string id, EquipmentConnector connector, CancellationToken ct) =>
             await connector.GoWithoutAsync(id, ct) is { } result ? Results.Ok(result) : Results.NotFound());
+
+        // 관측지: 지금 N.I.N.A. 값 / 적용(N.I.N.A. 저장 → 적도의에 보내기, 단계별) / 좌표의 고도
+        api.MapGet("/site/current", async (SiteService sites, CancellationToken ct) =>
+            await sites.CurrentAsync(ct) is { } site ? Results.Ok(site) : Results.NoContent());
+        api.MapGet("/site/apply", (double lat, double lon, double? elev, SiteService sites, CancellationToken ct) =>
+            TypedResults.ServerSentEvents(ApplySite(sites, lat, lon, elev, ct), eventType: "check"));
+        api.MapGet("/site/elevation", async (double lat, double lon, SiteService sites, CancellationToken ct) =>
+            Results.Ok(new { elevation = await sites.ElevationAsync(lat, lon, ct) }));
+
+        // 화면 설정: 카카오맵 JavaScript 키 (사용자 비밀 저장소 Map:KakaoJavaScriptKey. 없으면 지도 없이)
+        api.MapGet("/config", (IConfiguration config) => new { kakaoKey = config["Map:KakaoJavaScriptKey"] is { Length: > 0 } k ? k : null });
 
         MapPlan(api.MapGroup("/plan"));
         MapProfiles(api.MapGroup("/profiles"));
@@ -148,6 +180,22 @@ public static class AppServer
         plan.MapPost("/reset", (PlanAssistant assistant) => { assistant.Reset(); return Results.NoContent(); });
     }
 
+    /// <summary>고도를 모르면(화면이 안 보냄) 먼저 조회한 뒤 적용</summary>
+    private static async IAsyncEnumerable<Astro.Core.Setup.CheckResult> ApplySite(SiteService sites, double lat, double lon, double? elev,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        var elevation = elev ?? await sites.ElevationAsync(lat, lon, ct);
+        await foreach (var step in sites.ApplyAsync(lat, lon, elevation, ct)) yield return step;
+    }
+
+    private static object ScopeView(Scope s) => new
+    {
+        s.Id, s.Name, s.FocalLength, s.Aperture, s.FocalRatio, s.Reducer, s.Flattener,
+        effectiveFocalLength = Math.Round(s.EffectiveFocalLength, 1),
+        effectiveFocalRatio = Math.Round(s.EffectiveFocalRatio, 2),
+        s.Optics,
+    };
+
     private sealed record ChatInput(string Text);
 
     private sealed record RigSelect(string Kind, string? DeviceId, string? Name);
@@ -166,6 +214,28 @@ public static class AppServer
 
         profiles.MapPost("/{id}/select", (string id, ProfileStore store) =>
             store.Select(id) ? Results.NoContent() : Results.NotFound());
+
+        // 별명·메모 고치기 (프로필 선택 화면)
+        profiles.MapPut("/{id}", (string id, NewProfile input, ProfileStore store) =>
+        {
+            var (profile, error) = store.Edit(id, input);
+            return profile is null ? Results.BadRequest(new { error }) : Results.Ok(profile);
+        });
+
+        // 관측지 추가(고도를 안 보내면 좌표로 조회) · 삭제. 바뀐 프로필을 돌려준다
+        profiles.MapPost("/{id}/sites", async (string id, NewSite input, ProfileStore store, SiteService sites, CancellationToken ct) =>
+        {
+            var elevation = input.Elevation ?? await sites.ElevationAsync(input.Latitude, input.Longitude, ct);
+            var (profile, error) = store.AddSite(id, input.Name ?? "", input.Latitude, input.Longitude, elevation);
+            return profile is null ? Results.BadRequest(new { error }) : Results.Ok(profile);
+        });
+        profiles.MapPut("/{id}/sites/{siteId}", (string id, string siteId, NewSite input, ProfileStore store) =>
+        {
+            var (profile, error) = store.RenameSite(id, siteId, input.Name ?? "");
+            return profile is null ? Results.BadRequest(new { error }) : Results.Ok(profile);
+        });
+        profiles.MapDelete("/{id}/sites/{siteId}",(string id, string siteId, ProfileStore store) =>
+            store.RemoveSite(id, siteId) is { } profile ? Results.Ok(profile) : Results.NotFound());
 
         // 화면이 가운데를 정사각형으로 잘라 256×256 WebP로 줄여서 보낸다.
         profiles.MapPut("/{id}/image", async (string id, HttpRequest request, ProfileStore store) =>

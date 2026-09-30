@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useFrame } from './frame'
+import { ScreenReady } from './screenReady'
 import StatusBar, { type DeviceState } from './components/StatusBar'
 import NinaLostCard, { type NinaState } from './components/NinaLostCard'
 import StepRail, { type Stage } from './components/StepRail'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
 import EngineStartScreen from './screens/EngineStartScreen'
-import EquipmentScreen from './screens/EquipmentScreen'
+import EquipmentScreen, { type EquipmentDone } from './screens/EquipmentScreen'
 import NewProfileScreen from './screens/NewProfileScreen'
 import PlanScreen from './screens/PlanScreen'
 import PreflightScreen from './screens/PreflightScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import SetupCheckScreen from './screens/SetupCheckScreen'
+import SiteScreen from './screens/SiteScreen'
+import { applySite, describeSite, fetchCurrentSite, type CurrentSite } from './sites'
+import type { ObservingSite } from './profiles'
 import { PRODUCT } from './product'
 import { useTheme } from './theme'
 import styles from './App.module.css'
@@ -18,24 +23,30 @@ import styles from './App.module.css'
 // flow.mmd ① 시작 · 연결:
 // 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결
 // → 출발 전 점검 → 촬영 계획 → (다음: 준비)
-type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'preflight' | 'plan' | 'prepare'
+type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'site' | 'preflight' | 'plan' | 'prepare'
 
 /** 화면 → 하단 단계 레일의 단계. 부팅·프로필 화면에는 레일이 없다 (DESIGN.md 2장) */
 const STAGE_OF: Partial<Record<Phase, Stage>> = {
   check: '연결',
   engine: '연결',
   equipment: '연결',
+  site: '연결',
   preflight: '점검',
   plan: '계획',
   prepare: '준비',
 }
 
 /** N.I.N.A.가 켜져 있어야 하는 화면 (1단계 엔진 켜기 이후). 여기서 N.I.N.A.가 꺼지면 알린다 */
-const WATCHED: Phase[] = ['equipment', 'preflight', 'plan', 'prepare']
+const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare']
+
+/** 상태 줄에 관측지를 보여 주는 화면 (장비 연결 이후). 연필은 장비 연결·관측지 고르기 화면에서는 숨긴다 */
+const SITE_SHOWN: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare']
+const SITE_EDITABLE: Phase[] = ['preflight', 'plan', 'prepare']
 
 /** 상단 상태 줄의 지금 단계 이름 */
 const LABEL_OF: Partial<Record<Phase, string>> = {
   equipment: '장비 연결',
+  site: '관측지',
   preflight: '출발 전 점검',
   plan: '촬영 계획',
   prepare: '준비',
@@ -51,12 +62,17 @@ export default function App() {
   const [profiles, setProfiles] = useState<Profile[] | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loadError, setLoadError] = useState(false)
+  // 프로필 선택 화면에서 고치는 중인 프로필 (새 프로필 만들기 화면을 편집으로 쓴다)
+  const [editing, setEditing] = useState<Profile | null>(null)
   const fading = useRef(false)
 
   /** 지금 화면을 서서히 감추고, 다음 화면을 서서히 보여 준다. */
+  // 전환 중에는 화면을 누를 수 없다 (DESIGN.md 9장). 새 화면이 다 나타난 뒤 true
+  const [settled, setSettled] = useState(true)
   const fadeTo = useCallback((next: Phase) => {
     if (fading.current) return
     fading.current = true
+    setSettled(false)
     setShown(false)
     setTimeout(() => {
       setPhase(next)
@@ -65,6 +81,7 @@ export default function App() {
         requestAnimationFrame(() => {
           setShown(true)
           fading.current = false
+          setTimeout(() => setSettled(true), FADE_MS)
         }),
       )
     }, FADE_MS)
@@ -123,13 +140,60 @@ export default function App() {
   const [devices, setDevices] = useState<DeviceState[] | null>(null)
   // N.I.N.A.가 꺼져 다시 켠 경우: 장비를 다시 연결한 뒤 원래 있던 화면으로 돌아간다 (점검을 다시 묻지 않는다)
   const resumeTo = useRef<Phase | null>(null)
-  const toNext = useCallback((items: { title: string; term: string | null; status: string }[]) => {
+
+  // ── 관측지 (DESIGN.md 3장 "관측지"): 지금 관측지 = N.I.N.A.에 설정된 좌표. undefined면 아직 모름 ─────────
+  const [site, setSite] = useState<CurrentSite | null | undefined>(undefined)
+  const [siteSyncing, setSiteSyncing] = useState<string | null>(null)
+  // 관측지 고르기 화면이 끝나면 돌아갈 곳 (장비 연결 뒤 → 출발 전 점검, 상태 줄 "관측지 편집" → 원래 화면)
+  const siteReturn = useRef<Phase>('preflight')
+  useEffect(() => {
+    // 장비 연결 화면에 들어올 때 읽어 둔다 (N.I.N.A.가 켜진 뒤)
+    if (phase === 'equipment') fetchCurrentSite().then(setSite, () => setSite(null))
+  }, [phase])
+
+  const toNext: EquipmentDone = useCallback((items, opts) => {
     // 상태 줄에는 장비 이름(OnStep 등)을 쓴다. 칸의 큰 글씨는 장비 종류, 작은 글씨(term)가 장비 이름
     setDevices(items.filter((i) => i.status !== 'Absent').map((i) => ({ name: i.term ?? i.title, connected: i.status === 'Pass' })))
     const back = resumeTo.current
     resumeTo.current = null
+    // "변경"을 눌렀거나 관측지가 없으면 관측지 고르기 (없으면 건너뛸 수 없음)
+    if (opts.changeSite || site === null) {
+      siteReturn.current = back ?? 'preflight'
+      return fadeTo('site')
+    }
     fadeTo(back ?? 'preflight')
-  }, [fadeTo])
+  }, [fadeTo, site])
+
+  const updateProfile = useCallback((p: Profile) => {
+    setProfile(p)
+    setProfiles((list) => list?.map((x) => (x.id === p.id ? p : x)) ?? list)
+  }, [])
+
+  // 상태 줄 목록에서 고르면 바로 적용 (문장은 상태 줄 관측지 자리에)
+  const pickSite = useCallback(async (s: ObservingSite) => {
+    setSiteSyncing('관측지를 저장하는 중입니다')
+    const result = await applySite(s, setSiteSyncing)
+    if (result.ok) {
+      setSiteSyncing(null)
+      setSite({ latitude: s.latitude, longitude: s.longitude, elevation: s.elevation })
+    } else {
+      // 실패 문장을 잠깐 보여 준다 (N.I.N.A. 저장은 됐어도 적도의에 못 보냈을 수 있어 지금 값을 다시 읽는다)
+      setSiteSyncing(result.message)
+      fetchCurrentSite().then(setSite, () => undefined)
+      setTimeout(() => setSiteSyncing(null), 5000)
+    }
+  }, [])
+
+  const editSites = useCallback(() => {
+    siteReturn.current = phase
+    fadeTo('site')
+  }, [phase, fadeTo])
+
+  // 프로필 바꾸기 (상태 줄 프로필 사진). 관측지는 지금 서 있는 장소라 그대로 둔다
+  const switchProfile = useCallback((p: Profile) => {
+    void selectProfile(p.id)
+    setProfile(p)
+  }, [])
 
   // ── N.I.N.A. 감시: 장비 연결 이후 화면에서 N.I.N.A.가 꺼지거나 멈추면 알린다 ─────────
   const [nina, setNina] = useState<NinaState>('Unknown')
@@ -147,35 +211,94 @@ export default function App() {
     if (ninaLost) setDevices((d) => d?.map((x) => ({ ...x, connected: false })) ?? d)
   }, [ninaLost])
   const restartNina = useCallback(() => {
-    if (phase === 'preflight' || phase === 'plan' || phase === 'prepare') resumeTo.current = phase
+    if (phase === 'site' || phase === 'preflight' || phase === 'plan' || phase === 'prepare') resumeTo.current = phase
     setNina('Unknown')
     fadeTo('engine')
   }, [phase, fadeTo])
   const toPlan = useCallback(() => fadeTo('plan'), [fadeTo])
   const toPrepare = useCallback(() => fadeTo('prepare'), [fadeTo])
+  const frame = useFrame()
+  const siteInfo = describeSite(site ?? null, profile, profiles ?? [])
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.window}>
+    <div
+      className={styles.shell}
+      data-fixed={frame.fixed}
+      data-frame=""
+      style={{ '--frame-scale': frame.scale } as CSSProperties}
+    >
       {phase !== 'boot' && (
         <div className={styles.bar}>
           <StatusBar
             profile={profile}
+            profiles={profiles ?? []}
+            onSwitchProfile={switchProfile}
+            onProfileChange={updateProfile}
             devices={devices}
             label={LABEL_OF[phase] ?? '소프트웨어 준비'}
+            site={
+              SITE_SHOWN.includes(phase) && site !== undefined
+                ? {
+                    current: site,
+                    name: siteInfo.saved?.name ?? null,
+                    otherName: siteInfo.otherName,
+                    syncing: siteSyncing,
+                    editable: SITE_EDITABLE.includes(phase),
+                  }
+                : null
+            }
+            onPickSite={pickSite}
+            onEditSites={editSites}
             theme={theme}
             onThemeChange={setTheme}
           />
         </div>
       )}
-      <div className={styles.screen} data-shown={shown}>
+      {/* 전환 중(settled=false)에는 화면 전체를 누를 수 없고 초점도 받지 않는다 (inert) */}
+      <ScreenReady.Provider value={settled}>
+      <div className={styles.screen} data-shown={shown} inert={!settled}>
         {phase === 'boot' && <BootScreen error={loadError ? `${PRODUCT.name} 내부 서버에 연결하지 못했습니다. ${PRODUCT.reul} 다시 실행해 주세요.` : null} />}
-        {phase === 'profiles' && <ProfileScreen profiles={profiles ?? []} onSelect={choose} onNew={() => setPhase('newProfile')} />}
+        {phase === 'profiles' && (
+          <ProfileScreen
+            profiles={profiles ?? []}
+            onSelect={choose}
+            onNew={() => {
+              setEditing(null)
+              setPhase('newProfile')
+            }}
+            onEdit={(p) => {
+              setEditing(p)
+              setPhase('newProfile')
+            }}
+          />
+        )}
         {phase === 'newProfile' && (
-          <NewProfileScreen onCreated={created} onCancel={(profiles ?? []).length > 0 ? () => setPhase('profiles') : undefined} />
+          <NewProfileScreen
+            editing={editing}
+            onCreated={created}
+            onEdited={(p) => {
+              updateProfile(p)
+              setEditing(null)
+              setPhase('profiles')
+            }}
+            onCancel={(profiles ?? []).length > 0 ? () => setPhase('profiles') : undefined}
+          />
         )}
         {phase === 'check' && <SetupCheckScreen onContinue={toEngine} />}
         {phase === 'engine' && <EngineStartScreen onContinue={toEquipment} />}
-        {phase === 'equipment' && <EquipmentScreen onContinue={toNext} />}
+        {phase === 'equipment' && (
+          <EquipmentScreen onContinue={toNext} site={site === undefined ? undefined : { current: site, name: siteInfo.saved?.name ?? null }} />
+        )}
+        {phase === 'site' && profile && (
+          <SiteScreen
+            profile={profile}
+            current={site ?? null}
+            onProfileChange={updateProfile}
+            onApplied={setSite}
+            onDone={() => fadeTo(siteReturn.current)}
+          />
+        )}
         {phase === 'preflight' && <PreflightScreen onContinue={toPlan} />}
         {phase === 'plan' && <PlanScreen onContinue={toPrepare} />}
         {phase === 'prepare' && (
@@ -185,6 +308,7 @@ export default function App() {
           </main>
         )}
       </div>
+      </ScreenReady.Provider>
       {ninaLost && <NinaLostCard state={nina} onRestart={restartNina} />}
       {/* 레일은 화면 전환 페이드 밖에 둔다: 화면이 바뀌어도 같은 자리에 그대로 */}
       {STAGE_OF[phase] && (
@@ -192,6 +316,7 @@ export default function App() {
           <StepRail current={STAGE_OF[phase]} />
         </div>
       )}
+    </div>
     </div>
   )
 }

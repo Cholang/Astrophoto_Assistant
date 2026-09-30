@@ -5,7 +5,7 @@
   justify-items: center;
   /* 프로필 선택 화면과 같이 위아래 가운데. 없으면 키 큰 창에서 줄 높이가 늘어나 요소들이 벌어진다 */
   align-content: center;
-  padding: clamp(28px, 7vh, 72px) 16px 48px;
+  padding: clamp(28px, 7cqh, 72px) 16px 48px;
 }
 
 .form {

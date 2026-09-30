@@ -93,7 +93,7 @@ public sealed class EquipmentChoices
 ///   단 전원 허브는 다른 장비에 전원을 주므로, 있으면 맨 먼저 연결하고 실패하면 뒤 장비는 보류한다
 /// 돔·안전 모니터·날씨 장치는 다루지 않는다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live)
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics)
 {
     private const CheckSeverity Required = CheckSeverity.Required;
     private const CheckSeverity Recommended = CheckSeverity.Recommended;
@@ -107,6 +107,9 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             "허브의 12V 전원 어댑터와 PC로 가는 USB 케이블을 확인해 주세요. 허브가 켜져야 다른 장비에도 전원이 들어갑니다."),
         new("mount", "TelescopeSettings", Required, "적도의", "망원경을 움직이고 별을 따라 돌려 주는 받침대입니다.",
             "적도의 전원과 케이블(USB·네트워크)을 확인해 주세요. 무선으로 연결한다면 PC가 적도의의 와이파이에 연결되어 있는지도 확인해 주세요."),
+        // 경통: 연결되는 장비가 아니라 AA의 경통 목록(OpticsStore)에서 고른 것. 초점거리가 있어야 화각·플레이트 솔빙이 된다 (2026-10-01)
+        new(Scope, "", Required, "경통", "빛을 모으는 망원경(또는 렌즈)입니다. 초점거리와 F값으로 화각과 노출을 계산합니다.",
+            "아래 \"장비 변경\"에서 경통 원을 눌러 쓰는 경통을 고르거나 추가해 주세요."),
         new("camera", "CameraSettings", Required, "카메라", "사진을 찍는 카메라입니다.",
             "카메라 전원과 USB 케이블을 확인하고, 카메라의 PC 연결 방식이 테더링(PC 촬영)으로 되어 있는지 확인해 주세요."),
         new("focuser", "FocuserSettings", Recommended, "포커서", "초점을 자동으로 맞춰 주는 모터입니다. 없으면 초점을 손으로 맞춥니다.",
@@ -129,6 +132,8 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     private const string WaitingForHub = "전원 허브가 연결되면 확인합니다";
 
     private const string Hub = "switch";
+
+    public const string Scope = "scope";
 
     /// <summary>화면에 미리 칸을 그릴 수 있게, 연결할 장비 목록만 먼저 알려 준다.</summary>
     /// 화면에 들어올 때마다 부르므로, 시뮬레이션의 실패 목록과 "없이 진행" 기록도 여기서 처음 상태로 되돌린다.
@@ -207,6 +212,18 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     {
         if (d.Absent) return Make(d, CheckStatus.Absent, "");
 
+        // 경통: 연결 대신 고른 경통의 초점거리·F값을 N.I.N.A.에 써 넣는다 (시뮬레이션이어도 — N.I.N.A.가 화각·솔빙에 쓴다)
+        if (d.Slot.Kind == Scope)
+        {
+            if (optics.Current is not { } scope)
+                return Make(d, CheckStatus.Fail, "등록된 경통이 없습니다", new Diagnosis([], d.Slot.Fix));
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            await nina.ChangeProfileValueAsync("TelescopeSettings-FocalLength", Math.Round(scope.EffectiveFocalLength, 1).ToString(inv), ct);
+            await nina.ChangeProfileValueAsync("TelescopeSettings-FocalRatio", Math.Round(scope.EffectiveFocalRatio, 2).ToString(inv), ct);
+            await nina.ChangeProfileValueAsync("TelescopeSettings-Name", scope.Name, ct);
+            return Make(d, CheckStatus.Pass, scope.Optics);
+        }
+
         // 필수 장비가 프로필에 없음: 연결을 시도할 수 없다
         if (d.Id is null)
             return Make(d, CheckStatus.Fail, $"N.I.N.A.에 등록된 {d.Slot.Role}{Josa(d.Slot.Role)} 없습니다", new Diagnosis([],
@@ -273,6 +290,14 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         var list = new List<Device>();
         foreach (var slot in Slots)
         {
+            if (slot.Kind == Scope)
+            {
+                // 칸 아래 작은 글씨: "Pleiades 68 · 260mm · f/3.8"
+                list.Add(optics.Current is { } scope
+                    ? new Device(slot, scope.Id, $"{scope.Name} · {scope.Optics}", scope.Name)
+                    : new Device(slot, null, "등록 안 됨", ""));
+                continue;
+            }
             // AA에서 고른 장비가 있으면 그것을 쓴다 (null = 제거)
             if (overrides.TryGet(slot.Kind, out var chosen))
             {

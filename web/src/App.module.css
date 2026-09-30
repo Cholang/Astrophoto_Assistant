@@ -1,19 +1,39 @@
-/* 창 높이에 딱 맞춘다: 상태 줄 · 화면(넘치면 안에서 스크롤) · 단계 레일 */
+/* 창 전체. 틀 바깥(울트라와이드의 좌우, 16:10의 위아래)은 같은 배경의 여백 */
+.window {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* 앱 틀: 상태 줄 · 화면(넘치면 안에서 스크롤) · 단계 레일.
+   크기 컨테이너라서 화면 안의 cqw·cqh는 이 틀 기준이다 (창 크기 vw·vh 대신 이것을 쓴다, DESIGN.md 1장 "기준 화면") */
 .shell {
+  container-type: size;
+  --gutter: clamp(20px, 6cqw, 96px);
+  width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  /* 울트라와이드(21:9 등): 억지로 늘리지 않고 화면 높이 기준 16:9 너비만큼 가운데에 그린다. 남는 좌우는 같은 배경의 여백 (2026-10-01 사용자 결정).
-     16:9·16:10 모니터와 노트북에서는 창 너비 그대로 */
-  width: 100%;
-  max-width: calc(100vh * 16 / 9);
-  margin-inline: auto;
+}
+
+/* 데스크톱 크기 창: 기준 화면 1920×1080으로 그린 뒤 창에 맞춰 통째로 확대·축소해 가운데에 (frame.ts) */
+.shell[data-fixed='true'] {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--frame-scale, 1));
 }
 
 /* 상태 줄은 부팅이 끝나고 처음 나타날 때 한 번 페이드인하고, 그 뒤 화면 전환에는 그대로 있는다 */
 .bar {
   flex-shrink: 0;
+  /* 상태 줄의 펼침 목록(관측지·프로필)이 화면 위에 오도록 */
+  position: relative;
+  z-index: 10;
   animation: barIn 280ms ease-out both;
 }
 
@@ -44,7 +64,7 @@
 }
 
 .placeholder {
-  padding: clamp(32px, 9vh, 88px) var(--gutter);
+  padding: clamp(32px, 9cqh, 88px) var(--gutter);
   display: grid;
   align-content: start;
   gap: 10px;

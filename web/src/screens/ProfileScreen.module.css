@@ -92,3 +92,43 @@
 }
 
 
+
+/* 프로필 편집: 타일을 가리키면(또는 키보드 초점) 사진 오른쪽 위에 연필 */
+.slot {
+  position: relative;
+}
+
+.edit {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.slot:hover .edit,
+.slot:focus-within .edit {
+  opacity: 1;
+}
+
+.edit:hover,
+.edit:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.edit svg {
+  width: 15px;
+  height: 15px;
+}

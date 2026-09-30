@@ -27,10 +27,13 @@
 
 /* 그래프 영역. 안의 원 자리·크기는 이 영역을 재서 px로 계산한다 (EquipmentScreen.tsx의 layout) */
 .graph {
+  --graph-h: clamp(380px, calc(100cqh - 240px - var(--rail-h)), 100cqh);
   position: relative;
-  width: min(1100px, calc(100vw - 32px));
+  /* 기준 화면(1920×1080)에서 약 1280×800. 예전 고정 상한(1100×680)을 없애고 틀 높이를 다 쓴다 (2026-10-01).
+     가로는 높이의 1.6배까지 — 원형 배치가 좌우로 휑하게 벌어지지 않게 */
+  width: min(calc(100cqw - 32px), calc(var(--graph-h) * 1.6));
   /* 아래 영역(모드 버튼·막대 약 60px)과 상태 줄·레일을 뺀 높이 */
-  height: clamp(380px, calc(100vh - 240px - var(--rail-h)), 680px);
+  height: var(--graph-h);
 }
 
 .links {
@@ -70,12 +73,57 @@
 }
 
 .center[data-ready='true'] {
-  animation: shrink 1000ms cubic-bezier(0.45, 0, 0.25, 1) both;
+  animation: shrink 900ms cubic-bezier(0.45, 0, 0.25, 1) both;
 }
 
 .ring {
   width: 100%;
   --ring-font: clamp(11px, calc(var(--cd) * 0.06), 16px);
+}
+
+/* 1단계 완료 원 → 장비 연결 진행 중 원 크로스페이드 (작아지는 1초 중 앞쪽에 겹쳐 있다가 흐려진다) */
+.fromRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--bg);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.center[data-ready='true'] .fromRing {
+  animation: fromRingOut 630ms ease-in-out 160ms both;
+}
+
+/* 글자는 겹치지 않게 차례로: 옛 글자("준비되었습니다")가 먼저 빠르게 사라지고 → 새 글자가 그 뒤에 나타난다
+   ([data-visible]은 JarvisRing의 글자 줄) */
+.center[data-ready='true'] .fromRing [data-visible] {
+  animation: textOut 180ms ease-out both;
+}
+
+.center[data-ready='true'] > .ring [data-visible] {
+  animation: textIn 260ms ease-out 200ms both;
+}
+
+@keyframes fromRingOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes textOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes textIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .center[data-ready='true'] .fromRing,
+  .center[data-ready='true'] .fromRing [data-visible],
+  .center[data-ready='true'] > .ring [data-visible] { animation: none; }
 }
 
 /* 모드를 한 번 바꾼 뒤에는 처음의 줄어드는 움직임을 다시 하지 않는다 */
@@ -406,6 +454,55 @@
   to { width: 100%; }
 }
 
+/* 가리키면 멈춤 (EquipmentScreen.tsx의 타이머와 함께) */
+.progressFill[data-paused='true'] {
+  animation-play-state: paused;
+}
+
+/* 막대 위 지금 관측지 문장: 자리는 항상 있고 막대가 돌 때만 보인다 */
+.siteLine {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  visibility: hidden;
+}
+
+.siteLine[data-shown='true'] {
+  visibility: visible;
+}
+
+.siteLine[data-none='true'] {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.siteCoord {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.siteChange {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.siteChange:hover:not(:disabled) {
+  background: var(--surface);
+}
+
+.siteChange:focus-visible {
+  outline: none;
+  box-shadow: var(--state-focus-ring);
+}
+
 /* ── 등록 안 된 장비: 아이콘만 있는 작은 원, 흐린 톤, 연결 선 없음 ───────── */
 .node[data-absent='true'] {
   padding: 0;
@@ -648,7 +745,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 60vw;
+  max-width: 60cqw;
   font-size: var(--size-bar);
   color: var(--muted);
 }

@@ -439,7 +439,7 @@
   .chat {
     border-right: none;
     border-bottom: 1px solid var(--line);
-    max-height: 60vh;
+    max-height: 60cqh;
   }
   .right {
     grid-template-rows: auto auto;

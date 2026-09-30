@@ -1,8 +1,11 @@
 import { AlertTriangle, Check, RotateCw } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import DeviceIcon from '../components/DeviceIcon'
+import ScopeList from '../components/ScopeList'
 import JarvisRing from '../components/JarvisRing'
 import { useCheckStream, type CheckItem } from '../checks'
+import { scaleOf } from '../frame'
+import { coordText, type CurrentSite } from '../sites'
 import engineStyles from './EngineStartScreen.module.css'
 import styles from './EquipmentScreen.module.css'
 
@@ -27,6 +30,8 @@ const ADVANCE_MS = 4000
 const CHANGE_UNTIL_MS = 3500
 const ABSORB_MS = 960 // 원들이 가운데 원 뒤로 흡수되는 시간·펼쳐지는 시간 (CSS와 같게)
 const LIST_ROOM = 310 // 드라이버 목록 폭 280 + 간격 (CSS와 같게)
+/** 경통 (서버 EquipmentConnector.Scope): 드라이버 목록 대신 경통 목록을 연다 */
+const SCOPE = 'scope'
 
 type Mode = 'connect' | 'edit'
 /** 화면 모양: 연결 모드 / 가운데로 흡수 중 / 가운데에서 펼쳐지기 직전 / 변경 모드 */
@@ -38,7 +43,16 @@ type Phase = 'connect' | 'absorb' | 'spread' | 'edit'
  * 모두 되면 4초 막대 뒤 다음 단계로. 그 사이 "장비 변경"을 누르면 변경 모드 — 장비를 등록·변경·제거한다.
  * [임시] 지금은 서버 설정 Equipment:Simulate로 연결을 흉내 낸다 (실제 장비 없이 개발).
  */
-export default function EquipmentScreen({ onContinue }: { onContinue: (items: CheckItem[]) => void }) {
+/** 장비 연결 화면이 끝나고 넘어갈 때: changeSite면 관측지 고르기로 ("변경"을 누름) */
+export type EquipmentDone = (items: CheckItem[], opts: { changeSite: boolean }) => void
+
+/** 막대 위에 보여 줄 지금 관측지 (App이 N.I.N.A.에서 읽어 둔 값). undefined면 아직 모름 */
+export interface SiteLine {
+  current: CurrentSite | null
+  name: string | null
+}
+
+export default function EquipmentScreen({ onContinue, site }: { onContinue: EquipmentDone; site?: SiteLine }) {
   const [plan, setPlan] = useState<CheckItem[] | null>(null)
   // 장비 목록을 받는 동안에는 1단계와 똑같은 자리·크기의 원을 그대로 보여 준다 (화면이 바뀌어도 원이 끊기지 않게).
   // 목록이 오면 그 원의 자리에서 가운데 원이 작아지며 옮겨 가도록 자리를 넘긴다.
@@ -66,18 +80,20 @@ export default function EquipmentScreen({ onContinue }: { onContinue: (items: Ch
         <div className={engineStyles.actions} aria-hidden="true" />
       </main>
     )
-  return <EquipmentGraph plan={plan} onContinue={onContinue} from={from.current} />
+  return <EquipmentGraph plan={plan} onContinue={onContinue} from={from.current} site={site} />
 }
 
 function EquipmentGraph({
   plan,
   onContinue,
   from,
+  site,
 }: {
   plan: CheckItem[]
-  onContinue: (items: CheckItem[]) => void
+  onContinue: EquipmentDone
   /** 1단계 원이 있던 자리 (화면 좌표). 가운데 원이 여기서 작아지며 옮겨 온다 */
   from: DOMRect | null
+  site?: SiteLine
 }) {
   const { items, done, allPass, failed, restart, recheckOne, patch } = useCheckStream('/api/equipment/connect', plan)
   const [picked, setPicked] = useState<string | null>(null)
@@ -99,7 +115,9 @@ function EquipmentGraph({
     const el = graphRef.current
     if (!el) return
     const measure = () => {
-      const next = { w: el.clientWidth, h: el.clientHeight, left: el.getBoundingClientRect().left, vw: window.innerWidth }
+      // vw: 앱 틀(1920 기준 화면)의 너비. 창 너비가 아니라 틀 너비라 확대·축소와 관계없다
+      const frameEl = el.closest<HTMLElement>('[data-frame]')
+      const next = { w: el.clientWidth, h: el.clientHeight, left: el.offsetLeft, vw: frameEl?.clientWidth ?? window.innerWidth }
       setBox((b) => (b.w === next.w && b.h === next.h && b.left === next.left && b.vw === next.vw ? b : next))
     }
     measure()
@@ -119,27 +137,39 @@ function EquipmentGraph({
     if (!el) return
     const now = el.getBoundingClientRect()
     if (!now.width) return
-    const engine = from?.width ?? Math.min(340, Math.max(240, window.innerHeight * 0.34))
+    // 화면에서 잰 값(확대·축소 적용)을 틀 안의 길이로 바꿔서 옮긴다 — translate는 틀 안에서 다시 확대·축소되므로
+    const s = scaleOf(el)
+    const frameH = el.closest<HTMLElement>('[data-frame]')?.clientHeight ?? window.innerHeight
+    const engine = from ? from.width : Math.min(340, Math.max(240, frameH * 0.34)) * s
     setShrinkFrom({
       scale: engine / now.width,
-      dx: from ? from.left + from.width / 2 - (now.left + now.width / 2) : 0,
-      dy: from ? from.top + from.height / 2 - (now.top + now.height / 2) : 0,
+      dx: from ? (from.left + from.width / 2 - (now.left + now.width / 2)) / s : 0,
+      dy: from ? (from.top + from.height / 2 - (now.top + now.height / 2)) / s : 0,
     })
   }, [box, shrinkFrom, from])
 
   // ── 자동 진행: 모두 되면 4초 막대. 그동안 "장비 변경"을 누르면 멈춘다 ─────────
   const counting = mode === 'connect' && phase === 'connect' && allPass
   const [late, setLate] = useState(false) // 3.5초가 지났으면 "장비 변경"을 받지 않는다
+  // 막대·관측지 문장 위에 마우스를 올리면 멈춘다 (2026-10-01 사용자 결정). 멈춘 동안 흐른 시간은 빼고 이어서
+  const [paused, setPaused] = useState(false)
+  const elapsed = useRef(0)
   useEffect(() => {
-    setLate(false)
-    if (!counting) return
-    const lateTimer = setTimeout(() => setLate(true), CHANGE_UNTIL_MS)
-    const goTimer = setTimeout(() => onContinue(items), ADVANCE_MS)
+    if (!counting) {
+      elapsed.current = 0
+      setLate(false)
+      return
+    }
+    if (paused) return
+    const startedAt = performance.now()
+    const lateTimer = setTimeout(() => setLate(true), Math.max(0, CHANGE_UNTIL_MS - elapsed.current))
+    const goTimer = setTimeout(() => onContinue(items, { changeSite: false }), Math.max(0, ADVANCE_MS - elapsed.current))
     return () => {
       clearTimeout(lateTimer)
       clearTimeout(goTimer)
+      elapsed.current += performance.now() - startedAt
     }
-  }, [counting, items, onContinue])
+  }, [counting, paused, items, onContinue])
 
   // ── 모드 전환: 원들이 가운데로 흡수됐다가 다른 배치로 펼쳐진다 ─────────
   const [returned, setReturned] = useState(false) // 한 번이라도 모드를 바꿨으면 원이 기다리지 않고 나타난다
@@ -314,9 +344,33 @@ function EquipmentGraph({
               }
               data-ready={shrinkFrom !== null}
             >
-              <JarvisRing state={mode === 'edit' ? 'working' : state} className={styles.ring}>
+              {/* 장비 변경·변경 완료는 원 안, 글자 아래 (2026-10-01 사용자 결정) */}
+              <JarvisRing
+                state={mode === 'edit' ? 'working' : state}
+                className={styles.ring}
+                action={
+                  mode === 'connect' ? (
+                    <button type="button" className={styles.quiet} onClick={startEdit} disabled={!done || late || phase !== 'connect'}>
+                      장비 변경
+                    </button>
+                  ) : (
+                    <button type="button" className={styles.primary} onClick={finishEdit} disabled={phase !== 'edit'}>
+                      변경 완료
+                    </button>
+                  )
+                }
+              >
                 {centerLine}
               </JarvisRing>
+              {/* 1단계 끝 모습(초록 완료 원)을 위에 겹쳐 두고, 옮겨 오며 작아지는 동안 천천히 흐려진다 → 아래의 진행 중 원으로 크로스페이드.
+                  두 원이 같은 틀 안에서 함께 움직여 크기·자리가 어긋나지 않는다. 모드를 바꾼 뒤(returned)에는 없음 */}
+              {!returned && (
+                <div className={styles.fromRing} aria-hidden="true">
+                  <JarvisRing state="done" className={styles.ring}>
+                    준비되었습니다
+                  </JarvisRing>
+                </div>
+              )}
             </div>
 
             {items.map((item, i) => {
@@ -426,23 +480,27 @@ function EquipmentGraph({
         )}
       </div>
 
-      {/* 아래: 진행 막대 · 모드 버튼. 높이는 고정이라 무엇이 보이든 위의 원들은 움직이지 않는다 */}
-      <div className={styles.bottom}>
+      {/* 아래: 지금 관측지 문장 + 진행 막대. 높이는 고정이라 무엇이 보이든 위의 원들은 움직이지 않는다.
+          막대가 도는 동안에만 문장이 보이고, 가리키면 막대가 멈춘다 */}
+      <div className={styles.bottom} onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)}>
+        <div className={styles.siteLine} data-shown={counting && site !== undefined} data-none={!site?.current}>
+          {site?.current ? (
+            <>
+              <span>
+                현재 관측지는 <b className={styles.siteCoord}>{coordText(site.current)}</b>
+                {site.name && ` (${site.name})`}입니다
+              </span>
+              <button type="button" className={styles.siteChange} onClick={() => onContinue(items, { changeSite: true })} disabled={!counting}>
+                변경
+              </button>
+            </>
+          ) : (
+            <span>현재 관측지가 없습니다</span>
+          )}
+        </div>
         {/* 4초 진행 막대: 모두 되면 차오르고, 다 차면 다음 단계로 */}
         <div className={styles.progress} aria-hidden="true">
-          <div className={styles.progressFill} data-running={counting} key={counting ? 'run' : 'stop'} />
-        </div>
-
-        <div className={styles.modeRow}>
-          {mode === 'connect' ? (
-            <button type="button" className={styles.quiet} onClick={startEdit} disabled={!done || late || phase !== 'connect'}>
-              장비 변경
-            </button>
-          ) : (
-            <button type="button" className={styles.primary} onClick={finishEdit} disabled={phase !== 'edit'}>
-              변경 완료
-            </button>
-          )}
+          <div className={styles.progressFill} data-running={counting} data-paused={paused} key={counting ? 'run' : 'stop'} />
         </div>
       </div>
 
@@ -506,7 +564,12 @@ function EditNode({
           {error}
         </p>
       )}
-      {listOpen && <DeviceList kind={item.id} left={left} current={item.term} onPick={onSelect} onClose={onCloseList} />}
+      {listOpen &&
+        (item.id === SCOPE ? (
+          <ScopeList left={left} onPick={onSelect} onClose={onCloseList} />
+        ) : (
+          <DeviceList kind={item.id} left={left} current={item.term} onPick={onSelect} onClose={onCloseList} />
+        ))}
     </div>
   )
 }
@@ -743,8 +806,10 @@ function editLayout(items: CheckItem[], w: number, h: number, screenX?: (frac: n
     [-120, 60],
     [-30, 30, 150, 210],
   ]
-  const byTier = [0, 1, 2].map((t) => items.filter((i) => tierOf(i) === t))
+  // 경통은 필수지만 사용자가 정한 적도의·카메라 자리를 바꾸지 않게 따로: 가운데 원 바로 위
+  const byTier = [0, 1, 2].map((t) => items.filter((i) => i.id !== SCOPE && tierOf(i) === t))
   const nodes = items.map((item) => {
+    if (item.id === SCOPE) return { x: cx, y: cy - ry[1], d }
     const t = tierOf(item)
     const k = byTier[t].indexOf(item)
     const deg = byTier[t].length === angles[t].length ? angles[t][k] : -90 + (k * 360) / byTier[t].length

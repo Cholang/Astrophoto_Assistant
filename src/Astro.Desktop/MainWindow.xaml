@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Width="1100" Height="760" MinWidth="420" MinHeight="560"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Icon="app.ico">
     <!-- 배경색은 코드에서 마지막 테마에 맞춰 정한다 (로딩 순간에 보이는 색). -->
     <wv2:WebView2 x:Name="Web" />
 </Window>

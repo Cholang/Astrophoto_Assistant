@@ -14,7 +14,18 @@ const MIN_SHOW_MS = 800
  * 완료: 회전을 멈추고 바깥 원을 닫아 초록 + 체크. 실패: 회전을 멈추고 오류 색.
  * 상태·글자가 바뀔 때는 뚝 끊기지 않게 천천히 바뀐다.
  */
-export default function JarvisRing({ state, children, className }: { state: RingState; children: ReactNode; className?: string }) {
+export default function JarvisRing({
+  state,
+  children,
+  className,
+  action,
+}: {
+  state: RingState
+  children: ReactNode
+  className?: string
+  /** 원 안 글자 아래의 버튼 자리 (장비 연결의 "장비 변경"·"변경 완료"). 자리는 항상 확보 */
+  action?: ReactNode
+}) {
   // 완료 문장은 기다리지 않고 바로 (완료 순간과 글자가 어긋나 보이지 않게)
   const { shown, visible } = useSmoothContent(children, state === 'done')
   return (
@@ -33,6 +44,7 @@ export default function JarvisRing({ state, children, className }: { state: Ring
         <div className={styles.line} data-visible={visible}>
           {shown}
         </div>
+        {action !== undefined && <div className={styles.action}>{action}</div>}
       </div>
     </div>
   )

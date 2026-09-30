@@ -5,7 +5,7 @@
   left: 50%;
   z-index: 20;
   transform: translateX(-50%);
-  width: min(720px, calc(100vw - 32px));
+  width: min(720px, calc(100cqw - 32px));
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;

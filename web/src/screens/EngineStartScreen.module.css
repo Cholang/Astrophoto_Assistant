@@ -21,8 +21,8 @@
 
 /* 2단계(장비 연결)는 이 크기에서 작아지며 시작한다 — EquipmentScreen의 --engine-ring와 같은 값 */
 .ring {
-  width: clamp(240px, 34vh, 340px);
-  --ring-font: clamp(16px, 1.6vw, 20px);
+  width: clamp(240px, 34cqh, 340px);
+  --ring-font: clamp(16px, 1.6cqw, 20px);
 }
 
 /* 실패 시 해결 방법·다시 시도. 자리는 항상 차지 */

@@ -35,6 +35,8 @@ flowchart TB
     D["장비 연결 화면<br/>허브부터 차례로 · 냉각 카메라면 냉각은 뒤에서 시작"]:::screen
     E1{"모든 장비<br/>연결 성공?"}
     R["장비별 원인 안내·다시 연결"]
+    SITEQ{"막대 도는 동안<br/>'변경' 누름?<br/>또는 관측지 없음?"}
+    SITE["관측지 고르기<br/>프로필 관측지 카드(최대 10) · 카카오맵 · 추가<br/>저장 → N.I.N.A. 저장 → 적도의에 위치 보내기"]:::screen
     H["출발 전 점검<br/>시작 위치·경통 캡·케이블·밸런스·수평·열선<br/>6개 체크 또는 건너뛰기 → 자동 진행"]:::screen
   end
 
@@ -95,7 +97,9 @@ flowchart TB
   B -->|"예"| D
   D --> E1
   E1 -->|"아니오"| R --> D
-  E1 -->|"예 (자동 진행)"| H
+  E1 -->|"예 (막대: '현재 관측지는 …입니다' · 가리키면 멈춤)"| SITEQ
+  SITEQ -->|"아니오 (막대 끝)"| H
+  SITEQ -->|"예"| SITE --> H
 
   %% ② 촬영 계획 (계획 화면이 초기 화면을 겸함)
   H -->|"자동 진행"| P
@@ -137,7 +141,7 @@ flowchart TB
   classDef default fill:#FFFFFF,stroke:#6E6A80,color:#1E1C26
   classDef screen fill:#F24E1E,stroke:#B8330F,color:#FFFFFF
   classDef decide fill:#E8DEFF,stroke:#7B61FF,color:#221A40
-  class PROF,ENVOK,ENGOK,B,E1,T,OK,AN,DONE,RES,WAIT,POST decide
+  class PROF,ENVOK,ENGOK,B,E1,SITEQ,T,OK,AN,DONE,RES,WAIT,POST decide
   style S1 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S2 fill:none,stroke:#9A94B8,stroke-dasharray:5 4
   style S3 fill:none,stroke:#9A94B8,stroke-dasharray:5 4

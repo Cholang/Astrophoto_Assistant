@@ -17,11 +17,154 @@
 }
 
 .profile {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: var(--text);
   font-weight: 600;
+}
+
+/* 프로필 사진 버튼: 바꿀 프로필이 있을 때만 가리키면 테두리 강조 */
+.me {
+  display: inline-grid;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: box-shadow 150ms;
+}
+
+.me[data-can='true']:hover,
+.me[aria-expanded='true'],
+.me:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+.me:disabled {
+  cursor: default;
+}
+
+/* 다른 프로필 사진: 지금 사진 바로 아래에서 오른쪽으로 펼친다 (같은 크기) */
+.others {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  animation: open 180ms ease-out both;
+}
+
+.other {
+  position: relative;
+  display: inline-grid;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.other:hover,
+.other:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+/* 가리키면 별명만 */
+.tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.other:hover .tip,
+.other:focus-visible .tip {
+  visibility: visible;
+  opacity: 1;
+}
+
+@keyframes open {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 관측지: 시계 왼쪽 */
+.site {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.siteName {
+  font-weight: 600;
+}
+
+.unsaved {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.coord {
+  font-variant-numeric: tabular-nums;
+}
+
+.noSite {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.syncing {
+  color: var(--accent);
+}
+
+.pen {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pen svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pen:hover:not(:disabled),
+.site[data-open='true'] .pen {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.pen:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .devices {

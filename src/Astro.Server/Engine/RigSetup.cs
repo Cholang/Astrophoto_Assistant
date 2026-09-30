@@ -101,7 +101,7 @@ public sealed class RigOverrides
 /// 드라이버 목록은 N.I.N.A.가 켜져 있어야 받을 수 있다 (장비 연결 화면에서만 쓰는 이유).
 /// 드라이버의 첫 설정 창(포트 번호 등)은 API로 열 수 없다 — 연결 실패 안내가 N.I.N.A. 장비 탭의 톱니바퀴를 알려 준다.
 /// </summary>
-public sealed class RigSetup(NinaApiClient nina, RigOverrides overrides, LiveDevices live, EquipmentConnector connector, IOptions<EquipmentOptions> options)
+public sealed class RigSetup(NinaApiClient nina, RigOverrides overrides, LiveDevices live, EquipmentConnector connector, IOptions<EquipmentOptions> options, OpticsStore optics)
 {
     public async Task<IReadOnlyList<RigChoice>?> DevicesAsync(string kind, CancellationToken ct)
     {
@@ -119,7 +119,10 @@ public sealed class RigSetup(NinaApiClient nina, RigOverrides overrides, LiveDev
     public async Task<RigSelectResult?> SelectAsync(string kind, string? deviceId, string? name, CancellationToken ct)
     {
         if (EquipmentConnector.FindSlot(kind) is not { } slot) return null;
-        if (deviceId is null && slot.Tier == CheckSeverity.Required) return null; // 카메라·적도의는 제거할 수 없다
+        if (deviceId is null && slot.Tier == CheckSeverity.Required) return null; // 카메라·적도의·경통은 제거할 수 없다
+        // 경통: 목록에서 고르기만 (N.I.N.A.에는 "변경 완료" 뒤 다시 확인할 때 써 넣는다)
+        if (kind == EquipmentConnector.Scope)
+            return optics.Use(deviceId!) && await connector.DescribeAsync(kind, ct) is { } scopeItem ? new RigSelectResult(scopeItem, null) : null;
         var choice = deviceId is null ? null : new RigChoice(deviceId, string.IsNullOrWhiteSpace(name) ? deviceId : name);
 
         string? error = null;

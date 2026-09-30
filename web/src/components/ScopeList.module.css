@@ -1,0 +1,217 @@
+/* 경통 목록: 장비 변경 모드의 경통 원 옆 (드라이버 목록과 같은 자리·모양) */
+.panel {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 18px);
+  transform: translateY(-50%);
+  z-index: 5;
+  display: grid;
+  gap: 6px;
+  width: 320px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.panel[data-left='true'] {
+  left: auto;
+  right: calc(100% + 18px);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.row[data-current='true'] {
+  background: var(--surface-2);
+}
+
+.pick {
+  display: grid;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pick:hover,
+.pick:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.row[data-current='true'] .name {
+  color: var(--accent);
+}
+
+.optics {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.icon:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1.5px dashed var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.add svg {
+  width: 15px;
+  height: 15px;
+}
+
+.note {
+  margin: 4px 8px;
+  color: var(--muted);
+}
+
+.error {
+  margin: 0 8px;
+  min-height: 1.2em;
+  color: var(--fail);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.error:empty {
+  display: none;
+}
+
+.form {
+  display: grid;
+  gap: 10px;
+  padding: 4px;
+}
+
+.formTitle {
+  font-size: 14.5px;
+}
+
+.form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.form input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.quiet,
+.primary {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quiet {
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.primary {
+  border: 1px solid var(--primary-border);
+  background: var(--primary-bg);
+  color: var(--primary-text);
+}

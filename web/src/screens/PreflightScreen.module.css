@@ -7,7 +7,7 @@
 }
 
 .intro {
-  padding: clamp(28px, 6vh, 64px) var(--gutter) 0;
+  padding: clamp(28px, 6cqh, 64px) var(--gutter) 0;
 }
 
 .intro h1 {

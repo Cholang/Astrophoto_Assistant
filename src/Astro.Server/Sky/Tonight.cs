@@ -27,7 +27,7 @@ public sealed record CloudHour(DateTimeOffset Time, int Cover);
 /// 오늘 밤 정보를 모은다: 관측지·장비(N.I.N.A. 프로필), 어두운 시간·달(계산), 구름(Open-Meteo 예보).
 /// 관측지 좌표는 화면·AI에 넘기지 않는다 (계산에만 쓴다).
 /// </summary>
-public sealed class TonightService(NinaApiClient nina, IHttpClientFactory httpFactory, ILogger<TonightService> log)
+public sealed class TonightService(NinaApiClient nina, IHttpClientFactory httpFactory, ILogger<TonightService> log, Engine.OpticsStore optics)
 {
     private (DateTimeOffset At, Site Site, IReadOnlyList<CloudHour> Clouds)? _cloudCache;
 
@@ -42,10 +42,12 @@ public sealed class TonightService(NinaApiClient nina, IHttpClientFactory httpFa
         var site = new Site(Num("AstrometrySettings", "Latitude"), Num("AstrometrySettings", "Longitude"), Num("AstrometrySettings", "Elevation"));
         var camera = Str("CameraSettings", "LastDeviceName");
         var paren = camera.IndexOf(" (", StringComparison.Ordinal);
+        // 경통은 AA의 경통 목록이 기준 (N.I.N.A.에도 써 넣지만, 아직 안 썼을 수 있으니 여기서 직접)
+        var scope = optics.Current;
         var rig = new Rig(
-            Str("TelescopeSettings", "Name"),
-            Num("TelescopeSettings", "FocalLength"),
-            Num("TelescopeSettings", "FocalRatio"),
+            scope?.Name ?? Str("TelescopeSettings", "Name"),
+            scope?.EffectiveFocalLength ?? Num("TelescopeSettings", "FocalLength"),
+            scope?.EffectiveFocalRatio ?? Num("TelescopeSettings", "FocalRatio"),
             paren > 0 ? camera[..paren] : camera,
             Num("CameraSettings", "PixelSize"),
             (int)Num("FramingAssistantSettings", "CameraWidth"),
