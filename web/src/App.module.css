@@ -1,5 +1,6 @@
+/* 창 높이에 딱 맞춘다: 상태 줄 · 화면(넘치면 안에서 스크롤) · 단계 레일 */
 .shell {
-  min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -7,12 +8,27 @@
 
 /* 상태 줄은 부팅이 끝나고 처음 나타날 때 한 번 페이드인하고, 그 뒤 화면 전환에는 그대로 있는다 */
 .bar {
+  flex-shrink: 0;
   animation: barIn 280ms ease-out both;
+}
+
+/* 하단 단계 레일: 화면 맨 아래. 처음 나타날 때만 페이드인 (상태 줄과 같음) */
+.rail {
+  flex-shrink: 0;
+  display: flex;
+  background: var(--bg);
+  animation: barIn 280ms ease-out both;
+}
+
+.rail > * {
+  flex: 1;
 }
 
 /* 화면 전환: 앞 화면 페이드아웃 → 다음 화면 페이드인 (App.tsx FADE_MS와 같은 시간) */
 .screen {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   transition: opacity 280ms ease;

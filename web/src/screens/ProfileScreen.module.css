@@ -1,9 +1,10 @@
-/* 프로필 화면은 가운데 배치 (사용자 요청, DESIGN.md의 왼쪽 정렬 예외) */
+/* 프로필 화면은 가운데 배치 (사용자 요청, DESIGN.md의 왼쪽 정렬 예외): 제목·목록·새 프로필을 한 덩어리로 화면 위아래·좌우 가운데에 */
 .stage {
   flex: 1;
   display: grid;
   justify-items: center;
-  padding: clamp(28px, 10vh, 120px) 16px 48px;
+  align-content: center;
+  padding: 48px 16px;
 }
 
 .content {

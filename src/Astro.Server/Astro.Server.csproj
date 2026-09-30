@@ -11,11 +11,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- dotnet run을 어디서 실행해도 프로젝트 폴더의 wwwroot·설정을 쓴다 -->
     <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+    <UserSecretsId>8ead23fd-87d8-4714-a791-ffcd2807c620</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- 데스크톱 창에서 실행할 때도 화면 파일을 찾을 수 있게 빌드 출력에 복사한다. -->
     <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
   </ItemGroup>
 
 </Project>

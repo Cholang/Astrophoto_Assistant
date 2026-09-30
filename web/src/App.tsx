@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import StatusBar, { type DeviceState } from './components/StatusBar'
+import StepRail, { type Stage } from './components/StepRail'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
 import EngineStartScreen from './screens/EngineStartScreen'
 import EquipmentScreen from './screens/EquipmentScreen'
 import NewProfileScreen from './screens/NewProfileScreen'
+import PlanScreen from './screens/PlanScreen'
+import PreflightScreen from './screens/PreflightScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import SetupCheckScreen from './screens/SetupCheckScreen'
 import { PRODUCT } from './product'
@@ -12,9 +15,27 @@ import { useTheme } from './theme'
 import styles from './App.module.css'
 
 // flow.mmd ① 시작 · 연결:
-// 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결 → (다음: 정렬)
-// 단계 레일이 있는 본 화면은 흐름을 끝까지 이은 뒤에 만든다.
-type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'next'
+// 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결
+// → 출발 전 점검 → 촬영 계획 → (다음: 준비)
+type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'preflight' | 'plan' | 'prepare'
+
+/** 화면 → 하단 단계 레일의 단계. 부팅·프로필 화면에는 레일이 없다 (DESIGN.md 2장) */
+const STAGE_OF: Partial<Record<Phase, Stage>> = {
+  check: '연결',
+  engine: '연결',
+  equipment: '연결',
+  preflight: '점검',
+  plan: '계획',
+  prepare: '준비',
+}
+
+/** 상단 상태 줄의 지금 단계 이름 */
+const LABEL_OF: Partial<Record<Phase, string>> = {
+  equipment: '장비 연결',
+  preflight: '출발 전 점검',
+  plan: '촬영 계획',
+  prepare: '준비',
+}
 
 /** 화면 전환 페이드 한쪽 시간. App.module.css의 .screen transition과 같은 값 */
 const FADE_MS = 280
@@ -98,9 +119,11 @@ export default function App() {
   const [devices, setDevices] = useState<DeviceState[] | null>(null)
   const toNext = useCallback((items: { title: string; term: string | null; status: string }[]) => {
     // 상태 줄에는 장비 이름(OnStep 등)을 쓴다. 칸의 큰 글씨는 장비 종류, 작은 글씨(term)가 장비 이름
-    setDevices(items.map((i) => ({ name: i.term ?? i.title, connected: i.status === 'Pass' })))
-    setPhase('next')
-  }, [])
+    setDevices(items.filter((i) => i.status !== 'Absent').map((i) => ({ name: i.term ?? i.title, connected: i.status === 'Pass' })))
+    fadeTo('preflight')
+  }, [fadeTo])
+  const toPlan = useCallback(() => fadeTo('plan'), [fadeTo])
+  const toPrepare = useCallback(() => fadeTo('prepare'), [fadeTo])
 
   return (
     <div className={styles.shell}>
@@ -109,7 +132,7 @@ export default function App() {
           <StatusBar
             profile={profile}
             devices={devices}
-            label={phase === 'equipment' ? '장비 연결' : '소프트웨어 준비'}
+            label={LABEL_OF[phase] ?? '소프트웨어 준비'}
             theme={theme}
             onThemeChange={setTheme}
           />
@@ -124,13 +147,21 @@ export default function App() {
         {phase === 'check' && <SetupCheckScreen onContinue={toEngine} />}
         {phase === 'engine' && <EngineStartScreen onContinue={toEquipment} />}
         {phase === 'equipment' && <EquipmentScreen onContinue={toNext} />}
-        {phase === 'next' && (
+        {phase === 'preflight' && <PreflightScreen onContinue={toPlan} />}
+        {phase === 'plan' && <PlanScreen onContinue={toPrepare} />}
+        {phase === 'prepare' && (
           <main className={styles.placeholder}>
-            <h1>망원경을 정렬할까요?</h1>
-            <p>정렬 화면은 다음에 만들 차례입니다.</p>
+            <h1>촬영 준비</h1>
+            <p>초점·극축 정렬·대상 찾기 화면은 다음에 만들 차례입니다.</p>
           </main>
         )}
       </div>
+      {/* 레일은 화면 전환 페이드 밖에 둔다: 화면이 바뀌어도 같은 자리에 그대로 */}
+      {STAGE_OF[phase] && (
+        <div className={styles.rail}>
+          <StepRail current={STAGE_OF[phase]} />
+        </div>
+      )}
     </div>
   )
 }

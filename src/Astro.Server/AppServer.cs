@@ -1,8 +1,10 @@
 using System.Text.Json.Serialization;
 using Astro.Nina;
+using Astro.Server.Assistant;
 using Astro.Server.Engine;
 using Astro.Server.Profiles;
 using Astro.Server.Setup;
+using Astro.Server.Sky;
 using Microsoft.Extensions.Options;
 
 namespace Astro.Server;
@@ -27,6 +29,10 @@ public static class AppServer
             ContentRootPath = contentRoot,
         });
         if (url is not null) builder.WebHost.UseUrls(url);
+        // AI API 키 등 비밀 값: 이 PC의 사용자 비밀 저장소에서 읽는다 (git·화면에 남지 않음).
+        // 기본 설정은 개발 모드에서만 읽으므로 항상 읽도록 직접 추가. 환경 변수가 있으면 환경 변수가 이긴다.
+        builder.Configuration.AddUserSecrets(typeof(AppServer).Assembly, optional: true);
+        builder.Configuration.AddEnvironmentVariables();
 
         builder.Services.Configure<NinaOptions>(builder.Configuration.GetSection("Nina"));
         builder.Services.Configure<SetupOptions>(builder.Configuration.GetSection("Setup"));
@@ -34,12 +40,27 @@ public static class AppServer
         builder.Services.AddHttpClient<NinaApiClient>((sp, http) =>
         {
             http.BaseAddress = new Uri(sp.GetRequiredService<IOptions<NinaOptions>>().Value.BaseUrl);
-            http.Timeout = TimeSpan.FromSeconds(5);
+            // 요청별 대기 시간은 NinaApiClient가 정한다 (조회 5초, 장비 연결 60초). 여기는 그보다 넉넉한 안전선
+            http.Timeout = NinaApiClient.ConnectTimeout + TimeSpan.FromSeconds(30);
         });
+        builder.Services.Configure<NetworkOptions>(builder.Configuration.GetSection("Network"));
+        builder.Services.AddHttpClient<InternetCheck>();
         builder.Services.AddTransient<SetupChecker>();
         builder.Services.AddTransient<EngineStarter>();
         builder.Services.AddTransient<EquipmentConnector>();
         builder.Services.AddSingleton<EquipmentSimulation>();
+        builder.Services.AddSingleton<EquipmentChoices>();
+        builder.Services.AddSingleton(new RigOverrides(builder.Configuration["App:DataDir"]));
+        builder.Services.AddTransient<RigSetup>();
+
+        // 촬영 계획: 대상 목록(N.I.N.A. 데이터베이스), 오늘 밤 정보, AI 비서 (회사는 Assistant:Provider로 고름)
+        builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection("Assistant"));
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton(new DsoCatalog(builder.Configuration["Sky:NinaDatabase"] is { Length: > 0 } db ? db : null));
+        builder.Services.AddSingleton<TonightService>();
+        builder.Services.AddSingleton<PlanTools>();
+        builder.Services.AddSingleton<ChatModelFactory>();
+        builder.Services.AddSingleton<PlanAssistant>();
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -71,11 +92,53 @@ public static class AppServer
         api.MapGet("/equipment/connect/{id}", async (string id, bool? simulateFail, EquipmentConnector connector, CancellationToken ct) =>
             await connector.RetryAsync(id, simulateFail ?? false, ct) is { } result ? Results.Ok(result) : Results.NotFound());
 
+        // 장비 변경 모드: 설치된 드라이버 목록, 장비 고르기·제거 (deviceId가 null이면 제거)
+        api.MapGet("/equipment/devices/{kind}", async (string kind, RigSetup rig, CancellationToken ct) =>
+            await rig.DevicesAsync(kind, ct) is { } list ? Results.Ok(list) : Results.NotFound());
+        api.MapPost("/equipment/select", async (RigSelect input, RigSetup rig, CancellationToken ct) =>
+            await rig.SelectAsync(input.Kind, input.DeviceId, input.Name, ct) is { } result ? Results.Ok(result) : Results.BadRequest());
+
+        // 준필수 장비(포커서·가이더)를 "없이 진행"
+        api.MapPost("/equipment/skip/{id}", async (string id, EquipmentConnector connector, CancellationToken ct) =>
+            await connector.GoWithoutAsync(id, ct) is { } result ? Results.Ok(result) : Results.NotFound());
+
+        MapPlan(api.MapGroup("/plan"));
         MapProfiles(api.MapGroup("/profiles"));
 
         app.MapFallbackToFile("index.html");
         return app;
     }
+
+    private static void MapPlan(RouteGroupBuilder plan)
+    {
+        // 화면을 열 때: 대화·계획·그래프를 한 번에 (처음이면 오늘 밤 정보를 준비하고 인사를 만든다)
+        plan.MapGet("/state", async (PlanAssistant assistant, DsoCatalog catalog, CancellationToken ct) =>
+        {
+            if (await assistant.EnsureStartedAsync(ct) is { } problem) return Results.Ok(new { error = problem });
+            var night = assistant.Night!;
+            return Results.Ok(new
+            {
+                messages = assistant.Display,
+                plan = PlanView.From(assistant.Plan, night),
+                chart = NightChart.Build(night, assistant.Plan, catalog),
+                catalogAvailable = catalog.Available,
+                cloudsAvailable = night.Clouds.Count > 0,
+            });
+        });
+
+        plan.MapGet("/chart", (PlanAssistant assistant, DsoCatalog catalog) =>
+            assistant.Night is { } night ? Results.Ok(NightChart.Build(night, assistant.Plan, catalog)) : Results.NotFound());
+
+        // 사용자 말 하나 → 글 조각·계획 변화·선택지를 차례로 (Server-Sent Events)
+        plan.MapPost("/chat", (ChatInput input, PlanAssistant assistant, CancellationToken ct) =>
+            TypedResults.ServerSentEvents(assistant.SendAsync(input.Text, ct)));
+
+        plan.MapPost("/reset", (PlanAssistant assistant) => { assistant.Reset(); return Results.NoContent(); });
+    }
+
+    private sealed record ChatInput(string Text);
+
+    private sealed record RigSelect(string Kind, string? DeviceId, string? Name);
 
     private static void MapProfiles(RouteGroupBuilder profiles)
     {

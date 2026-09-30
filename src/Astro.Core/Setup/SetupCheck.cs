@@ -13,14 +13,18 @@ public enum CheckStatus
     Warn,
     /// <summary>앞 단계가 해결돼야 확인할 수 있다.</summary>
     Skipped,
+    /// <summary>장비가 등록되어 있지 않아 확인하지 않는다 (선택·준필수 장비).</summary>
+    Absent,
 }
 
 public enum CheckSeverity
 {
     /// <summary>실패하면 다음 화면으로 넘어갈 수 없다.</summary>
     Required,
-    /// <summary>실패해도 "이 기능 없이 계속하기"가 가능하다.</summary>
+    /// <summary>실패해도 "이 기능 없이 계속하기"가 가능하다. 사용자가 고른다.</summary>
     Recommended,
+    /// <summary>있으면 쓰고, 실패하면 경고만 하고 자동으로 계속한다.</summary>
+    Optional,
 }
 
 /// <summary>

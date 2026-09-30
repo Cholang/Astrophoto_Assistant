@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { tellHost } from './host'
 
 export type Theme = 'dark' | 'light' | 'night'
 
@@ -20,14 +21,9 @@ function load(): Theme {
   return 'dark'
 }
 
-interface HostWebView {
-  postMessage(message: unknown): void
-}
-
 /** 데스크톱 창(WPF)이 로딩 순간의 배경색을 테마에 맞출 수 있게 알려 준다. */
-function tellHost(theme: Theme) {
-  const host = (window as unknown as { chrome?: { webview?: HostWebView } }).chrome?.webview
-  host?.postMessage({ type: 'theme', theme })
+function tellHostTheme(theme: Theme) {
+  tellHost({ type: 'theme', theme })
 }
 
 export function useTheme() {
@@ -40,7 +36,7 @@ export function useTheme() {
     } catch {
       /* 무시 */
     }
-    tellHost(theme)
+    tellHostTheme(theme)
   }, [theme])
 
   const cycle = useCallback(

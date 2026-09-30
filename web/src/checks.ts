@@ -8,7 +8,8 @@ export interface CheckItem {
   title: string
   term: string | null
   hint: string | null
-  severity: 'Required' | 'Recommended'
+  /** Required: 통과해야 넘어감 · Recommended: 실패하면 사용자가 '없이 진행'을 고를 수 있음(Warn) · Optional: 실패해도 경고만 */
+  severity: 'Required' | 'Recommended' | 'Optional'
   status: Status
   message: string
   diagnosis: DiagnosisData | null
@@ -82,7 +83,10 @@ export function useCheckStream(url: string, initial: CheckItem[]) {
   const finals = items.filter((i) => isFinal(i.status)).length
   const done = finals === items.length || closed
   const interrupted = done && finals < items.length
-  const failed = items.some((i) => i.severity === 'Required' && i.status !== 'Pass')
+  // 등급별 통과: 필수는 Pass만, 준필수는 Pass 또는 '없이 진행'(Warn), 선택은 끝나기만 하면 된다
+  const failed = items.some((i) =>
+    i.severity === 'Required' ? i.status !== 'Pass' : i.severity === 'Recommended' ? !['Pass', 'Warn', 'Absent'].includes(i.status) : !isFinal(i.status),
+  )
   const allPass = done && !interrupted && !failed && items.length > 0
 
   return { items, done, interrupted, failed, allPass, restart, run, markPassed, recheckOne, patch: setItems }

@@ -15,7 +15,7 @@ public sealed class EquipmentOptions
     public bool Simulate { get; set; }
 
     /// <summary>
-    /// [임시] 시뮬레이션에서 연결 실패로 시작할 장비 (switch, mount, camera, focuser, guider). "*"는 전부.
+    /// [임시] 시뮬레이션에서 연결 실패로 시작할 장비 (switch, mount, camera, focuser, filterwheel, rotator, flatdevice, guider). "*"는 전부.
     /// 화면에 들어올 때마다 이 목록으로 다시 시작하고, 장비별 "다시 연결"을 누르면 그 장비는 성공한다.
     /// </summary>
     public string[] SimulateFailing { get; set; } = [];
@@ -55,40 +55,88 @@ public sealed class EquipmentSimulation
 }
 
 /// <summary>
-/// 장비 연결. 지금 쓰는 N.I.N.A. 프로필에서 장비 목록을 읽어, 전원 허브부터 차례로 연결한다.
-/// 프로필에서 "없음"으로 된 장비(필터휠 등)는 건너뛴다.
+/// 사용자가 "없이 진행"을 고른 준필수 장비 (포커서·가이더). 뒤 단계(계획 추천 등)가 읽는다.
+/// 장비 연결 화면에 들어올 때마다 비운다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim)
+public sealed class EquipmentChoices
 {
+    private readonly Lock _gate = new();
+    private readonly HashSet<string> _without = [];
+
+    public void Reset()
+    {
+        lock (_gate) _without.Clear();
+    }
+
+    public void GoWithout(string id)
+    {
+        lock (_gate) _without.Add(id);
+    }
+
+    public void Connected(string id)
+    {
+        lock (_gate) _without.Remove(id);
+    }
+
+    public bool IsWithout(string id)
+    {
+        lock (_gate) return _without.Contains(id);
+    }
+}
+
+/// <summary>
+/// 장비 연결. 지금 쓰는 N.I.N.A. 프로필에서 장비 목록을 읽어, 전원 허브부터 차례로 연결한다.
+/// 장비 등급 (DESIGN.md 3장 "장비 연결"):
+/// - 필수(카메라·적도의): 프로필에 없거나 연결에 실패하면 멈춘다
+/// - 준필수(포커서·가이더): 프로필에 없으면 통과, 실패하면 사용자가 "없이 진행"을 고를 수 있다
+/// - 선택(전원 허브·필터휠·회전장치·플랫패널): 프로필에 없으면 통과, 실패하면 경고만 하고 계속
+///   단 전원 허브는 다른 장비에 전원을 주므로, 있으면 맨 먼저 연결하고 실패하면 뒤 장비는 보류한다
+/// 돔·안전 모니터·날씨 장치는 다루지 않는다.
+/// </summary>
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides)
+{
+    private const CheckSeverity Required = CheckSeverity.Required;
+    private const CheckSeverity Recommended = CheckSeverity.Recommended;
+    private const CheckSeverity Optional = CheckSeverity.Optional;
+
     /// <summary>연결 순서: 허브가 다른 장비에 전원을 주므로 가장 먼저 (onboarding-and-architecture.md 4.2).</summary>
     // Fix: 연결에 실패했을 때 상태 옆 ? 툴팁에 보여 줄 해결 방법 (장비마다 다르게)
     private static readonly Slot[] Slots =
     [
-        new("switch", "SwitchSettings", "전원 허브", "망원경·카메라·열선에 전원을 나눠 주는 장치입니다. 열선은 허브의 포트로 함께 제어합니다.",
+        new("switch", "SwitchSettings", Optional, "전원 허브", "망원경·카메라·열선에 전원을 나눠 주는 장치입니다. 열선은 허브의 포트로 함께 제어합니다.",
             "허브의 12V 전원 어댑터와 PC로 가는 USB 케이블을 확인해 주세요. 허브가 켜져야 다른 장비에도 전원이 들어갑니다."),
-        new("mount", "TelescopeSettings", "적도의", "망원경을 움직이고 별을 따라 돌려 주는 받침대입니다.",
+        new("mount", "TelescopeSettings", Required, "적도의", "망원경을 움직이고 별을 따라 돌려 주는 받침대입니다.",
             "적도의 전원과 케이블(USB·네트워크)을 확인해 주세요. 무선으로 연결한다면 PC가 적도의의 와이파이에 연결되어 있는지도 확인해 주세요."),
-        new("camera", "CameraSettings", "카메라", "사진을 찍는 카메라입니다.",
+        new("camera", "CameraSettings", Required, "카메라", "사진을 찍는 카메라입니다.",
             "카메라 전원과 USB 케이블을 확인하고, 카메라의 PC 연결 방식이 테더링(PC 촬영)으로 되어 있는지 확인해 주세요."),
-        new("focuser", "FocuserSettings", "포커서", "초점을 자동으로 맞춰 주는 모터입니다.",
+        new("focuser", "FocuserSettings", Recommended, "포커서", "초점을 자동으로 맞춰 주는 모터입니다. 없으면 초점을 손으로 맞춥니다.",
             "포커서 전원(허브 포트)과 USB 케이블을 확인해 주세요."),
-        new("filterwheel", "FilterWheelSettings", "필터휠", "촬영 중에 필터를 바꿔 끼워 주는 장치입니다.",
+        new("filterwheel", "FilterWheelSettings", Optional, "필터휠", "촬영 중에 필터를 바꿔 끼워 주는 장치입니다. 없으면 필터를 손으로 끼웁니다.",
             "필터휠 전원과 USB 케이블을 확인해 주세요."),
-        new("guider", "GuiderSettings", "가이딩", "보조 카메라로 별을 지켜보며 흔들림을 바로잡습니다. N.I.N.A.가 PHD2를 거쳐 가이드 카메라와 실제로 연결되는지 확인합니다.",
+        new("rotator", "RotatorSettings", Optional, "회전장치", "카메라를 돌려 구도의 각도를 맞춰 주는 장치입니다. 없으면 손으로 돌립니다.",
+            "회전장치 전원과 USB 케이블을 확인해 주세요."),
+        new("flatdevice", "FlatDeviceSettings", Optional, "플랫패널", "플랫(밝기 고르게 맞추기용 사진)을 찍을 때 경통 앞을 고르게 비추는 판입니다.",
+            "플랫패널 전원과 USB 케이블을 확인해 주세요."),
+        new("guider", "GuiderSettings", Recommended, "가이딩", "보조 카메라로 별을 지켜보며 흔들림을 바로잡습니다. 없으면 노출을 짧게 찍습니다.",
             "PHD2가 켜져 있는지, PHD2 안에서 가이드 카메라와 적도의가 연결되어 있는지 확인해 주세요."),
     ];
 
-    private sealed record Slot(string Kind, string ProfileKey, string Role, string Hint, string Fix);
+    public sealed record Slot(string Kind, string ProfileKey, CheckSeverity Tier, string Role, string Hint, string Fix);
+
+    public static Slot? FindSlot(string kind) => Slots.FirstOrDefault(s => s.Kind == kind);
 
     /// <summary>허브가 실패하면 뒤 장비는 이 문장으로 보류한다 (전원이 허브에서 오므로 원인을 하나로 모은다).</summary>
     private const string WaitingForHub = "전원 허브가 연결되면 확인합니다";
 
+    private const string Hub = "switch";
+
     /// <summary>화면에 미리 칸을 그릴 수 있게, 연결할 장비 목록만 먼저 알려 준다.</summary>
-    /// 화면에 들어올 때마다 부르므로, 시뮬레이션의 실패 목록도 여기서 처음 상태로 되돌린다.
+    /// 화면에 들어올 때마다 부르므로, 시뮬레이션의 실패 목록과 "없이 진행" 기록도 여기서 처음 상태로 되돌린다.
     public async Task<IReadOnlyList<CheckResult>> PlanAsync(CancellationToken ct = default)
     {
         if (options.Value.Simulate) sim.Reset(options.Value.SimulateFailing);
-        return (await ReadDevicesAsync(ct)).Select(d => Pending(d)).ToList();
+        choices.Reset();
+        return (await ReadDevicesAsync(ct)).Select(d => d.Absent ? Make(d, CheckStatus.Absent, "") : Pending(d)).ToList();
     }
 
     public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
@@ -105,20 +153,26 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         foreach (var d in devices)
         {
             // 허브가 실패하면 멈추고 허브부터 해결한다: 뒤 장비는 연결을 시도하지 않고 보류
+            // 등록되지 않은 장비: 연결하지 않고 작은 원으로만 보인다
+            if (d.Absent)
+            {
+                yield return Make(d, CheckStatus.Absent, "");
+                continue;
+            }
             if (hubFailed)
             {
                 yield return Make(d, CheckStatus.Skipped, WaitingForHub);
                 continue;
             }
-            yield return Make(d, CheckStatus.Running, "연결하는 중입니다");
+            if (d.Id is not null) yield return Make(d, CheckStatus.Running, "연결하는 중입니다");
             var result = await ConnectOneAsync(d, ct);
             yield return result;
-            if (d.Slot.Kind == "switch" && result.Status != CheckStatus.Pass) hubFailed = true;
+            if (d.Slot.Kind == Hub && result.Status != CheckStatus.Pass) hubFailed = true;
         }
     }
 
     /// <summary>
-    /// 장비 하나만 다시 연결한다 (쉐브론 안의 새로고침).
+    /// 장비 하나만 다시 연결한다.
     /// simulateFail: [임시] 화면 설계용 — 실패했을 때와 똑같은 결과를 만든다 (Simulate가 켜져 있을 때만).
     /// </summary>
     public async Task<CheckResult?> RetryAsync(string id, bool simulateFail = false, CancellationToken ct = default)
@@ -130,8 +184,30 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         return await ConnectOneAsync(d, ct, simulateFail && options.Value.Simulate);
     }
 
+    /// <summary>장비 하나의 지금 모습 (연결 전). 장비 변경 모드에서 고른 뒤 칸을 바꿀 때</summary>
+    public async Task<CheckResult?> DescribeAsync(string kind, CancellationToken ct = default) =>
+        (await ReadDevicesAsync(ct)).FirstOrDefault(x => x.Slot.Kind == kind) is { } d
+            ? d.Absent ? Make(d, CheckStatus.Absent, "") : Pending(d)
+            : null;
+
+    /// <summary>준필수 장비를 "없이 진행". 필수·선택 장비는 대상이 아니다.</summary>
+    public async Task<CheckResult?> GoWithoutAsync(string id, CancellationToken ct = default)
+    {
+        var d = (await ReadDevicesAsync(ct)).FirstOrDefault(x => x.Slot.Kind == id);
+        if (d is null || d.Slot.Tier != Recommended) return null;
+        choices.GoWithout(id);
+        return Make(d, CheckStatus.Warn, $"{d.Slot.Role} 없이 진행합니다");
+    }
+
     private async Task<CheckResult> ConnectOneAsync(Device d, CancellationToken ct, bool forceFail = false)
     {
+        if (d.Absent) return Make(d, CheckStatus.Absent, "");
+
+        // 필수 장비가 프로필에 없음: 연결을 시도할 수 없다
+        if (d.Id is null)
+            return Make(d, CheckStatus.Fail, $"N.I.N.A.에 등록된 {d.Slot.Role}{Josa(d.Slot.Role)} 없습니다", new Diagnosis([],
+                $"아래 \"장비 변경\"에서 {d.Slot.Role}{Reul(d.Slot.Role)} 등록해 주세요. 처음 쓰는 드라이버라면 N.I.N.A.의 장비 탭에서 드라이버 설정(톱니바퀴)도 한 번 해 주세요."));
+
         bool connected;
         if (forceFail)
         {
@@ -149,13 +225,25 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                 || (await nina.ConnectAsync(d.Slot.Kind, d.Id, ct) && await nina.IsConnectedAsync(d.Slot.Kind, ct));
         }
 
-        return connected
-            ? Make(d, CheckStatus.Pass, "연결되어 있습니다")
-            : Make(d, CheckStatus.Fail, "연결되어 있지 않습니다", new Diagnosis([],
-                $"{d.Slot.Fix} 그다음 새로고침을 눌러 주세요. 처음 쓰는 장비라면 N.I.N.A.의 장비 탭에서 드라이버 설정(톱니바퀴)을 먼저 해 주세요. (드라이버: {d.DriverName})"));
+        if (connected)
+        {
+            choices.Connected(d.Slot.Kind);
+            return Make(d, CheckStatus.Pass, "연결되어 있습니다");
+        }
+
+        var diagnosis = new Diagnosis([],
+            $"{d.Slot.Fix} 그다음 다시 연결을 눌러 주세요. 처음 쓰는 장비라면 N.I.N.A.의 장비 탭에서 드라이버 설정(톱니바퀴)을 먼저 해 주세요. (드라이버: {d.DriverName})");
+        // 선택 장비는 경고만 (허브는 뒤 장비의 전원이라 실패로 둔다)
+        return d.Slot.Tier == Optional && d.Slot.Kind != Hub
+            ? Make(d, CheckStatus.Warn, $"연결되지 않아 {d.Slot.Role} 없이 진행합니다", diagnosis)
+            : Make(d, CheckStatus.Fail, "연결되어 있지 않습니다", diagnosis);
     }
 
-    private sealed record Device(Slot Slot, string Id, string Name, string DriverName);
+    /// <summary>Id가 null이면 등록되지 않은 장비. 필수 장비면 실패, 나머지는 Absent(작은 원)</summary>
+    private sealed record Device(Slot Slot, string? Id, string Name, string DriverName)
+    {
+        public bool Absent => Id is null && Slot.Tier != Required;
+    }
 
     private async Task<List<Device>> ReadDevicesAsync(CancellationToken ct)
     {
@@ -163,17 +251,29 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         var list = new List<Device>();
         foreach (var slot in Slots)
         {
-            if (!profile.TryGetProperty(slot.ProfileKey, out var s)) continue;
+            // AA에서 고른 장비가 있으면 그것을 쓴다 (null = 제거)
+            if (overrides.TryGet(slot.Kind, out var chosen))
+            {
+                list.Add(chosen is null
+                    ? new Device(slot, null, "등록 안 됨", "")
+                    : new Device(slot, chosen.Id, ShortName(slot.Kind, chosen.Id, chosen.Name), chosen.Name));
+                continue;
+            }
             // 가이더는 Id 대신 GuiderName에 들어 있다 (예: PHD2_Single)
-            var id = Text(s, slot.Kind == "guider" ? "GuiderName" : "Id");
-            if (id is null || id is "No_Device" or "No_Guider") continue;
+            var id = profile.TryGetProperty(slot.ProfileKey, out var s) ? Text(s, slot.Kind == "guider" ? "GuiderName" : "Id") : null;
+            if (id is null || id is "No_Device" or "No_Guider")
+            {
+                // 등록 안 됨: 필수 장비는 실패 칸, 나머지는 작은 원 (장비 변경 모드에서 등록할 수 있게 목록에는 넣는다)
+                list.Add(new Device(slot, null, "등록 안 됨", ""));
+                continue;
+            }
             var last = Text(s, "LastDeviceName");
             list.Add(new Device(slot, id, ShortName(slot.Kind, id, last), last ?? id));
         }
         return list;
     }
 
-    /// <summary>쉐브론에 쓸 짧은 이름: "WandererEmpire WandererBox 1 (ASCOM)" → "WandererBox", "X-T5 (gin_X-T5)" → "X-T5"</summary>
+    /// <summary>칸에 쓸 짧은 이름: "WandererEmpire WandererBox 1 (ASCOM)" → "WandererBox", "X-T5 (gin_X-T5)" → "X-T5"</summary>
     private static string ShortName(string kind, string id, string? last)
     {
         if (kind == "guider") return id.StartsWith("PHD2", StringComparison.OrdinalIgnoreCase) ? "PHD2" : id;
@@ -188,9 +288,13 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     private static string? Text(JsonElement obj, string key) =>
         obj.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : null;
 
+    // 장비 이름 뒤 조사 (카메라가 / 적도의가 — 모두 받침 없음이지만 이름이 바뀌어도 맞게)
+    private static string Josa(string word) => Astro.Core.Josa.HasFinalConsonant(word) ? "이" : "가";
+    private static string Reul(string word) => Astro.Core.Josa.HasFinalConsonant(word) ? "을" : "를";
+
     private static CheckResult Pending(Device d) => Make(d, CheckStatus.Pending, "");
 
     private static CheckResult Make(Device d, CheckStatus status, string message, Diagnosis? diagnosis = null) =>
         // 칸 가운데에는 장비 종류(적도의 등), 그 아래 작게 장비 이름(OnStep 등)
-        new(d.Slot.Kind, d.Slot.Role, d.Name, d.Slot.Hint, CheckSeverity.Required, status, message, diagnosis);
+        new(d.Slot.Kind, d.Slot.Role, d.Name, d.Slot.Hint, d.Slot.Tier, status, message, diagnosis);
 }

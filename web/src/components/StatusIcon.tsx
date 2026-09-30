@@ -1,7 +1,7 @@
 import { Check, Circle, Minus, TriangleAlert, X } from 'lucide-react'
 import styles from './StatusIcon.module.css'
 
-export type Status = 'Pending' | 'Running' | 'Pass' | 'Fail' | 'Warn' | 'Skipped'
+export type Status = 'Pending' | 'Running' | 'Pass' | 'Fail' | 'Warn' | 'Skipped' | 'Absent'
 
 /**
  * 상태는 색만이 아니라 모양으로도 구분한다 (촬영용 적색 테마에서는 모양만 남는다).
@@ -17,6 +17,7 @@ export default function StatusIcon({ status }: { status: Status }) {
     case 'Warn':
       return <TriangleAlert {...common} />
     case 'Skipped':
+    case 'Absent':
       return <Minus {...common} />
     case 'Pending':
       return <Circle {...common} />

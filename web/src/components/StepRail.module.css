@@ -1,0 +1,117 @@
+/* 하단 단계 레일: 높이 고정, 가운데 정렬, 조용하게 */
+.rail {
+  position: relative;
+  flex-shrink: 0;
+  height: var(--rail-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 var(--gutter);
+  border-top: 1px solid var(--line);
+  font-size: var(--size-bar);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mark {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+
+.mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.step[data-state='done'] {
+  color: var(--text);
+}
+
+.step[data-state='done'] .mark {
+  box-shadow: none;
+  color: var(--pass);
+}
+
+/* 현재 단계: 굵게 + 강조색 점 */
+.step[data-state='now'] {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.step[data-state='now'] .mark {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.step[data-state='now'] .mark::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.sep {
+  width: 28px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line);
+  transition: background-color 400ms ease;
+}
+
+.sep[data-on='true'] {
+  background: var(--accent);
+}
+
+/* 좁은 화면: 선을 줄인다 */
+@media (max-width: 560px) {
+  .rail { gap: 6px; }
+  .sep { width: 12px; }
+}
+
+/* 앱 끄기 (문 아이콘): 레일 맨 오른쪽. 단계 표시의 가운데 정렬에 영향 없게 따로 놓는다 */
+.exit {
+  position: absolute;
+  top: 50%;
+  right: var(--gutter);
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  /* 연한 테두리와 면: 누를 수 있는 버튼임이 보이게 (레일의 조용한 글자와 구분) */
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 160ms, border-color 160ms, background-color 160ms;
+}
+
+.exit svg {
+  width: 17px;
+  height: 17px;
+}
+
+.exit:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.exit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--focus);
+}

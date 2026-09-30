@@ -21,6 +21,7 @@ const STATUS_WORD: Record<Status, string> = {
   Fail: '필요',
   Warn: '권장',
   Skipped: '보류',
+  Absent: '없음',
 }
 
 /**

@@ -57,6 +57,8 @@ npm run build
 dotnet run --project src/Astro.Desktop
 ```
 
+전체화면으로 시작한다. **F11**로 창 모드와 오가고, 끄기는 **Alt+F4**. 이미 켜져 있으면 새로 켜지 않고 켜진 창을 앞으로 가져온다.
+
 또는 서버만 실행하고 브라우저에서 `http://localhost:5210` 열기:
 
 ```
@@ -87,7 +89,38 @@ dotnet run --project src/Astro.Server
 | 키 | 기본값 | 설명 |
 |---|---|---|
 | `Simulate` | `true` **[임시]** | 장비 없이 개발할 때. 실제 연결은 하지 않고 N.I.N.A. 프로필의 장비로 연결 과정을 흉내 낸다. 장비를 연결할 수 있으면 `false` — 실제 연결 경로는 아직 실기 미검증 |
-| `SimulateFailing` | `["*"]` **[임시]** | 시뮬레이션에서 연결 실패로 시작할 장비 (`switch`, `mount`, `camera`, `focuser`, `guider`, `*`=전부). 화면에 들어올 때마다 이 상태로 시작하고, 장비별 "다시 연결"을 누르면 그 장비는 성공한다. `[]`이면 모두 바로 연결됨 |
+| `SimulateFailing` | `["*"]` **[임시]** | 시뮬레이션에서 연결 실패로 시작할 장비 (`switch`, `mount`, `camera`, `focuser`, `filterwheel`, `rotator`, `flatdevice`, `guider`, `*`=전부. 프로필에 없는 장비는 무시). 화면에 들어올 때마다 이 상태로 시작하고, 장비별 "다시 연결"을 누르면 그 장비는 성공한다. `[]`이면 모두 바로 연결됨 |
+
+`Network` 항목:
+
+| 키 | 기본값 | 설명 |
+|---|---|---|
+| `CheckUrl` | `https://api.open-meteo.com/` | 1단계에서 인터넷 연결을 확인할 주소 (날씨 예보 서버) |
+| `SimulateOffline` | `false` | 화면 확인용. 인터넷이 없는 것처럼 보고 (`Network__SimulateOffline=true`) |
+
+`Assistant` 항목 (촬영 계획 화면의 AI 비서):
+
+| 키 | 기본값 | 설명 |
+|---|---|---|
+| `Provider` | `gemini` | AI 회사. `scripted`면 **연습 대화**: AI 없이 정해진 순서로 묻고, 계획 칸은 실제 계산으로 채운다 (시연·한도 걱정 없이). 다른 회사는 `src/Astro.Server/Assistant/Providers/`에 번역기를 하나 더 만들고 `ChatModelFactory`에 이름을 더한다 |
+| `Models` | `gemini-flash-latest` 등 | 앞에서부터 시도. 과부하(503)·한도(429)면 다음 모델로 |
+| `Effort` | `low` | 생각의 깊이 (low · medium · high). 대화는 low가 빠르고 충분 |
+
+**API 키는 appsettings.json에 넣지 않는다.** 이 PC의 사용자 비밀 저장소에 한 번 넣으면 된다 (git에 올라가지 않음):
+
+```
+dotnet user-secrets set "Assistant:ApiKeys:gemini" "키" --project src/Astro.Server
+```
+
+환경 변수 `Assistant__ApiKeys__gemini`로도 된다.
+
+키가 없거나, 오늘 무료 한도를 다 썼거나(모든 모델이 429), 키가 틀리면 계획 화면은 **자동으로 연습 대화로 넘어간다** (대화 안에 한 줄 안내). 한도는 다시 차는 시각(미국 태평양 자정, 한국 오후 4~5시)까지, 키 문제는 앱을 다시 켤 때까지 연습 대화로 둔다. 시연 때 처음부터 연습 대화만 쓰려면:
+
+```
+Assistant__Provider=scripted dotnet run --project src/Astro.Desktop
+```
+
+`Sky:NinaDatabase`: 대상 목록으로 쓰는 N.I.N.A. 데이터베이스 (기본 `%LOCALAPPDATA%NINANINA.sqlite`, 읽기 전용). 관측지 위치·망원경·카메라는 N.I.N.A. 프로필에서 읽고, 구름 예보는 Open-Meteo에서 받는다.
 
 `App:DataDir`: 프로필 등 데이터 폴더 (기본 `%LOCALAPPDATA%\<product.json의 dataFolder>`). 테스트할 때 다른 폴더로 바꾼다.
 

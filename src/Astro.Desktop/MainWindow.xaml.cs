@@ -35,6 +35,32 @@ public partial class MainWindow : Window
         ApplyTheme(ReadSavedTheme());
         Loaded += OnLoaded;
         Closing += OnClosing;
+        // 처음부터 전체화면 (제목 표시줄·작업 표시줄 없이). F11로 창 모드와 오간다. 끄기는 Alt+F4
+        SetFullScreen(true);
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != System.Windows.Input.Key.F11) return;
+            SetFullScreen(WindowStyle != WindowStyle.None);
+            e.Handled = true;
+        };
+    }
+
+    private void SetFullScreen(bool on)
+    {
+        // 작업 표시줄까지 덮으려면 테두리를 없앤 뒤에 최대화해야 한다 (순서 중요)
+        if (on)
+        {
+            WindowState = WindowState.Normal;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            ResizeMode = ResizeMode.CanResize;
+            WindowState = WindowState.Normal;
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -57,7 +83,14 @@ public partial class MainWindow : Window
                 try
                 {
                     using var doc = JsonDocument.Parse(args.WebMessageAsJson);
-                    if (doc.RootElement.GetProperty("type").GetString() != "theme") return;
+                    var type = doc.RootElement.GetProperty("type").GetString();
+                    // 화면 아래 단계 레일의 "앱 끄기" (전체화면이라 창 닫기 버튼이 없다)
+                    if (type == "close")
+                    {
+                        Close();
+                        return;
+                    }
+                    if (type != "theme") return;
                     var theme = doc.RootElement.GetProperty("theme").GetString();
                     if (theme is null || !ThemeBackground.ContainsKey(theme)) return;
                     ApplyTheme(theme);
@@ -69,7 +102,11 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"{Product.Reul} 시작하지 못했습니다.\n\n{ex.Message}", Product.Name, MessageBoxButton.OK, MessageBoxImage.Error);
+            // AA끼리는 App이 하나만 켜게 막는다. 여기 오는 건 다른 프로그램(개발용 서버 등)이 주소를 쓰고 있을 때
+            var reason = ex is IOException && ex.Message.Contains("address already in use")
+                ? $"다른 프로그램이 {AppServer.DefaultUrl} 주소를 쓰고 있습니다.\n개발용 서버(dotnet run --project src/Astro.Server)가 켜져 있으면 닫고 다시 실행해 주세요."
+                : ex.Message;
+            MessageBox.Show(this, $"{Product.Reul} 시작하지 못했습니다.\n\n{reason}", Product.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
         }
     }

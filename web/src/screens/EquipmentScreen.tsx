@@ -1,8 +1,9 @@
 import { AlertTriangle, Check, RotateCw } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
-import InfoTip from '../components/InfoTip'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import DeviceIcon from '../components/DeviceIcon'
 import JarvisRing from '../components/JarvisRing'
 import { useCheckStream, type CheckItem } from '../checks'
+import engineStyles from './EngineStartScreen.module.css'
 import styles from './EquipmentScreen.module.css'
 
 /** 전원 허브: 다른 장비에 전원을 주므로, 허브가 실패하면 나머지는 보류하고 허브부터 해결한다 (서버와 같은 규칙) */
@@ -10,21 +11,42 @@ const HUB = 'switch'
 const WAITING_FOR_HUB = '전원 허브가 연결되면 확인합니다'
 
 // 크기 (그래프 영역의 기준 길이 = 1). 기준 길이는 높이와 너비×0.75 중 작은 쪽
-const CENTER = 0.38 // 가운데 원 지름
+const CENTER = 0.456 // 가운데 원 지름 (2026-09-30: 0.38의 120%)
 const NODE = 0.23 // 장비 원 기본 지름
 const SIZE_SPREAD = 0.27 // 장비 원 크기 편차 (±27%)
+const SMALL = 0.3 // 등록 안 된 장비의 작은 원: 가장 작은 장비 원의 30%
+const EDIT_NODE = 0.14 // 변경 모드의 아이콘 원 지름
+const EDIT_CENTER_SCALE = 0.72 // 변경 모드에서 가운데 원 크기 (EquipmentScreen.module.css와 같게)
 const ANGLE_JITTER = 14 // 각도 흔들림 (±도). 정다각형처럼 보이지 않게
 const RADIUS_JITTER = 0.08 // 궤도 거리 흔들림 (±8%)
-const GAP = 14 // 원끼리 최소 간격 (px)
+// 원끼리 최소 간격: 연결 모드에서 가장 작은 장비 원(글자가 든 원)의 반지름 (2026-09-30 사용자 규칙). connectLayout에서 계산
 const LINK_MIN = 40 // 가운데 원과 장비 원 사이 최소 간격 (px). 연결 선이 보일 만큼
 
+// 자동 진행 (DESIGN.md 3장 "장비 연결"): 4초 막대, "장비 변경"은 3.5초까지만 받는다
+const ADVANCE_MS = 4000
+const CHANGE_UNTIL_MS = 3500
+const ABSORB_MS = 960 // 원들이 가운데 원 뒤로 흡수되는 시간·펼쳐지는 시간 (CSS와 같게)
+const LIST_ROOM = 310 // 드라이버 목록 폭 280 + 간격 (CSS와 같게)
+
+type Mode = 'connect' | 'edit'
+/** 화면 모양: 연결 모드 / 가운데로 흡수 중 / 가운데에서 펼쳐지기 직전 / 변경 모드 */
+type Phase = 'connect' | 'absorb' | 'spread' | 'edit'
+
 /**
- * 2단계 장비 연결: 1단계의 원형 표시가 작아져 가운데에 남고, 장비 원들이 방사형으로 둘러싼다.
- * 연결에 성공한 장비는 가운데와 선으로 이어진다. 모든 장비가 필수.
- * [임시] 지금은 서버 설정 Equipment:Simulate로 모두 연결된 것으로 간주한다 (실제 장비 없이 개발).
+ * 장비 연결: 1단계의 원형 표시가 작아져 가운데에 남고, 장비 원들이 방사형으로 둘러싼다.
+ * 연결에 성공한 장비는 가운데와 선으로 이어진다. 등록되지 않은 장비는 아이콘만 있는 작은 원.
+ * 모두 되면 4초 막대 뒤 다음 단계로. 그 사이 "장비 변경"을 누르면 변경 모드 — 장비를 등록·변경·제거한다.
+ * [임시] 지금은 서버 설정 Equipment:Simulate로 연결을 흉내 낸다 (실제 장비 없이 개발).
  */
 export default function EquipmentScreen({ onContinue }: { onContinue: (items: CheckItem[]) => void }) {
   const [plan, setPlan] = useState<CheckItem[] | null>(null)
+  // 장비 목록을 받는 동안에는 1단계와 똑같은 자리·크기의 원을 그대로 보여 준다 (화면이 바뀌어도 원이 끊기지 않게).
+  // 목록이 오면 그 원의 자리에서 가운데 원이 작아지며 옮겨 가도록 자리를 넘긴다.
+  const holdRing = useRef<HTMLDivElement>(null)
+  const from = useRef<DOMRect | null>(null)
+  useLayoutEffect(() => {
+    if (plan === null && holdRing.current) from.current = holdRing.current.getBoundingClientRect()
+  })
 
   useEffect(() => {
     fetch('/api/equipment/plan')
@@ -32,60 +54,178 @@ export default function EquipmentScreen({ onContinue }: { onContinue: (items: Ch
       .then(setPlan, () => setPlan([]))
   }, [])
 
-  if (plan === null) return <main className={styles.stage} />
-  return <EquipmentGraph plan={plan} onContinue={onContinue} />
+  if (plan === null)
+    return (
+      <main className={engineStyles.stage}>
+        <div ref={holdRing}>
+          <JarvisRing state="done" className={engineStyles.ring}>
+            준비되었습니다
+          </JarvisRing>
+        </div>
+        <div className={engineStyles.actions} aria-hidden="true" />
+      </main>
+    )
+  return <EquipmentGraph plan={plan} onContinue={onContinue} from={from.current} />
 }
 
-function EquipmentGraph({ plan, onContinue }: { plan: CheckItem[]; onContinue: (items: CheckItem[]) => void }) {
+function EquipmentGraph({
+  plan,
+  onContinue,
+  from,
+}: {
+  plan: CheckItem[]
+  onContinue: (items: CheckItem[]) => void
+  /** 1단계 원이 있던 자리 (화면 좌표). 가운데 원이 여기서 작아지며 옮겨 온다 */
+  from: DOMRect | null
+}) {
   const { items, done, allPass, failed, restart, recheckOne, patch } = useCheckStream('/api/equipment/connect', plan)
   const [picked, setPicked] = useState<string | null>(null)
   const ringBox = useRef<HTMLDivElement>(null)
   const graphRef = useRef<HTMLDivElement>(null)
-  const [box, setBox] = useState({ w: 0, h: 0 })
-  const [shrinkFrom, setShrinkFrom] = useState<number | null>(null)
+  const [box, setBox] = useState({ w: 0, h: 0, left: 0, vw: 0 })
+  const [shrinkFrom, setShrinkFrom] = useState<{ scale: number; dx: number; dy: number } | null>(null)
 
-  // 그래프 영역 크기를 재서 원들의 자리를 계산한다 (창 크기가 바뀌면 다시)
+  // 모드: 연결 ↔ 변경. phase는 전환 애니메이션 단계
+  const [mode, setMode] = useState<Mode>('connect')
+  const [phase, setPhase] = useState<Phase>('connect')
+  const changed = useRef(new Set<string>())
+  // 변경 모드에서 드라이버 목록을 연 원 (selected)
+  const [listKind, setListKind] = useState<string | null>(null)
+
+  // 그래프 영역 크기와 창 안에서의 위치를 재서 원들의 자리를 계산한다 (창 크기가 바뀌면 다시)
+  // 변경 모드의 가로 자리는 창 전체 너비 기준이라 그래프의 왼쪽 위치(left)와 창 너비(vw)도 잰다
   useLayoutEffect(() => {
     const el = graphRef.current
     if (!el) return
-    const measure = () => setBox((b) => (b.w === el.clientWidth && b.h === el.clientHeight ? b : { w: el.clientWidth, h: el.clientHeight }))
+    const measure = () => {
+      const next = { w: el.clientWidth, h: el.clientHeight, left: el.getBoundingClientRect().left, vw: window.innerWidth }
+      setBox((b) => (b.w === next.w && b.h === next.h && b.left === next.left && b.vw === next.vw ? b : next))
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
-    return () => ro.disconnect()
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
   }, [])
 
-  // 1단계의 원(clamp(240px, 34vh, 340px)) 크기에서 지금 크기로 바뀌는 것처럼 시작한다 (처음 한 번만)
+  // 1단계 원의 자리·크기에서 지금 자리·크기로 옮겨 오는 것처럼 시작한다 (처음 한 번만)
   useLayoutEffect(() => {
     if (shrinkFrom !== null) return
-    const w = ringBox.current?.offsetWidth
-    if (!w) return
-    const engine = Math.min(340, Math.max(240, window.innerHeight * 0.34))
-    setShrinkFrom(engine / w)
-  }, [box, shrinkFrom])
+    const el = ringBox.current
+    if (!el) return
+    const now = el.getBoundingClientRect()
+    if (!now.width) return
+    const engine = from?.width ?? Math.min(340, Math.max(240, window.innerHeight * 0.34))
+    setShrinkFrom({
+      scale: engine / now.width,
+      dx: from ? from.left + from.width / 2 - (now.left + now.width / 2) : 0,
+      dy: from ? from.top + from.height / 2 - (now.top + now.height / 2) : 0,
+    })
+  }, [box, shrinkFrom, from])
 
-  // 모두 연결되면 선이 다 이어진 모습을 잠깐 보여 주고 바로 다음 단계로 (누를 필요 없는 "다음"은 두지 않음)
+  // ── 자동 진행: 모두 되면 4초 막대. 그동안 "장비 변경"을 누르면 멈춘다 ─────────
+  const counting = mode === 'connect' && phase === 'connect' && allPass
+  const [late, setLate] = useState(false) // 3.5초가 지났으면 "장비 변경"을 받지 않는다
   useEffect(() => {
-    if (!allPass) return
-    const t = setTimeout(() => onContinue(items), 1600)
-    return () => clearTimeout(t)
-  }, [allPass, items, onContinue])
+    setLate(false)
+    if (!counting) return
+    const lateTimer = setTimeout(() => setLate(true), CHANGE_UNTIL_MS)
+    const goTimer = setTimeout(() => onContinue(items), ADVANCE_MS)
+    return () => {
+      clearTimeout(lateTimer)
+      clearTimeout(goTimer)
+    }
+  }, [counting, items, onContinue])
 
-  const state = allPass ? 'done' : done && failed ? 'failed' : 'working'
-  const missing = items.filter((i) => i.status === 'Fail').length
+  // ── 모드 전환: 원들이 가운데로 흡수됐다가 다른 배치로 펼쳐진다 ─────────
+  const [returned, setReturned] = useState(false) // 한 번이라도 모드를 바꿨으면 원이 기다리지 않고 나타난다
+  const switchMode = useCallback((next: Mode) => {
+    setReturned(true)
+    setListKind(null)
+    setPicked(null)
+    setPhase('absorb')
+    setTimeout(
+      () => {
+        // 새 모드의 원들을 가운데에 놓고 한 번 그린 뒤 제자리로 보내야 펼쳐지는 움직임이 된다
+        setMode(next)
+        setPhase('spread')
+        requestAnimationFrame(() => requestAnimationFrame(() => setPhase(next)))
+      },
+      reduceMotion() ? 0 : ABSORB_MS,
+    )
+  }, [])
+
+  const startEdit = () => {
+    if (mode !== 'connect' || late) return
+    changed.current.clear()
+    switchMode('edit')
+  }
+
+  // 변경 완료: 연결 모드로 돌아가 바뀐 장비만 연결한다 (허브가 바뀌면 처음부터)
+  const finishEdit = () => {
+    if (mode !== 'edit') return
+    const kinds = [...changed.current]
+    switchMode('connect')
+    setTimeout(
+      () => {
+        if (kinds.includes(HUB)) return restart()
+        for (const kind of kinds) {
+          const item = items.find((i) => i.id === kind)
+          if (item && item.status !== 'Absent') void recheckOne(kind, `/api/equipment/connect/${kind}`)
+        }
+      },
+      reduceMotion() ? 0 : ABSORB_MS,
+    )
+  }
+
+  // 장비 고르기·제거: 서버에 저장하고 그 원의 칸을 바꾼다
+  const select = async (kind: string, device: { id: string; name: string } | null) => {
+    setListKind(null)
+    const res = await fetch('/api/equipment/select', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind, deviceId: device?.id ?? null, name: device?.name ?? null }),
+    })
+    if (!res.ok) return
+    const result = (await res.json()) as CheckItem
+    changed.current.add(kind)
+    patch((prev) => prev.map((i) => (i.id === kind ? result : i)))
+  }
+
+  // ── 가운데 문장 ─────────
+  // 어느 장비든 연결하는 중이면 '연결 중' (허브를 다시 연결하는 동안 '0개 있습니다'가 먼저 보이지 않게, 개수는 연결이 끝난 뒤에)
+  const connecting = items.some((i) => i.status === 'Running')
+  const state = allPass ? 'done' : connecting ? 'working' : done && failed ? 'failed' : 'working'
+  const without = items.filter((i) => i.status === 'Warn')
+  const missing = items.filter((i) => i.status === 'Fail' && i.severity !== 'Optional').length
   const hubFailed = items.some((i) => i.id === HUB && i.status === 'Fail')
+  // 고른 원: 연결되지 않은 장비(실패·경고)만 고를 수 있다. 연결되면 저절로 풀린다
+  const selected = mode === 'connect' ? items.find((i) => i.id === picked && selectable(i)) : undefined
   const centerLine =
-    state === 'done'
-      ? '모든 장비가 연결되었습니다'
-      : state === 'failed'
-        ? hubFailed
-          ? '전원 허브를 먼저 연결해 주세요'
-          : `연결되지 않은 장비가 ${missing}개 있습니다`
-        : '장비 연결 중입니다'
+    mode === 'edit'
+      ? '바꿀 장비를 골라 주세요'
+      : selected
+        ? `${selected.title} 연결되지 않음`
+        : state === 'done'
+          ? without.length === 0
+            ? '모든 장비가 연결되었습니다'
+            : without.length === 1
+              ? `${without[0].title} 없이 진행합니다`
+              : `장비 ${without.length}개 없이 진행합니다`
+          : state === 'failed'
+            ? hubFailed
+              ? '전원 허브를 먼저 연결해 주세요'
+              : `연결되지 않은 장비가\n${missing}개 있습니다`
+            : '장비 연결 중입니다'
 
-  // 아래 상태 줄에 보여 줄 장비: 고른 장비 → 첫 실패 장비
-  const selected =
-    items.find((i) => i.id === picked && i.status !== 'Pass') ?? items.find((i) => i.status === 'Fail')
+  // 원을 누르면 고르고, 한 번 더 누르면 풀린다
+  const togglePick = (item: CheckItem) => {
+    if (!selectable(item)) return
+    setPicked((p) => (p === item.id ? null : item.id))
+  }
 
   const retry = async (item: CheckItem) => {
     setPicked(null)
@@ -105,97 +245,301 @@ function EquipmentGraph({ plan, onContinue }: { plan: CheckItem[]; onContinue: (
     }
   }
 
-  const geo = layout(items.map((i) => i.id), box.w, box.h)
+  // 준필수 장비를 없이 진행: 서버에 기록해 두면 뒤 단계(계획 추천)가 맞춘다
+  const goWithout = async (item: CheckItem) => {
+    setPicked(null)
+    const res = await fetch(`/api/equipment/skip/${item.id}`, { method: 'POST' })
+    if (!res.ok) return
+    const result = (await res.json()) as CheckItem
+    patch((prev) => prev.map((i) => (i.id === item.id ? result : i)))
+  }
+
+  // ── 자리 계산 ─────────
+  const connectGeo = connectLayout(items, box.w, box.h)
+  const editGeo = editLayout(items, box.w, box.h, (frac) => frac * box.vw - box.left)
+  const geo = mode === 'edit' ? editGeo : connectGeo
+  const centerOf = connectGeo
 
   return (
     <main className={styles.stage}>
-      <div ref={graphRef} className={styles.graph}>
-        {geo && (
+      <div ref={graphRef} className={styles.graph} data-phase={phase} data-mode={mode} data-returned={returned}>
+        {geo && centerOf && (
           <>
-            {/* 연결 선: 가운데 원 가장자리 → 장비 원 가장자리. 연결에 성공하면 그려진다 */}
+            {/* 연결 선: 가운데 원 가장자리 → 장비 원 가장자리. 연결 모드에서 연결에 성공하면 그려진다 */}
             <svg className={styles.links} viewBox={`0 0 ${box.w} ${box.h}`} aria-hidden="true">
-              {items.map((item, i) => {
-                const n = geo.nodes[i]
-                const dx = n.x - geo.cx
-                const dy = n.y - geo.cy
-                const len = Math.hypot(dx, dy)
-                const ux = dx / len
-                const uy = dy / len
-                return (
-                  <line
-                    key={item.id}
-                    className={styles.link}
-                    data-on={item.status === 'Pass'}
-                    x1={geo.cx + ux * (geo.cd / 2 + 6)}
-                    y1={geo.cy + uy * (geo.cd / 2 + 6)}
-                    x2={n.x - ux * (n.d / 2 + 5)}
-                    y2={n.y - uy * (n.d / 2 + 5)}
-                    pathLength={1}
-                  />
-                )
-              })}
+              {phase === 'connect' &&
+                items.map((item, i) => {
+                  const n = connectGeo!.nodes[i]
+                  if (item.status === 'Absent') return null
+                  const dx = n.x - connectGeo!.cx
+                  const dy = n.y - connectGeo!.cy
+                  const len = Math.hypot(dx, dy) || 1
+                  const ux = dx / len
+                  const uy = dy / len
+                  return (
+                    <line
+                      key={item.id}
+                      className={styles.link}
+                      data-on={item.status === 'Pass'}
+                      x1={connectGeo!.cx + ux * (connectGeo!.cd / 2 + 6)}
+                      y1={connectGeo!.cy + uy * (connectGeo!.cd / 2 + 6)}
+                      x2={n.x - ux * (n.d / 2 + 5)}
+                      y2={n.y - uy * (n.d / 2 + 5)}
+                      pathLength={1}
+                    />
+                  )
+                })}
             </svg>
 
             <div
               ref={ringBox}
               className={styles.center}
-              style={{ left: geo.cx, top: geo.cy, width: geo.cd, '--shrink-from': shrinkFrom, '--cd': `${geo.cd}px` } as CSSProperties}
+              style={
+                {
+                  left: centerOf.cx,
+                  top: centerOf.cy,
+                  width: centerOf.cd,
+                  '--shrink-from': shrinkFrom?.scale ?? 1,
+                  '--from-dx': `${shrinkFrom?.dx ?? 0}px`,
+                  '--from-dy': `${shrinkFrom?.dy ?? 0}px`,
+                  '--cd': `${centerOf.cd}px`,
+                } as CSSProperties
+              }
+              data-ready={shrinkFrom !== null}
             >
-              <JarvisRing state={state} className={styles.ring}>
+              <JarvisRing state={mode === 'edit' ? 'working' : state} className={styles.ring}>
                 {centerLine}
               </JarvisRing>
             </div>
 
             {items.map((item, i) => {
-              const n = geo.nodes[i]
+              // 흡수 중·펼치기 직전에는 모두 가운데에, 작은 원 크기로
+              const small = connectGeo!.small
+              const n = phase === 'absorb' || phase === 'spread' ? { x: centerOf.cx, y: centerOf.cy, d: small } : geo.nodes[i]
+              const absent = item.status === 'Absent'
+              const style = {
+                left: n.x - n.d / 2,
+                top: n.y - n.d / 2,
+                width: n.d,
+                '--d': `${n.d}px`,
+                '--i': i,
+              } as CSSProperties
+
+              if (mode === 'edit')
+                return (
+                  <EditNode
+                    key={item.id}
+                    item={item}
+                    style={style}
+                    // 목록(약 300px)은 오른쪽으로 열되, 창 오른쪽에 자리가 없으면 왼쪽으로
+                    left={box.left + n.x + n.d / 2 + LIST_ROOM > box.vw}
+                    listOpen={listKind === item.id}
+                    onToggleList={() => setListKind((k) => (k === item.id ? null : item.id))}
+                    onCloseList={() => setListKind(null)}
+                    onSelect={(device) => select(item.id, device)}
+                  />
+                )
+
+              const canPick = selectable(item)
+              const isPicked = selected?.id === item.id
               return (
-                <button
+                // 원 안에 버튼(다시 연결·없이 진행)이 들어가므로 원 자체는 div + role=button
+                <div
                   key={item.id}
-                  type="button"
+                  role="button"
                   className={styles.node}
                   data-status={item.status}
-                  data-selected={selected?.id === item.id}
-                  style={{ left: n.x - n.d / 2, top: n.y - n.d / 2, width: n.d, '--d': `${n.d}px`, '--i': i } as CSSProperties}
-                  onClick={() => setPicked(item.id)}
-                  aria-label={`${item.title} ${item.term ?? ''}: ${statusText(item)}`}
+                  data-absent={absent}
+                  data-selectable={canPick}
+                  data-hub={item.id === HUB}
+                  data-selected={isPicked}
+                  style={style}
+                  onClick={() => togglePick(item)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+                    e.preventDefault()
+                    togglePick(item)
+                  }}
+                  tabIndex={canPick ? 0 : -1}
+                  aria-disabled={!canPick}
+                  aria-pressed={canPick ? isPicked : undefined}
+                  aria-label={absent ? `${item.title}: 등록되지 않음` : `${item.title} ${item.term ?? ''}: ${statusText(item)}`}
                 >
-                  <span className={styles.kind}>{item.title}</span>
-                  {item.term && <span className={styles.name}>{item.term}</span>}
-                  {/* 상태 아이콘 자리는 항상 둔다 (글자가 움직이지 않게) */}
-                  <span className={styles.mark} aria-hidden="true">
-                    {item.status === 'Pass' && <Check strokeWidth={2.5} />}
-                    {item.status === 'Fail' && <AlertTriangle strokeWidth={2} />}
-                  </span>
-                </button>
+                  {absent ? (
+                    <span className={styles.smallIcon}>
+                      <DeviceIcon kind={item.id} />
+                    </span>
+                  ) : (
+                    <>
+                      <span className={styles.kind}>{item.title}</span>
+                      {item.term && <span className={styles.name}>{item.term}</span>}
+                      {/* 상태 아이콘 자리는 항상 둔다 (글자가 움직이지 않게) */}
+                      <span className={styles.mark} aria-hidden="true">
+                        {item.status === 'Pass' && <Check strokeWidth={2.5} />}
+                        {(item.status === 'Fail' || item.status === 'Warn') && <AlertTriangle strokeWidth={2} />}
+                      </span>
+                      {/* 연결 안 된 원을 가리키면(hover·포커스): 이름·경고 대신 가운데에 다시 연결 아이콘 (준필수는 그 아래 "없이 진행") */}
+                      {canPick && (
+                        <span className={styles.hoverBody}>
+                          <button
+                            type="button"
+                            className={styles.retryIcon}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void retry(item)
+                            }}
+                            aria-label={`${item.title} 다시 연결`}
+                          >
+                            <RotateCw strokeWidth={2} />
+                          </button>
+                          {item.status === 'Fail' && item.severity === 'Recommended' && (
+                            <button
+                              type="button"
+                              className={styles.textAction}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void goWithout(item)
+                              }}
+                            >
+                              없이 진행
+                            </button>
+                          )}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
               )
             })}
           </>
         )}
       </div>
-      {/* 아래 상태 줄: 연결 안 된 장비의 상태·해결 방법·다시 시도. 자리는 항상 확보 */}
-      <div className={styles.status} data-shown={!!selected && done}>
-        {selected && (
-          <>
-            <span className={styles.statusName}>
-              {selected.title}
-              {selected.term && <small>{selected.term}</small>}
-            </span>
-            <span className={styles.statusText} data-status={selected.status}>
-              {statusText(selected)}
-            </span>
-            {selected.diagnosis?.fix && <InfoTip label="해결 방법" text={selected.diagnosis.fix} />}
-            {selected.status === 'Fail' && (
-              <button type="button" className={styles.retry} onClick={() => retry(selected)}>
-                <RotateCw strokeWidth={2} aria-hidden="true" />
-                다시 연결
-              </button>
-            )}
-          </>
-        )}
+
+      {/* 아래: 진행 막대 · 모드 버튼. 높이는 고정이라 무엇이 보이든 위의 원들은 움직이지 않는다 */}
+      <div className={styles.bottom}>
+        {/* 4초 진행 막대: 모두 되면 차오르고, 다 차면 다음 단계로 */}
+        <div className={styles.progress} aria-hidden="true">
+          <div className={styles.progressFill} data-running={counting} key={counting ? 'run' : 'stop'} />
+        </div>
+
+        <div className={styles.modeRow}>
+          {mode === 'connect' ? (
+            <button type="button" className={styles.quiet} onClick={startEdit} disabled={!done || late || phase !== 'connect'}>
+              장비 변경
+            </button>
+          ) : (
+            <button type="button" className={styles.primary} onClick={finishEdit} disabled={phase !== 'edit'}>
+              변경 완료
+            </button>
+          )}
+        </div>
       </div>
 
-      <TempFailButtons items={items} done={done} patch={patch} />
+      {mode === 'connect' && <TempFailButtons items={items} done={done} patch={patch} />}
     </main>
+  )
+}
+
+/**
+ * 변경 모드의 아이콘 원.
+ * - 누르면(selected) 원 옆에 드라이버 목록이 바로 열리고, 한 번 더 누르면 닫히며 normal로 돌아간다
+ * - 누른 원(목록이 열림)에만 이름 아래에 "제거"가 보인다 (등록된 선택·준필수 장비만). 가리키기만 해서는 안 보인다
+ */
+function EditNode({
+  item,
+  style,
+  left,
+  listOpen,
+  onToggleList,
+  onCloseList,
+  onSelect,
+}: {
+  item: CheckItem
+  style: CSSProperties
+  /** 오른쪽에 자리가 없으면 목록을 왼쪽으로 연다 */
+  left: boolean
+  listOpen: boolean
+  onToggleList: () => void
+  onCloseList: () => void
+  onSelect: (device: { id: string; name: string } | null) => void
+}) {
+  const absent = item.status === 'Absent'
+  const canRemove = !absent && item.severity !== 'Required'
+  return (
+    <div className={styles.editNode} data-absent={absent} data-selected={listOpen} style={style}>
+      <button
+        type="button"
+        className={styles.editCircle}
+        onClick={onToggleList}
+        aria-expanded={listOpen}
+        aria-label={`${item.title}: ${absent ? '등록되지 않음. 눌러서 등록' : `${item.term ?? ''}. 눌러서 변경`}`}
+      >
+        <DeviceIcon kind={item.id} />
+      </button>
+      <div className={styles.editLabel}>
+        <b>{item.title}</b>
+        {!absent && <small>{item.term}</small>}
+      </div>
+      {canRemove && (
+        <div className={styles.actions}>
+          <button type="button" className={styles.textAction} onClick={() => onSelect(null)}>
+            제거
+          </button>
+        </div>
+      )}
+      {listOpen && <DeviceList kind={item.id} left={left} current={item.term} onPick={onSelect} onClose={onCloseList} />}
+    </div>
+  )
+}
+
+/** 설치된 드라이버 목록 (N.I.N.A.가 이 PC에서 찾은 것). 원 옆에 작게 열린다 */
+function DeviceList({
+  kind,
+  left,
+  current,
+  onPick,
+  onClose,
+}: {
+  kind: string
+  left: boolean
+  current: string | null
+  onPick: (device: { id: string; name: string }) => void
+  onClose: () => void
+}) {
+  const [devices, setDevices] = useState<{ id: string; name: string }[] | null>(null)
+  const [error, setError] = useState(false)
+  const load = useCallback(() => {
+    setDevices(null)
+    setError(false)
+    fetch(`/api/equipment/devices/${kind}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setDevices, () => setError(true))
+  }, [kind])
+  useEffect(load, [load])
+
+  // Esc로 닫기
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className={styles.deviceList} data-left={left} role="listbox" aria-label="설치된 드라이버">
+      {devices === null && !error && <p className={styles.listNote}>드라이버 목록을 읽는 중입니다</p>}
+      {error && <p className={styles.listNote}>N.I.N.A.에서 목록을 받지 못했습니다</p>}
+      {devices?.map((d) => (
+        <button key={d.id} type="button" role="option" aria-selected={d.name === current} onClick={() => onPick(d)}>
+          {d.name}
+        </button>
+      ))}
+      <p className={styles.listNote}>
+        목록에 없나요? 제조사 드라이버를 설치한 뒤{' '}
+        <button type="button" className={styles.textAction} onClick={load}>
+          새로고침
+        </button>
+      </p>
+    </div>
   )
 }
 
@@ -204,14 +548,25 @@ function statusText(item: CheckItem) {
     case 'Pass':
       return '연결되어 있습니다'
     case 'Fail':
-      return '연결되어 있지 않습니다'
+      return item.message || '연결되어 있지 않습니다'
     case 'Running':
       return '연결하는 중입니다'
     case 'Skipped':
       return '전원 허브를 먼저 연결해 주세요'
+    case 'Warn':
+      return item.message
     default:
       return '연결 대기 중입니다'
   }
+}
+
+/** 누를 수 있는 원: 연결되지 않은 장비(실패·경고) */
+function selectable(item: CheckItem) {
+  return item.status === 'Fail' || item.status === 'Warn'
+}
+
+function reduceMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 }
 
 interface Geo {
@@ -219,24 +574,53 @@ interface Geo {
   cy: number
   /** 가운데 원 지름 */
   cd: number
+  /** 작은 원(등록 안 된 장비) 지름 */
+  small: number
   nodes: { x: number; y: number; d: number }[]
 }
 
 /**
- * 원들의 자리와 크기 (px). 정다각형처럼 보이지 않게:
- * - 옆으로 약간 넓은 타원 궤도 위에, 각도·거리·크기를 장비마다 조금씩 흔든다
- * - 흔든 값은 장비 id로 정해지므로 다시 열어도 같은 모양 (레이아웃 안정성)
+ * 연결 모드: 원들의 자리와 크기 (px). 정다각형처럼 보이지 않게:
+ * - 옆으로 약간 넓은 타원 궤도 위에, 각도·거리·크기를 장비마다 조금씩 흔든다 (흔든 값은 장비 id로 정해짐)
+ * - **어느 자리에 어느 장비를 둘지는 앱을 켤 때마다 무작위**, 단 원 넓이가 위·아래·좌·우로 고르게
+ *   퍼지는 순서를 고른다 (여러 번 섞어 보고 넓이의 무게중심이 가운데에 가장 가까운 것)
+ *   한 번 정한 순서는 앱을 다시 켤 때까지 그대로 (sessionOrder) — 장비를 바꾸거나 화면에 다시 들어와도
+ *   원들이 제자리에 있다 (레이아웃 안정성)
+ * - 등록 안 된 장비는 가장 작은 장비 원의 30% 크기
  * - 원끼리·가운데 원과 겹치면 서로 밀어내고, 그래도 안 되면 전체를 조금씩 줄여 맞춘다
  */
-function layout(ids: string[], w: number, h: number): Geo | null {
-  if (w < 50 || h < 50 || ids.length === 0) return null
+/** 앱을 켠 동안 유지하는 장비 자리 순서 (모듈 변수라 화면을 다시 열어도 남고, 앱을 다시 켜면 새로 정한다) */
+let sessionOrder: string[] | null = null
+const sessionSeed = Math.floor(Math.random() * 2 ** 31)
+
+function connectLayout(items: CheckItem[], w: number, h: number): Geo | null {
+  if (w < 50 || h < 50 || items.length === 0) return null
   const cx = w / 2
   const cy = h / 2
   const base = Math.min(h, w * 0.75)
+  const isSmallById = new Map(items.map((i) => [i.id, i.status === 'Absent']))
+  const areaOf = (id: string) => {
+    const d = isSmallById.get(id) ? SMALL * base * NODE * (1 - SIZE_SPREAD) : base * NODE * (1 + (seeded(id, 1) * 2 - 1) * SIZE_SPREAD)
+    return d * d
+  }
+  // 처음 한 번만 정하고, 그 뒤로는 같은 순서 (장비 종류는 늘 같은 8가지라 목록이 같으면 그대로 쓴다)
+  const idList = items.map((i) => i.id)
+  const sameSet = sessionOrder !== null && sessionOrder.length === idList.length && idList.every((id) => sessionOrder!.includes(id))
+  if (!sameSet) sessionOrder = balancedOrder(idList, areaOf, sessionSeed)
+  const ids = sessionOrder!.slice(0)
+  const isSmall = ids.map((id) => isSmallById.get(id) ?? false)
 
+  let last: Geo | null = null
   for (let scale = 1; scale > 0.4; scale *= 0.94) {
     const cd = base * CENTER * scale
-    const sizes = ids.map((id) => base * NODE * scale * (1 + (seeded(id, 1) * 2 - 1) * SIZE_SPREAD))
+    // 글자가 든 원은 이름이 넘치지 않을 만큼은 크게 (최소 84px)
+    const big = ids.map((id) => Math.max(84, base * NODE * scale * (1 + (seeded(id, 1) * 2 - 1) * SIZE_SPREAD)))
+    const smallest = Math.min(...big.filter((_, i) => !isSmall[i]), base * NODE * scale)
+    // 원끼리 최소 간격 = 실제로 그려지는 가장 작은 장비 원(글자가 든 원)의 반지름
+    const bigOnly = big.filter((_, i) => !isSmall[i])
+    const gap = (bigOnly.length > 0 ? Math.min(...bigOnly) : base * NODE * scale) / 2
+    const small = Math.max(26, smallest * SMALL)
+    const sizes = big.map((d, i) => (isSmall[i] ? small : d))
     const maxR = Math.max(...sizes) / 2
     const ry = h / 2 - maxR - 8
     const rx = Math.min(w / 2 - maxR - 8, ry * 1.5)
@@ -244,51 +628,156 @@ function layout(ids: string[], w: number, h: number): Geo | null {
 
     const nodes = ids.map((id, i) => {
       const angle = ((-90 + (i * 360) / ids.length + (seeded(id, 2) * 2 - 1) * ANGLE_JITTER) * Math.PI) / 180
-      const f = 1 + (seeded(id, 3) * 2 - 1) * RADIUS_JITTER
+      // 작은 원은 가운데에 조금 더 가깝게 (큰 원 사이 빈자리에)
+      const f = (1 + (seeded(id, 3) * 2 - 1) * RADIUS_JITTER) * (isSmall[i] ? 0.8 : 1)
       return { x: cx + Math.cos(angle) * rx * f, y: cy + Math.sin(angle) * ry * f, d: sizes[i] }
     })
 
-    // 겹침 풀기: 몇 번 반복해 서로 밀어낸다 (정해진 순서라 결과는 항상 같다)
-    for (let pass = 0; pass < 60; pass++) {
-      let moved = false
-      for (const n of nodes) {
-        // 가운데 원과 겹치면 바깥쪽으로
-        const dx = n.x - cx
-        const dy = n.y - cy
+    // 자리는 섞은 순서로 정했으니, 돌려줄 때는 원래 장비 순서(items)로 되돌린다
+    const byId = new Map(ids.map((id, k) => [id, nodes[k]]))
+    last = { cx, cy, cd, small, nodes: items.map((i) => byId.get(i.id)!) }
+    if (relax(nodes, cx, cy, cd, w, h, gap)) return last
+  }
+  // 아주 좁은 화면: 완전히 풀리지 않아도 마지막 배치를 쓴다 (아무것도 안 그리는 것보다 낫다)
+  return last
+}
+
+/**
+ * 원 넓이가 고르게 퍼지는 자리 순서: seed로 여러 번(200) 섞어 보고,
+ * 둘레에 같은 간격으로 놓았을 때 넓이의 무게중심(위·아래·좌·우 치우침)이 가장 작은 순서와 시작 각도를 고른다.
+ */
+function balancedOrder(ids: string[], areaOf: (id: string) => number, seed: number): string[] {
+  const rand = mulberry32(seed)
+  const n = ids.length
+  let best = ids
+  let bestScore = Infinity
+  for (let t = 0; t < 200; t++) {
+    const order = [...ids]
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[order[i], order[j]] = [order[j], order[i]]
+    }
+    let sx = 0
+    let sy = 0
+    order.forEach((id, k) => {
+      const a = -Math.PI / 2 + (k * 2 * Math.PI) / n
+      sx += Math.cos(a) * areaOf(id)
+      sy += Math.sin(a) * areaOf(id)
+    })
+    const score = Math.hypot(sx, sy)
+    if (score < bestScore) {
+      bestScore = score
+      best = order
+    }
+  }
+  return best
+}
+
+/** seed로 정해지는 난수 (0~1). 같은 seed면 같은 순서 */
+function mulberry32(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * 변경 모드: 장비 8종을 등급별 세 겹 궤도에. 필수가 가장 가깝게, 준필수 중간, 선택 바깥.
+ * 원 크기는 모두 같고, 겹마다 시작 각도를 달리해 서로 줄 서지 않게 한다.
+ */
+/**
+ * 변경 모드 원의 가로 자리 (2026-09-30 사용자 지정): 창 전체 너비를 0~10으로 나눈 값, 원 중심 기준.
+ * 오른쪽 넷을 정하고, 왼쪽은 같은 겹에서 마주 보는 원을 좌우 대칭(10 - x)으로 둔다.
+ * 세로 자리는 등급별 궤도 계산을 그대로 쓴다.
+ */
+const RIGHT_X = { camera: 6.7, guider: 7, switch: 8, filterwheel: 8.5 }
+const EDIT_X: Record<string, number> = {
+  ...RIGHT_X,
+  mount: 10 - RIGHT_X.camera, // 필수: 가운데 원 좌우
+  focuser: 10 - RIGHT_X.guider, // 준필수: 대각선
+  flatdevice: 10 - RIGHT_X.switch, // 선택 위쪽
+  rotator: 10 - RIGHT_X.filterwheel, // 선택 아래쪽
+}
+
+function editLayout(items: CheckItem[], w: number, h: number, screenX?: (frac: number) => number): Geo | null {
+  if (w < 50 || h < 50 || items.length === 0) return null
+  const cx = w / 2
+  const cy = h / 2
+  const base = Math.min(h, w * 0.75)
+  const cd = base * CENTER * EDIT_CENTER_SCALE // 변경 모드에서는 가운데 원이 조금 작아진다 (CSS와 같게)
+  const d = Math.max(52, base * EDIT_NODE)
+  const tierOf = (i: CheckItem) => (i.severity === 'Required' ? 0 : i.severity === 'Recommended' ? 1 : 2)
+  // 겹마다 가운데에서의 거리. 세로는 화면 높이에 막히므로 바깥 겹일수록 옆으로 넓은 타원
+  const r = [0, 1, 2].map((t) => cd / 2 + d / 2 + 18 + t * (d + 22))
+  const maxY = h / 2 - d / 2 - 40 // 이름 글자 자리
+  const ry = r.map((v) => Math.min(v, maxY))
+  const sx = Math.min(1, (w / 2 - d / 2 - 12) / (r[2] * 1.3))
+  const rx = r.map((v, t) => v * (t === 0 ? 1 : 1.3) * sx)
+  // 겹마다 자리(도): 필수는 가운데 원 좌우(이름 글자가 가운데 원에 닿지 않게), 준필수는 대각선, 선택은 바깥 좌우
+  const angles = [
+    [180, 0],
+    [-120, 60],
+    [-30, 30, 150, 210],
+  ]
+  const byTier = [0, 1, 2].map((t) => items.filter((i) => tierOf(i) === t))
+  const nodes = items.map((item) => {
+    const t = tierOf(item)
+    const k = byTier[t].indexOf(item)
+    const deg = byTier[t].length === angles[t].length ? angles[t][k] : -90 + (k * 360) / byTier[t].length
+    const a = (deg * Math.PI) / 180
+    const fixedX = EDIT_X[item.id] !== undefined && screenX ? screenX(EDIT_X[item.id] / 10) : null
+    // 그래프 영역 밖으로는 나가지 않게
+    const x = fixedX === null ? cx + Math.cos(a) * rx[t] : Math.min(w - d / 2 - 4, Math.max(d / 2 + 4, fixedX))
+    return { x, y: cy + Math.sin(a) * ry[t], d }
+  })
+  return { cx, cy, cd, small: d * 0.5, nodes }
+}
+
+/** 겹침 풀기: 몇 번 반복해 서로 밀어낸다 (정해진 순서라 결과는 항상 같다). 풀리면 true */
+function relax(nodes: { x: number; y: number; d: number }[], cx: number, cy: number, cd: number, w: number, h: number, gap: number) {
+  for (let pass = 0; pass < 60; pass++) {
+    let moved = false
+    for (const n of nodes) {
+      // 가운데 원과 겹치면 바깥쪽으로
+      const dx = n.x - cx
+      const dy = n.y - cy
+      const dist = Math.hypot(dx, dy) || 1
+      const need = cd / 2 + n.d / 2 + LINK_MIN
+      if (dist < need) {
+        n.x = cx + (dx / dist) * need
+        n.y = cy + (dy / dist) * need
+        moved = true
+      }
+    }
+    for (let a = 0; a < nodes.length; a++)
+      for (let b = a + 1; b < nodes.length; b++) {
+        const p = nodes[a]
+        const q = nodes[b]
+        const dx = q.x - p.x
+        const dy = q.y - p.y
         const dist = Math.hypot(dx, dy) || 1
-        const need = cd / 2 + n.d / 2 + LINK_MIN
+        const need = p.d / 2 + q.d / 2 + gap
         if (dist < need) {
-          n.x = cx + (dx / dist) * need
-          n.y = cy + (dy / dist) * need
+          const push = (need - dist) / 2
+          p.x -= (dx / dist) * push
+          p.y -= (dy / dist) * push
+          q.x += (dx / dist) * push
+          q.y += (dy / dist) * push
           moved = true
         }
       }
-      for (let a = 0; a < nodes.length; a++)
-        for (let b = a + 1; b < nodes.length; b++) {
-          const p = nodes[a]
-          const q = nodes[b]
-          const dx = q.x - p.x
-          const dy = q.y - p.y
-          const dist = Math.hypot(dx, dy) || 1
-          const need = p.d / 2 + q.d / 2 + GAP
-          if (dist < need) {
-            const push = (need - dist) / 2
-            p.x -= (dx / dist) * push
-            p.y -= (dy / dist) * push
-            q.x += (dx / dist) * push
-            q.y += (dy / dist) * push
-            moved = true
-          }
-        }
-      // 영역 밖으로 나가지 않게
-      for (const n of nodes) {
-        n.x = Math.min(w - n.d / 2 - 4, Math.max(n.d / 2 + 4, n.x))
-        n.y = Math.min(h - n.d / 2 - 4, Math.max(n.d / 2 + 4, n.y))
-      }
-      if (!moved) return { cx, cy, cd, nodes }
+    // 영역 밖으로 나가지 않게
+    for (const n of nodes) {
+      n.x = Math.min(w - n.d / 2 - 4, Math.max(n.d / 2 + 4, n.x))
+      n.y = Math.min(h - n.d / 2 - 4, Math.max(n.d / 2 + 4, n.y))
     }
+    if (!moved) return true
   }
-  return null
+  return false
 }
 
 /** id로 정해지는 0~1 사이 값 (매번 같은 값) */
@@ -321,7 +810,7 @@ function TempFailButtons({
         i.id === id
           ? result
           : id === HUB
-            ? { ...i, status: 'Skipped' as const, message: WAITING_FOR_HUB, diagnosis: null }
+            ? { ...i, status: i.status === 'Absent' ? i.status : ('Skipped' as const), message: WAITING_FOR_HUB, diagnosis: null }
             : i,
       ),
     )

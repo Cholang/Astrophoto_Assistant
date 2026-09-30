@@ -88,6 +88,8 @@
   /* 모든 도형은 둥근 모서리 (DESIGN.md 3장). 상자·버튼·입력창은 이 값, 쉐브론은 SVG로 같은 느낌의 곡선 */
   --radius: 10px;
   --gutter: clamp(20px, 6vw, 96px);
+  /* 하단 단계 레일 높이 (모든 화면 같은 높이) */
+  --rail-h: 38px;
 
   font-family: var(--font);
   font-size: var(--size-body);

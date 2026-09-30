@@ -63,7 +63,7 @@ NINA에서 장비를 연결하려면 지금은 이렇게 해야 한다.
 **1단계 엔진 켜기** (같은 쉐브론·공통 영역 화면)
 1. N.I.N.A. 켜기 — 꺼져 있으면 AA가 실행
 2. 연결 통로 응답 — Advanced API `/version`이 답할 때까지 최대 90초. 안 되면 "옵션에서 Advanced API 켜기, 포트 1888" 안내 + [다시 시도]
-3. **(추가 예정, 2026-09-30) 인터넷 연결** — 시작·계획은 온라인 필수. 없으면 "휴대폰 핫스팟에 연결해 주세요" + [다시 시도]
+3. **인터넷 연결** (2026-09-30 추가, `InternetCheck`) — 시작·계획은 온라인 필수. 없으면 "휴대폰 핫스팟에 연결해 주세요" + [다시 시도]
    - 0단계가 아니라 1단계에 둔다: 0단계는 "설치돼 있나?"만 보는 단계이고, 인터넷은 지금 실행 환경의 상태라서
 
 ### 지금은 사용자 환경에 맞춰 만든다
@@ -96,7 +96,9 @@ NINA에서 장비를 연결하려면 지금은 이렇게 해야 한다.
 - 마지막에 요약 화면 ("연결 5개, 건너뜀 1개") → 다음부터 저장된 구성으로 자동 연결
 
 ### 4.2 장비 순서
-**허브(전원) → 적도의 → 카메라 → 포커서 → 필터휠 → 가이드 카메라 → 열선**
+**허브(전원) → 적도의 → 카메라 → 포커서 → 필터휠 → 회전장치 → 플랫패널 → 가이드 카메라** (열선은 허브 포트로 함께)
+
+등급(2026-09-30): 필수 카메라·적도의 / 준필수 포커서·가이더("없이 진행" 가능) / 선택 허브·필터휠·회전장치·플랫패널(실패해도 경고만). 돔·안전 모니터·날씨 장치는 다루지 않는다. 자세한 화면 규칙은 DESIGN.md 3장.
 허브가 다른 장비에 전원을 주므로 가장 먼저. 가이드 카메라는 NINA가 아니라 PHD2 쪽에서 연결한다는 안내 필요.
 
 ### 4.3 허브는 종류부터 묻는다 ("허브를 쓰시나요?")
@@ -212,7 +214,7 @@ web/            React + TypeScript 화면
 → `appsettings.json`의 `Setup:SimulateMissing`, `Equipment:Simulate`는 **그때까지 `true` 유지**
 
 ### 바로 고칠 것 (회사 노트북에서, 2026-09-29 집 PC 검토)
-- [ ] **장비 연결 대기 시간이 5초로 짧음**
+- [x] **장비 연결 대기 시간이 5초로 짧음** (2026-09-30 수정: 조회 5초, 연결 60초 — `NinaApiClient.QueryTimeout`/`ConnectTimeout`)
   - 위치: `src/Astro.Server/AppServer.cs`의 `NinaApiClient` 설정 `http.Timeout = TimeSpan.FromSeconds(5)`
   - 문제: 모든 NINA 요청이 5초 제한을 공유함. 적도의·카메라 연결(`equipment/{kind}/connect`)은 5초 넘게 걸리는 경우가 흔해서, 실제로는 연결되는 중인데 "연결 실패"로 표시될 수 있음
   - 수정 방향: 짧은 조회(`version`, `info`, `profile`)는 5초 유지, `ConnectAsync`만 긴 제한(예: 60초). 예) `HttpClient.Timeout`은 넉넉히 두고 요청마다 `CancellationTokenSource.CancelAfter`로 제한
@@ -221,6 +223,11 @@ web/            React + TypeScript 화면
 ### 실기 테스트 때 확인할 것 (플로우 완성 후)
 - [ ] **시뮬레이션 끄기**: `Setup:SimulateMissing=false`, `Equipment:Simulate=false`, `Equipment:SimulateFailing=[]`. 화면의 임시 "○○ 설치 완료하기" 버튼도 제거
 - [ ] **실제 장비 연결 경로 검증**: `EquipmentConnector.ConnectOneAsync`의 실기 경로는 아직 한 번도 실행되지 않음. 특히 NINA 프로필의 장비 `Id`를 `connect?to=`에 그대로 넣어도 되는지 (`list-devices`의 id와 같은지)
+- [ ] **장비 변경 모드의 쓰기 경로** (`RigSetup.SelectAsync`, 시뮬레이션에서는 AA의 `rig-overrides.json`에만 저장):
+  - `connect?to=<id>`로 고르면 N.I.N.A.가 그 장비를 프로필에 저장하는지
+  - 제거: `disconnect` 뒤 `profile/change-value?settingpath=FilterWheelSettings-Id&newValue=No_Device` — settingpath 형식이 맞는지
+  - N.I.N.A.에 쓰기에 성공하면 AA 쪽 `rig-overrides.json`의 그 장비 값이 지워지는지
+  - 처음 쓰는 드라이버의 설정 창(포트 등)을 N.I.N.A. 장비 탭에서 열어야 하는 안내가 자연스러운지
 - [ ] **PHD2는 누가 켜나**: 1단계는 NINA만 켬. 가이딩 연결 전에 PHD2가 꺼져 있으면 "가이딩" 칸이 실패함. NINA가 가이더 연결 시 PHD2를 자동 실행하는지 확인하고, 안 하면 1단계에 "PHD2 켜기" 추가
 - [ ] **API 실기 점검 1단계**: `node tools/api-check.mjs --listen 120` (장비 연결된 PC에서)
   - Wanderer Box가 WandererEmpire 없이 동작하는지, 첫 연결 시 드라이버 설정 창이 뜨는지
