@@ -28,7 +28,7 @@ public sealed class PlanTools(DsoCatalog catalog, Engine.EquipmentChoices equipm
         Spec("set_target", "계획의 '대상' 칸을 정한다. 사용자가 대상을 고르거나 동의했을 때만 부른다.",
             """{"type":"object","properties":{"target_id":{"type":"string","description":"search_targets·suggest_targets가 돌려준 id"},"korean_name":{"type":"string","description":"한국어 통칭 (예: 플레이아데스). 없으면 비움"}},"required":["target_id"]}"""),
         Spec("set_framing", "계획의 '구도' 칸을 정한다.",
-            """{"type":"object","properties":{"placement":{"type":"string","description":"사용자 말 그대로 짧게 (예: 가운데, 왼쪽으로 조금 비켜서)"},"rotation_degrees":{"type":"number","description":"카메라 회전 각도. 모르면 0"}},"required":["placement"]}"""),
+            """{"type":"object","properties":{"placement":{"type":"string","description":"사용자 말 그대로 짧게 (예: 가운데, 왼쪽으로 조금 비켜서)"},"rotation_degrees":{"type":"number","description":"사용자가 카메라 방향 각도를 직접 말했을 때만 넣는다(사진 위쪽이 북쪽 = 0). 말하지 않았으면 넣지 않는다 — 지금 카메라 방향을 그대로 쓴다"}},"required":["placement"]}"""),
         Spec("recommend_settings", "노출 시간·ISO 추천값 (단순 표 기준: 초점비, 필터, 달 밝기). 촬영 설정을 묻기 전에 부른다.",
             """{"type":"object","properties":{"filter":{"type":"string","enum":["none","light_pollution","dual_narrowband"],"description":"필터 종류"}},"required":["filter"]}"""),
         Spec("set_settings", "계획의 '촬영 설정' 칸을 정한다. 예상 장수는 서버가 계산한다.",
@@ -173,7 +173,7 @@ public sealed class PlanTools(DsoCatalog catalog, Engine.EquipmentChoices equipm
         if (catalog.Get(id) is not { } d) return new { error = "그 id의 대상이 없습니다. search_targets로 먼저 찾으세요." };
         var t = Night.Target(d.Position, n.Site, n.Window);
         plan.Target = new PlanTarget(d.Id, d.Name, d.CommonName, string.IsNullOrWhiteSpace(korean) ? null : korean.Trim(),
-            d.Type, d.Constellation, d.SizeArcmin, d.Magnitude,
+            d.Type, d.Constellation, d.SizeArcmin, d.Magnitude, d.Position.Ra, d.Position.Dec,
             t.UsableStart, t.UsableEnd, t.HighestAt, t.HighestAltitude, t.Transit, t.MoonSeparation);
         // 대상이 바뀌면 구도·설정은 다시 정한다
         if (plan.Framing is not null) plan.Framing = plan.Framing with { FillPercent = Fill(d.SizeArcmin, n.Rig) };
@@ -185,7 +185,8 @@ public sealed class PlanTools(DsoCatalog catalog, Engine.EquipmentChoices equipm
     private static object SetFraming(JsonElement a, NightContext n, ShootingPlan plan)
     {
         if (plan.Target is null) return new { error = "대상을 먼저 정하세요." };
-        plan.Framing = new PlanFraming(Str(a, "placement") ?? "가운데", Num(a, "rotation_degrees") ?? 0, Fill(plan.Target.SizeArcmin, n.Rig));
+        // 각도를 말하지 않았으면 null = 지금 카메라 방향 유지 (0도로 돌리라는 뜻이 되지 않게, CX-PLAN-02)
+        plan.Framing = new PlanFraming(Str(a, "placement") ?? "가운데", Num(a, "rotation_degrees"), Fill(plan.Target.SizeArcmin, n.Rig));
         ClearAsking(plan, "framing");
         return new { ok = true };
     }
@@ -211,32 +212,29 @@ public sealed class PlanTools(DsoCatalog catalog, Engine.EquipmentChoices equipm
     private object SetSettings(JsonElement a, NightContext n, ShootingPlan plan)
     {
         if (plan.Target is null) return new { error = "대상을 먼저 정하세요." };
-        var end = Str(a, "end") ?? "target_low_or_dawn";
-        var endText = end switch
-        {
-            "dawn" => "새벽이 올 때까지",
-            "time" => $"{Str(a, "end_time")}까지",
-            _ => "대상이 낮아지거나 새벽이 올 때까지",
-        };
+        var rule = Str(a, "end") switch { "dawn" => EndRule.Dawn, "time" => EndRule.AtTime, _ => EndRule.TargetLowOrDawn };
+        var endTime = Str(a, "end_time");
+        if (rule == EndRule.AtTime && !TimeOnly.TryParse(endTime, out _)) return new { error = "end가 time이면 end_time을 HH:mm로 넣으세요." };
         var s = new PlanSettings(Int(a, "exposure_seconds") ?? 180, Int(a, "iso") ?? 800, Str(a, "filter") ?? "필터 없음",
-            endText, n.Window.DarkStart, n.Window.DarkEnd, 0,
+            rule, n.Window.DarkStart, n.Window.DarkEnd, 0,
             Bool(a, "exposure_recommended") ?? false, Bool(a, "iso_recommended") ?? false);
-        plan.Settings = Recount(s, n, plan.Target, end, Str(a, "end_time"));
+        plan.Settings = Recount(s, n, plan.Target, endTime);
         ClearAsking(plan, "settings");
         var r = plan.Settings;
         return new { ok = true, start = Hm(r.Start), end = Hm(r.End), estimated_frames = r.EstimatedFrames };
     }
 
-    /// <summary>시작·끝 시각과 예상 장수를 다시 계산</summary>
-    private static PlanSettings Recount(PlanSettings s, NightContext n, PlanTarget t, string? end = null, string? endTime = null)
+    /// <summary>시작·끝 시각과 예상 장수를 다시 계산 (종료 규칙은 문장이 아니라 EndRule로, CX-PLAN-04). endTime은 규칙이 AtTime으로 새로 정해질 때만</summary>
+    private static PlanSettings Recount(PlanSettings s, NightContext n, PlanTarget t, string? endTime = null)
     {
-        end ??= s.EndCondition.StartsWith("대상") ? "target_low_or_dawn" : s.EndCondition.StartsWith("새벽") ? "dawn" : "keep";
+        // 오늘 밤 30° 위로 오지 않는 대상: 찍을 시간이 없다 (밤 전체를 촬영 시간으로 잡지 않게, CX-PLAN-04)
+        if (t.UsableStart is null) return s with { Start = n.Window.DarkStart, End = n.Window.DarkStart, EstimatedFrames = 0 };
         var start = t.UsableStart is { } us && us > n.Window.DarkStart ? us : n.Window.DarkStart;
-        var stop = end switch
+        var stop = s.EndRule switch
         {
-            "dawn" => n.Window.DarkEnd,
-            "time" when TimeOnly.TryParse(endTime, out var tt) => AtLocal(n, tt),
-            "keep" => s.End,
+            EndRule.Dawn => n.Window.DarkEnd,
+            EndRule.AtTime when TimeOnly.TryParse(endTime, out var tt) => AtLocal(n, tt),
+            EndRule.AtTime => s.End, // 정해 둔 시각 그대로
             _ => t.UsableEnd is { } ue && ue < n.Window.DarkEnd ? ue : n.Window.DarkEnd,
         };
         var seconds = Math.Max(0, (stop - start).TotalSeconds);
@@ -255,15 +253,14 @@ public sealed class PlanTools(DsoCatalog catalog, Engine.EquipmentChoices equipm
 
     private static object SetAfter(JsonElement a, ShootingPlan plan)
     {
-        var mount = Str(a, "mount") == "leave" ? "그대로 둠" : "파킹";
         var cal = Str(a, "calibration") switch
         {
-            "darks" => "다크 찍기",
-            "flats" => "플랫 찍기",
-            "darks_and_flats" => "다크·플랫 찍기",
-            _ => "찍지 않음",
+            "darks" => CalibrationFrames.Darks,
+            "flats" => CalibrationFrames.Flats,
+            "darks_and_flats" => CalibrationFrames.DarksAndFlats,
+            _ => CalibrationFrames.None,
         };
-        plan.After = new PlanAfter(mount, cal, Bool(a, "disconnect") ?? true ? "연결 해제" : "연결 유지");
+        plan.After = new PlanAfter(Str(a, "mount") != "leave", cal, Bool(a, "disconnect") ?? true);
         ClearAsking(plan, "after");
         return new { ok = true };
     }

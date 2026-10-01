@@ -83,16 +83,43 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
     private bool _noticeShown;
 
     public ShootingPlan Plan => _plan;
+
+    /// <summary>"이 계획으로 준비 시작"으로 확정한 계획. 준비 단계가 이것을 읽는다 (없으면 null)</summary>
+    public PreparationPlan? Confirmed { get; private set; }
+
+    /// <summary>지금 계획을 확정해 준비 단계로 넘긴다. 실행할 수 없는 계획이면 이유를 돌려준다</summary>
+    public string? Confirm()
+    {
+        var (plan, problem) = PreparationPlan.From(_plan, DateTimeOffset.Now);
+        if (plan is null) return problem;
+        Confirmed = plan;
+        log.LogInformation("계획 확정: {Plan}", plan);
+        return null;
+    }
     public NightContext? Night => _night;
     public IReadOnlyList<DisplayMessage> Display => _display;
 
-    /// <summary>화면을 열 때: 오늘 밤 정보를 준비하고, 처음이면 인사를 만든다. 날짜가 바뀌면 새로 시작.</summary>
+    /// <summary>
+    /// 화면을 열 때·말할 때마다: 오늘 밤 정보를 준비하고, 처음이면 인사를 만든다. 날짜·관측지가 바뀌면 새로 시작.
+    /// 같은 밤에 장비(망원경·카메라 등)만 바뀌었으면 대화는 두고 장비에 달린 값만 고친다 (Codex 리뷰 CX-PLAN-06)
+    /// </summary>
     public async Task<string?> EnsureStartedAsync(CancellationToken ct)
     {
         var evening = TonightService.EveningOf(DateTimeOffset.Now);
-        if (_night is not null && _evening == evening) return null;
+        var read = await tonight.ReadProfileAsync(ct);
+        if (_night is not null && _evening == evening)
+        {
+            // N.I.N.A.를 잠깐 못 읽었거나 위치가 비어 있으면 하던 대화는 그대로 (다음 번에 다시 확인)
+            if (read is not { } now || now.Site is { Latitude: 0, Longitude: 0 }) return null;
+            if (now.Site == _night.Site)
+            {
+                if (now.Rig != _night.Rig) ApplyRig(now.Rig);
+                return null;
+            }
+            // 관측지가 바뀌었으면 시각·고도가 모두 달라지므로 새로 시작 (아래)
+        }
 
-        if (await tonight.ReadProfileAsync(ct) is not { } profile)
+        if (read is not { } profile)
             return "N.I.N.A. 프로필을 읽지 못했습니다. N.I.N.A.가 켜져 있는지 확인해 주세요.";
         if (profile.Site is { Latitude: 0, Longitude: 0 })
             return "N.I.N.A. 프로필에 관측지 위치가 없습니다. N.I.N.A.의 옵션 > 일반 > 천문 설정에서 위도·경도를 넣어 주세요.";
@@ -114,6 +141,38 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
     public void Reset()
     {
         _night = null;
+    }
+
+    private string? _profileId;
+
+    /// <summary>프로필을 고를 때: 다른 프로필이면 계획 대화를 새로 시작한다 (다른 사람의 계획이 섞이지 않게). 같은 프로필이면 그대로</summary>
+    public void ProfileSelected(string id)
+    {
+        if (_profileId is not null && _profileId != id) Reset();
+        _profileId = id;
+    }
+
+    /// <summary>
+    /// 같은 밤에 장비만 바뀌었을 때: 대상(시각·고도)은 그대로, 화각에 달린 구도의 채움 비율은 다시 계산.
+    /// 노출 추천에 쓰는 것(F값·카메라·가이딩·필터휠)이 바뀌었으면 촬영 설정 칸을 비우고 다시 묻는다
+    /// </summary>
+    private void ApplyRig(Rig rig)
+    {
+        var old = _night!.Rig;
+        _night = _night with { Rig = rig };
+        if (_plan.Framing is { } f && _plan.Target is { } t) _plan.Framing = f with { FillPercent = PlanTools.Fill(t.SizeArcmin, rig) };
+
+        var settingsStale = _plan.Settings is not null &&
+            (old.FocalRatio != rig.FocalRatio || old.Camera != rig.Camera || old.HasGuider != rig.HasGuider || old.HasFilterWheel != rig.HasFilterWheel);
+        if (settingsStale)
+        {
+            _plan.Settings = null;
+            _plan.Asking ??= "settings";
+        }
+        log.LogInformation("계획 중 장비가 바뀜: {Old} → {New}", old, rig);
+        _display.Add(new DisplayMessage("notice", settingsStale
+            ? "장비가 바뀌어 화각을 다시 계산했어요. 촬영 설정은 새 장비에 맞춰 다시 정해 주세요."
+            : "장비가 바뀌어 화각을 다시 계산했어요."));
     }
 
     /// <summary>사용자 말 하나를 처리한다. 화면으로 보낼 이벤트: notice · text · plan · choices · error · done</summary>
@@ -255,7 +314,7 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
     {
         var dark = $"오늘 밤은 {Hm(n.Window.DarkStart)}부터 {Hm(n.Window.DarkEnd)}까지 어두워요.";
         var moon = MoonLine(n);
-        return $"{dark} {moon} 무엇을 찍어 볼까요?";
+        return $"{dark} {moon} 오늘은 무엇을 촬영하실 계획인가요?";
     }
 
     private static string MoonLine(NightContext n)
@@ -287,13 +346,15 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
             - 순서: 대상 → 구도 → 촬영 설정 → 끝난 뒤. 사용자가 다른 칸부터 말하면 따른다.
             - 질문할 때는 먼저 offer_choices로 그 칸과 선택지(2~4개)를 보여 준 다음 질문한다. 한 번에 한 가지만 묻는다.
             - 사용자가 고르거나 동의하면 바로 set_* 도구로 칸을 채우고 다음으로 넘어간다. 다시 확인하지 않는다.
-            - 대상: 추천을 원하면 suggest_targets, 이름을 말하면 search_targets. 대상을 정하면 언제 30°를 넘고 언제 가장 높은지, 화면을 얼마나 채우는지 한 문장으로 알려 준다.
+            - 대상: 사용자가 정해 온 대상이 있으면 추천부터 하지 말고 그 대상을 찾아 바로 진행한다. 대안까지 말하면 오늘 조건에 맞는 쪽을 함께 비교한다. 추천을 원하면 suggest_targets, 이름을 말하면 search_targets. 대상을 정하면 언제 30°를 넘고 언제 가장 높은지, 화면을 얼마나 채우는지 한 문장으로 알려 준다.
             - 달이 50% 넘게 밝고 대상과 30° 안쪽이면(moon_separation_degrees) 대상을 정하기 전에 그 사실을 알리고, 듀얼 내로우밴드 필터를 쓰거나 달과 먼 대상을 고를 수 있다고 제안한다. 사용자가 그대로 찍겠다면 따른다.
-            - 구도: 가운데에 둘지 묻는다. 회전은 사용자가 말할 때만.
+            - 대상이 오늘 밤 30° 위로 올라오지 않으면(예상 장수 0) 오늘은 찍기 어렵다고 알리고 다른 대상을 제안한다.
+            - 구도: 기본은 대상을 가운데에 두고 카메라 방향은 지금 그대로다. 가운데에 둘지만 묻는다. 회전 각도는 사용자가 직접 말할 때만 넣는다. 실제 구도는 준비 단계에서 사진으로 확인한다고 말해도 좋다.
             - 촬영 설정: 필터를 먼저 묻고(필터 없음 / 광해 필터 / 듀얼 내로우밴드), recommend_settings로 추천값을 받아 제안한다. 끝나는 조건 기본값은 '대상이 낮아지거나 새벽이 올 때까지'.
             - 끝난 뒤: 기본값(적도의 파킹, 다크·플랫 찍지 않음, 장비 연결 해제)을 제안하고 확인만 받는다.
             - 네 칸이 모두 차면 "오른쪽 계획을 확인해 주세요"라고 짧게 마무리한다.
             - 사용자가 "(칸) 고치기"라고 하면 그 칸을 다시 묻는다.
+            - 대화 도중 장비가 바뀔 수 있다. 장비·화각·계획 값은 앞의 대화가 아니라 아래 '지금 계획 상태'와 get_tonight 결과를 기준으로 한다.
             - 이 단계에서는 적도의를 움직이거나 촬영을 시작하지 않는다. 그런 요청은 다음 단계(준비)에서 한다고 말한다.
             - 촬영과 관계없는 이야기는 짧게 답하고 계획으로 돌아온다.
 
@@ -330,7 +391,8 @@ public static class PlanView
             framing = new
             {
                 state = State("framing", p.Framing),
-                value = p.Framing is { } f ? new { f.Placement, rotation = Math.Round(f.RotationDegrees), fillPercent = f.FillPercent } : null,
+                // rotation: null = 지금 카메라 방향 유지
+                value = p.Framing is { } f ? new { f.Placement, rotation = f.RotationDegrees is { } r ? Math.Round(r) : (double?)null, fillPercent = f.FillPercent } : null,
             },
             settings = new
             {
@@ -345,7 +407,7 @@ public static class PlanView
             after = new
             {
                 state = State("after", p.After),
-                value = p.After,
+                value = p.After is { } a ? new { mount = a.MountText, calibration = a.CalibrationText, equipment = a.EquipmentText } : null,
             },
         };
     }

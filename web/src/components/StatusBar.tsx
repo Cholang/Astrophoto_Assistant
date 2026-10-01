@@ -1,6 +1,6 @@
 import { Pencil } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { PRODUCT } from '../product'
+import { PRODUCT, VERSION } from '../product'
 import { profileImageUrl, type ObservingSite, type Profile } from '../profiles'
 import { coordText, type CurrentSite } from '../sites'
 import type { Theme } from '../theme'
@@ -63,6 +63,7 @@ export default function StatusBar({
   return (
     <header className={styles.bar}>
       <span className={styles.brand}>{PRODUCT.name}</span>
+      <span className={styles.version}>{VERSION}</span>
 
       {profile && <ProfileSwitcher profile={profile} profiles={profiles} onSwitch={onSwitchProfile} />}
 

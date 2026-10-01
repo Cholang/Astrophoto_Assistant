@@ -2,5 +2,6 @@
   "name": "AA",
   "fullName": "Astrophoto Assistant",
   "tagline": "천체사진 촬영 비서",
-  "dataFolder": "AA"
+  "dataFolder": "AA",
+  "version": "0.0"
 }

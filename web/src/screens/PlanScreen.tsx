@@ -118,6 +118,23 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
     [busy],
   )
 
+  // "이 계획으로 준비 시작": 서버가 계획을 실행 값으로 확정한다. 실행할 수 없는 계획이면(관측 가능한 시간 없음 등) 이유를 오류 줄에
+  const [starting, setStarting] = useState(false)
+  const start = async () => {
+    if (starting) return
+    setStarting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/plan/confirm', { method: 'POST' })
+      if (res.ok) return onContinue()
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      setError(body?.error ?? '계획을 확정하지 못했습니다. 다시 눌러 주세요.')
+    } catch {
+      setError(`${PRODUCT.name} 내부 서버와 연결이 끊겼습니다. 다시 눌러 주세요.`)
+    }
+    setStarting(false)
+  }
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
     void send(draft)
@@ -205,7 +222,7 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
               {summary(plan)}
               <small>{summarySub(plan)}</small>
             </div>
-            <Button variant="primary" onClick={onContinue} disabled={!plan.complete || busy} tabIndex={plan.complete ? 0 : -1}>
+            <Button variant="primary" onClick={() => void start()} disabled={!plan.complete || busy || starting} tabIndex={plan.complete ? 0 : -1}>
               이 계획으로 준비 시작
             </Button>
           </div>
@@ -250,7 +267,7 @@ function PlanCell({ field, plan, disabled, onEdit }: { field: Field; plan: Plan;
           <div className={styles.big}>{f.placement}</div>
           <Rows
             rows={[
-              ['회전', `${f.rotation}°`],
+              ['카메라 방향', f.rotation === null ? '지금 방향 그대로' : `${f.rotation}°`],
               ['대상 크기', f.fillPercent !== null ? `화면 가로의 약 ${f.fillPercent}%` : '-'],
             ]}
           />

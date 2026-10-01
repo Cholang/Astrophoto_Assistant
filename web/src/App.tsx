@@ -10,6 +10,7 @@ import EngineStartScreen from './screens/EngineStartScreen'
 import EquipmentScreen, { type EquipmentDone } from './screens/EquipmentScreen'
 import NewProfileScreen from './screens/NewProfileScreen'
 import PlanScreen from './screens/PlanScreen'
+import PrepareScreen from './screens/PrepareScreen'
 import PreflightScreen from './screens/PreflightScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import SetupCheckScreen from './screens/SetupCheckScreen'
@@ -22,8 +23,8 @@ import styles from './App.module.css'
 
 // flow.mmd ① 시작 · 연결:
 // 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결
-// → 출발 전 점검 → 촬영 계획 → (다음: 준비)
-type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'site' | 'preflight' | 'plan' | 'prepare'
+// → 출발 전 점검 → 촬영 계획 → 촬영 준비 → (다음: 촬영)
+type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'site' | 'preflight' | 'plan' | 'prepare' | 'shoot'
 
 /** 화면 → 하단 단계 레일의 단계. 부팅·프로필 화면에는 레일이 없다 (DESIGN.md 2장) */
 const STAGE_OF: Partial<Record<Phase, Stage>> = {
@@ -34,13 +35,14 @@ const STAGE_OF: Partial<Record<Phase, Stage>> = {
   preflight: '점검',
   plan: '계획',
   prepare: '준비',
+  shoot: '촬영',
 }
 
 /** N.I.N.A.가 켜져 있어야 하는 화면 (1단계 엔진 켜기 이후). 여기서 N.I.N.A.가 꺼지면 알린다 */
-const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare']
+const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare', 'shoot']
 
 /** 상태 줄에 관측지를 보여 주는 화면 (장비 연결 이후). 연필은 장비 연결·관측지 고르기 화면에서는 숨긴다 */
-const SITE_SHOWN: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare']
+const SITE_SHOWN: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare', 'shoot']
 const SITE_EDITABLE: Phase[] = ['preflight', 'plan', 'prepare']
 
 /** 상단 상태 줄의 지금 단계 이름 */
@@ -49,7 +51,8 @@ const LABEL_OF: Partial<Record<Phase, string>> = {
   site: '관측지',
   preflight: '출발 전 점검',
   plan: '촬영 계획',
-  prepare: '준비',
+  prepare: '촬영 준비',
+  shoot: '촬영',
 }
 
 /** 화면 전환 페이드 한쪽 시간. App.module.css의 .screen transition과 같은 값 */
@@ -217,6 +220,7 @@ export default function App() {
   }, [phase, fadeTo])
   const toPlan = useCallback(() => fadeTo('plan'), [fadeTo])
   const toPrepare = useCallback(() => fadeTo('prepare'), [fadeTo])
+  const toShoot = useCallback(() => fadeTo('shoot'), [fadeTo])
   const frame = useFrame()
   const siteInfo = describeSite(site ?? null, profile, profiles ?? [])
 
@@ -301,10 +305,11 @@ export default function App() {
         )}
         {phase === 'preflight' && <PreflightScreen onContinue={toPlan} />}
         {phase === 'plan' && <PlanScreen onContinue={toPrepare} />}
-        {phase === 'prepare' && (
+        {phase === 'prepare' && <PrepareScreen onContinue={toShoot} />}
+        {phase === 'shoot' && (
           <main className={styles.placeholder}>
-            <h1>촬영 준비</h1>
-            <p>초점·극축 정렬·대상 찾기 화면은 다음에 만들 차례입니다.</p>
+            <h1>촬영</h1>
+            <p>본촬영·종료 화면은 다음에 만들 차례입니다 (W7).</p>
           </main>
         )}
       </div>

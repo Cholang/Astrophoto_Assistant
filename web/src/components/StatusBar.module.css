@@ -16,6 +16,13 @@
   color: var(--text);
 }
 
+/* 앱 이름 바로 옆 작은 버전 (이름과의 간격은 줄 간격보다 좁게) */
+.version {
+  margin-left: -12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .profile {
   position: relative;
   display: inline-flex;

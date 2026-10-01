@@ -64,6 +64,10 @@ public static class AppServer
         builder.Services.AddSingleton<PlanTools>();
         builder.Services.AddSingleton<ChatModelFactory>();
         builder.Services.AddSingleton<PlanAssistant>();
+        // 촬영 준비: 지금은 모의 장비만 (실제 N.I.N.A.·PHD2·SharpCap 동작은 W4~W6에서 IPrepareDevices로 채운다)
+        builder.Services.AddSingleton<Prepare.SimulatedPrepareDevices>();
+        builder.Services.AddSingleton<Prepare.IPrepareDevices>(sp => sp.GetRequiredService<Prepare.SimulatedPrepareDevices>());
+        builder.Services.AddSingleton<Prepare.PrepareRunner>();
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
         builder.Services.AddTransient<SiteService>();
@@ -147,11 +151,32 @@ public static class AppServer
         api.MapGet("/config", (IConfiguration config) => new { kakaoKey = config["Map:KakaoJavaScriptKey"] is { Length: > 0 } k ? k : null });
 
         MapPlan(api.MapGroup("/plan"));
+        MapPrepare(api.MapGroup("/prepare"));
         MapProfiles(api.MapGroup("/profiles"));
 
         app.MapFallbackToFile("index.html");
         return app;
     }
+
+    private static void MapPrepare(RouteGroupBuilder prepare)
+    {
+        // 확정 계획으로 준비 시작 (같은 계획이면 하던 곳에서 그대로)
+        prepare.MapPost("/start", (Prepare.PrepareRunner runner) =>
+            runner.Start() is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(runner.View()));
+        prepare.MapGet("/state", (Prepare.PrepareRunner runner) => runner.View());
+        // 상태가 바뀔 때마다 (Server-Sent Events)
+        prepare.MapGet("/watch", (Prepare.PrepareRunner runner, CancellationToken ct) =>
+            TypedResults.ServerSentEvents(runner.WatchAsync(ct), eventType: "state"));
+        // 칸의 버튼
+        prepare.MapPost("/act", (PrepAct input, Prepare.PrepareRunner runner) =>
+            runner.Act(input.Step, input.Action) is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+
+        // [임시] 화면 확인용: 다음 동작 하나를 실패시키기, 대상이 보인다고 가정하기
+        prepare.MapPost("/sim/fail-next/{step}", (string step, Prepare.SimulatedPrepareDevices sim) => { sim.FailNext(step); return Results.NoContent(); });
+        prepare.MapPost("/sim/ignore-altitude", (Prepare.PrepareRunner runner) => { runner.IgnoreAltitude(); return Results.NoContent(); });
+    }
+
+    private sealed record PrepAct(string Step, string Action);
 
     private static void MapPlan(RouteGroupBuilder plan)
     {
@@ -178,6 +203,13 @@ public static class AppServer
             TypedResults.ServerSentEvents(assistant.SendAsync(input.Text, ct)));
 
         plan.MapPost("/reset", (PlanAssistant assistant) => { assistant.Reset(); return Results.NoContent(); });
+
+        // "이 계획으로 준비 시작": 계획을 실행 값으로 확정한다 (CX-PLAN-07). 실행할 수 없는 계획이면 이유
+        plan.MapPost("/confirm", (PlanAssistant assistant) =>
+            assistant.Confirm() is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(assistant.Confirmed));
+        // 준비 단계가 읽는 확정 계획
+        plan.MapGet("/confirmed", (PlanAssistant assistant) =>
+            assistant.Confirmed is { } p ? Results.Ok(p) : Results.NotFound());
     }
 
     /// <summary>고도를 모르면(화면이 안 보냄) 먼저 조회한 뒤 적용</summary>
@@ -212,8 +244,12 @@ public static class AppServer
                 : Results.Created($"/api/profiles/{profile.Id}", profile);
         });
 
-        profiles.MapPost("/{id}/select", (string id, ProfileStore store) =>
-            store.Select(id) ? Results.NoContent() : Results.NotFound());
+        profiles.MapPost("/{id}/select", (string id, ProfileStore store, PlanAssistant plan) =>
+        {
+            if (!store.Select(id)) return Results.NotFound();
+            plan.ProfileSelected(id); // 다른 프로필이면 계획 대화를 새로 (CX-PLAN-06)
+            return Results.NoContent();
+        });
 
         // 별명·메모 고치기 (프로필 선택 화면)
         profiles.MapPut("/{id}", (string id, NewProfile input, ProfileStore store) =>

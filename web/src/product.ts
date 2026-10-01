@@ -3,7 +3,11 @@
  * 이름이 바뀌어도 코드는 고치지 않는다 — product.json만 고친다.
  * 문장에 넣을 때는 조사가 이름에 맞게 바뀌도록 ga·reul·neun·wa를 쓴다 (예: `${PRODUCT.ga} 켭니다`).
  */
-declare const __PRODUCT__: { name: string; fullName: string; tagline: string; dataFolder: string }
+declare const __PRODUCT__: { name: string; fullName: string; tagline: string; dataFolder: string; version: string }
+declare const __VERSION__: string
+
+/** 앱 버전 표기 (예: v0.0.27). product.json의 version + 빌드 번호(커밋 수), vite.config.ts에서 만든다 */
+export const VERSION = __VERSION__
 
 /** 앞말의 받침 유무. 영문·숫자는 읽는 소리로 판단한다 (서버 Astro.Core.Josa와 같은 규칙). */
 export function hasFinalConsonant(word: string) {

@@ -50,7 +50,7 @@ public static class NightChart
             },
             clouds = n.Clouds.Where(c => c.Time >= from && c.Time < to).Select(c => new { at = Min(c.Time), cover = c.Cover }).ToList(),
             target,
-            shooting = plan.Settings is { } s ? new { start = Min(s.Start), end = Min(s.End) } : null,
+            shooting = plan.Settings is { EstimatedFrames: > 0 } s ? new { start = Min(s.Start), end = Min(s.End) } : null, // 찍을 시간이 없으면 띠 없음
         };
     }
 }

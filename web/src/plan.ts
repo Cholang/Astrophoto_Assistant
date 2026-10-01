@@ -19,7 +19,8 @@ export interface PlanTarget {
 
 export interface PlanFraming {
   placement: string
-  rotation: number
+  /** 카메라 방향(도). null = 지금 방향 유지 */
+  rotation: number | null
   fillPercent: number | null
 }
 

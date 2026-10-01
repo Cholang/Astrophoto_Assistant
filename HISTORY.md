@@ -8,7 +8,31 @@
 
 ---
 
-## 2026-10-01 · [Claude] 장비 연결 화면 다듬기, 경통 → 망원경, 리프트 공통 규칙
+## 2026-10-01 · [Claude] 계획 확정 구조, 촬영 준비 화면 골격(모의), 시퀀스 재개 확인, 버전 표시, 장비 바뀐 계획 갱신
+
+**요청**
+- Codex 리뷰(REVIEW_CODEX.md) 검토 후 결정: CX-PLAN-06 지금 고치기, 01 미리보기 유지, 진행 순서 06 → 시퀀스 실험 → 계획 전달 구조 → 준비
+- Codex 요청서(IMPLEMENTATION_REQUEST_CODEX.md) 검토 후 결정: 준비는 단계별 API 호출, 극축정렬 생략 안 함, 이동 승인 한 번, 대상이 30° 아래면 알리고 멈춤, 시험 사진 항상, 가이딩은 픽셀 기준 규칙 판정 + (온라인이면) AI 설명 + 사용자 확정, SharpCap 설치 확인은 V0.2로
+- 부팅 화면·상태 줄에 빌드 버전 표시. 장비 없이 안 되는 것은 성공 가정으로 진행
+
+**변경**
+- CX-PLAN-06: `PlanAssistant.EnsureStartedAsync`가 같은 밤 장비 변경을 감지 → `ApplyRig`(화각 재계산, 노출에 영향 주는 장비면 촬영 설정 칸 비움 + 안내), `ProfileSelected`(다른 프로필이면 새로)
+- W2 계획 확정: `Plan.cs` — `PlanTarget` J2000 좌표, `PlanFraming.RotationDegrees` null = 방향 유지(CX-PLAN-02), `EndRule`(CX-PLAN-04), `PlanAfter` 구조화, `PreparationPlan.From`(실행 가능 여부 확인) + `POST /api/plan/confirm`·`GET /confirmed`. 30° 위로 안 오는 대상은 예상 0장·촬영 띠 없음. 첫 인사 문장, AI 지시(정해 온 대상 바로 받기, 회전은 말할 때만)
+- W3 준비: `Prepare/PrepareRunner.cs`(7칸 상태 기계, SSE `/api/prepare/watch`, `/act`), `Prepare/PrepareDevices.cs`(`IPrepareDevices` + `SimulatedPrepareDevices`, [임시] fail-next·고도 무시), `PrepareScreen.tsx`(쉐브론 7칸 + 공통 영역), App에 촬영 자리(빈 화면)
+- 버전: `product.json` version + 커밋 수 → `vite.config.ts` `__VERSION__`, `StatusBar`·`BootScreen`
+- 문서: DESIGN.md(계획 화면 규칙, "촬영 준비" 절), flow.mmd ③ 7단계, api-coverage.md(재개 확인), README PowerShell 예시, REVIEW_CODEX.md 처리 표(01~07), 요청서 파일 함께 커밋
+
+**확인**
+- 시퀀스 재개 실험 (이 노트북 N.I.N.A., 실험용 프로필 AstroAssistant + 시뮬레이터 카메라): stop → start가 끝난 항목은 건너뛰고 완료 장수 유지(5장 중 3장 뒤 중지 → 다시 시작 → 파일 정확히 5장)
+- 연습 대화 API: 망원경 바꾸면 화각 5.17° → 1.5°·채움 61% → 211%·설정 칸 비움, 같은 프로필 재선택 유지, 다른 프로필 새로. M31 확정 값, NGC 104 확정 거부·0장
+- 헤드리스(1920×1200): 준비 7칸을 극축정렬 → 대상 낮음 멈춤 → 이동 → 초점 실패·재시도 → 가이딩 판정 → 시험 사진 → 촬영 시작까지. 버전 v0.0.26 표시
+- 실제 AI 호출·실장비 없음. 실제 앱 창 확인은 사용자가 쉐브론 화면까지 봄. 흐름도 검사 때 실수로 Edge 헤드리스가 한 번 실행됨(스크립트 고침)
+
+**남은 것**: 준비 화면을 세로 진행 목록 + 큰 작업 영역으로 바꾸기(사용자 확인, 쉐브론 반복이 식상), W4(SharpCap·PHD2 실제 연결) ~ W7(촬영·종료), 시험 사진 실제 표시, 가이딩 AI 설명, N.I.N.A. 이동 명령이 J2000을 받는지 시뮬레이터 적도의로 확인
+
+---
+
+## 2026-10-01 · 86afaff [Claude] 장비 연결 화면 다듬기, 경통 → 망원경, 리프트 공통 규칙
 
 **요청**
 - 장비 연결: 진행 막대는 모두 연결됐을 때만(변경 모드에서는 숨김), 멈춤 대신 "변경" 버튼을 가리키는 동안 0.3배속, 다시 연결 아이콘 두 배, 허브 문구 줄바꿈, 망원경 원은 이름만, 등록 안 된 작은 원에 종류 이름표 + 떠오름, 연결된 원도 떠오름

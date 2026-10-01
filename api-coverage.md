@@ -15,6 +15,7 @@
 - **프레임마다 HFR·별 개수·배경값이 이벤트로 온다** (`IMAGE-SAVE`). 중간 분석과 세션 기록의 핵심 데이터를 파일을 뒤지지 않고 받을 수 있다.
 - **API에 없는 것 = 우리 앱의 몫**: 날씨 *예보*, 대상 이름→좌표 검색, 고도·자오선·박명 계산, 구름 판단 로직, NINA 실행.
 - **가장 큰 확인 과제는 "일시정지"다.** 시퀀스에 pause가 없고 start/stop/skip/reset만 있다. stop 후 start가 이어서 진행되는지 반드시 실기로 확인해야 한다.
+  - **확인함 (2026-10-01, Advanced API 2.2.15, 시뮬레이터 카메라)**: stop 후 start는 **이어서 진행**한다. 끝난 항목은 건너뛰고, 반복 횟수(LoopCondition의 완료 횟수)도 유지된다. 중단된 노출 1장만 버려지고 다시 찍는다 (5장 중 3장 뒤 중지 → 다시 시작 → 저장된 파일 정확히 5장)
 
 ---
 
@@ -81,7 +82,7 @@
 |---|---|---|---|
 | 이상 감지 | 이벤트 `SEQUENCE-ENTITY-FAILED`, `ERROR-PLATESOLVE`, `ERROR-AF`, `CAMERA-DOWNLOAD-TIMEOUT`, `*-DISCONNECTED`, `SAFETY-CHANGED` | ✅ | |
 | 구름 감지 | `IMAGE-SAVE`의 Stars·HFR·Mean 추세 | ❌ | 판정 로직은 우리 코드 |
-| **일시정지 + 진행상태 저장** | `/sequence/stop` | ⚠️🔍 | **pause 없음.** stop 후 `/sequence/start`가 이어서 진행하는지 확인 필수. 안 되면 진행 상태를 우리가 기록하고 남은 장수로 다시 로드 |
+| **일시정지 + 진행상태 저장** | `/sequence/stop` → `/sequence/start` | ✅ | pause는 없지만 stop 후 start가 이어서 진행함 (2026-10-01 확인: 끝난 항목·완료 장수 유지, 중단된 노출 1장만 다시) |
 | 원인 진단 자료 | `/application/logs?lineCount=&level=`, `/event-history` | ✅ | AI에는 요약된 특징만 전달 |
 | 재연결 | `/equipment/{종류}/connect` | ✅ | |
 | 준비상태 재확인 | ③과 동일 | ✅ | |
@@ -120,7 +121,7 @@ node tools/api-check.mjs --listen 120
 | Wanderer 포트 on/off | `switch/set` | 어떤 포트가 어떤 장비인지 먼저 확인. 카메라·마운트 전원 포트는 건드리지 않기 |
 | 냉각/워밍 | `camera/cool`, `camera/warm` | 문제 없음 |
 | 슬루·파킹 | `mount/slew`, `mount/park` | ⚠️ **낮에는 경통 캡을 반드시 닫기** (태양 방향 통과 위험). 케이블 걸림 확인하며 옆에서 지켜보기 |
-| 시퀀스 로드·시작·중지·재시작 | `sequence/load` → `start` → `stop` → `start` | 다크 1장짜리 테스트 시퀀스로. **stop 후 이어서 진행되는지가 핵심 확인 항목** |
+| 시퀀스 로드·시작·중지·재시작 | `sequence/load` → `start` → `stop` → `start` | ✅ 시뮬레이터로 확인함 (2026-10-01). JSON으로 만든 시퀀스를 `POST /sequence/load`로 넣을 수 있음. 실장비에서는 노출 도중 중지했을 때 카메라 상태만 다시 볼 것 |
 
 ### 3단계: 야간 (별이 필요)
 플레이트 솔빙 센터링, 오토포커스, 가이딩, TPPA 극축 정렬, `IMAGE-SAVE` 품질 값.

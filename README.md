@@ -125,9 +125,11 @@ dotnet user-secrets set "Map:KakaoJavaScriptKey" "키" --project src/Astro.Serve
 
 키가 없거나, 오늘 무료 한도를 다 썼거나(모든 모델이 429), 키가 틀리면 계획 화면은 **자동으로 연습 대화로 넘어간다** (대화 안에 한 줄 안내). 한도는 다시 차는 시각(미국 태평양 자정, 한국 오후 4~5시)까지, 키 문제는 앱을 다시 켤 때까지 연습 대화로 둔다. 시연 때 처음부터 연습 대화만 쓰려면:
 
+```powershell
+$env:Assistant__Provider="scripted"; dotnet run --project src/Astro.Desktop
 ```
-Assistant__Provider=scripted dotnet run --project src/Astro.Desktop
-```
+
+(PowerShell. 이 설정은 그 터미널 창이 열려 있는 동안 남는다 — 다시 실제 AI로 하려면 `Remove-Item Env:Assistant__Provider` 또는 새 터미널)
 
 `Sky:NinaDatabase`: 대상 목록으로 쓰는 N.I.N.A. 데이터베이스 (기본 `%LOCALAPPDATA%NINANINA.sqlite`, 읽기 전용). 관측지 위치·망원경·카메라는 N.I.N.A. 프로필에서 읽고, 구름 예보는 Open-Meteo에서 받는다.
 
