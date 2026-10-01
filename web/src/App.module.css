@@ -18,13 +18,13 @@
   background: var(--bg);
 }
 
-/* 데스크톱 크기 창: 기준 화면 1920×1080으로 그린 뒤 창에 맞춰 통째로 확대·축소해 가운데에 (frame.ts) */
+/* 데스크톱 크기 창: 기준 화면 1920×1200(16:10)으로 그린 뒤 창에 맞춰 통째로 확대·축소해 가운데에 (frame.ts FRAME_W·FRAME_H와 같게) */
 .shell[data-fixed='true'] {
   position: absolute;
   left: 50%;
   top: 50%;
   width: 1920px;
-  height: 1080px;
+  height: 1200px;
   transform: translate(-50%, -50%) scale(var(--frame-scale, 1));
 }
 

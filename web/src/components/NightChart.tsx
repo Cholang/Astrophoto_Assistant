@@ -8,6 +8,8 @@ const TOP = 6
 const H = 90
 const MOON_Y = 101
 const CLOUD_Y = 110
+const VIEW_W = 800 // viewBox 너비
+const MOON_LABEL_W = 64 // "달 06:27 짐" 글자 폭 (11px 기준, 약간 여유)
 
 /**
  * 오늘 밤 조건 한 장: 어두운 시간(양 끝 옅은 면), 대상 고도 곡선 + 30° 기준선, 자오선, 달 떠 있는 시간,
@@ -58,7 +60,8 @@ export default function NightChart({ chart }: { chart: Chart }) {
       {chart.moon.up.map((u) => (
         <g key={u.start}>
           <rect x={x(u.start)} y={MOON_Y} width={Math.max(2, x(u.end) - x(u.start))} height={4} rx={2} className={styles.moon} />
-          {u.end < chart.minutes - 30 ? (
+          {/* "달 ○○ 짐"은 막대 오른쪽에 자리가 있을 때만 (그래프 밖으로 잘리지 않게). 없으면 막대 왼쪽에 "뜸" */}
+          {u.end < chart.minutes - 30 && x(u.end) + 6 + MOON_LABEL_W <= VIEW_W ? (
             <text x={x(u.end) + 6} y={MOON_Y + 5}>달 {u.setLabel} 짐</text>
           ) : u.start > 30 ? (
             <text x={x(u.start) - 6} y={MOON_Y + 5} textAnchor="end">달 {u.riseLabel} 뜸</text>
