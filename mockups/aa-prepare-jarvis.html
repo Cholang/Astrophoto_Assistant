@@ -1,0 +1,386 @@
+<title>AA 촬영 준비 자비스 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<style>
+/* 레이아웃: 설명·조작 단추 → 1단계 움직이는 시안(1920×1200 기준 화면을 폭에 맞춰 축소).
+   가운데 자비스 원 + 6단계 원(장비 연결 화면과 같은 말투) → 1단계로 '카메라'가 다가가 호 카드로 세부 진행. */
+:root {
+  --page-bg: #ececea; --page-surface: #f7f7f5; --page-text: #25272a; --page-muted: #62656a; --page-line: #d4d4cf; --page-accent: #9a5c00;
+  --font: 'Pretendard Variable', Pretendard, 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page-bg); color: var(--page-text); font-family: var(--font); font-size: 15px; line-height: 1.6; word-break: keep-all; }
+.page { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 22px; }
+header.top { display: grid; gap: 10px; }
+header.top h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+header.top p { margin: 0; color: var(--page-muted); max-width: 80ch; }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.controls span { font-size: 13px; color: var(--page-muted); }
+.seg { display: inline-grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-surface); }
+.seg button, .ctl { min-width: 72px; padding: 5px 14px; border: none; border-radius: 8px; background: transparent; color: var(--page-muted); font: inherit; font-size: 14px; cursor: pointer; }
+.seg button[aria-checked="true"] { background: var(--page-line); color: var(--page-text); font-weight: 700; }
+.ctl { border: 1px solid var(--page-line); background: var(--page-surface); color: var(--page-text); }
+.ctl[aria-pressed="true"] { border-color: var(--page-accent); color: var(--page-accent); font-weight: 700; }
+.stateLbl { font-size: 13px; color: var(--page-muted); font-variant-numeric: tabular-nums; }
+.frame { width: 100%; max-width: 100%; aspect-ratio: 16 / 10; position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--page-line); }
+
+/* ───────── 앱 (1920×1200) ───────── */
+.app { position: absolute; left: 0; top: 0; width: 1920px; height: 1200px; transform-origin: 0 0; transform: scale(var(--s, 1));
+  display: flex; flex-direction: column; font-family: var(--font); font-size: 15.5px; line-height: 1.6; color: var(--text); background: var(--bg); overflow: hidden;
+  --radius: 10px; --gutter: 96px; --size-bar: 12.5px; --zoom-ms: 750ms; --move-ms: 600ms; }
+.app, .app[data-t="dark"] { --bg:#1e1f21; --surface:#27292c; --surface-2:#303236; --line:#3b3e42; --text:#ebe8e3; --muted:#a3a09a; --accent:#f0a93b; --on-accent:#231800; --pass:#72bf8e; --fail:#f07a52; --step-idle:#242528; --step-done:#303337; --step-done-line:#5e8f6f; --primary-bg:#f0a93b; --primary-border:#f0a93b; --primary-text:#231800; --glow: rgb(240 169 59 / .55); }
+.app[data-t="light"] { --bg:#f1f1ef; --surface:#fafaf9; --surface-2:#e7e7e4; --line:#d6d6d2; --text:#25272a; --muted:#676a6e; --accent:#b36b00; --on-accent:#fff; --pass:#2f7d4e; --fail:#c24a26; --step-idle:#e7e7e4; --step-done:#fff; --step-done-line:#8fb89d; --primary-bg:#b36b00; --primary-border:#b36b00; --primary-text:#fff; --glow: rgb(179 107 0 / .45); }
+.app[data-t="night"] { --bg:#000; --surface:#0c0000; --surface-2:#170000; --line:#3c0000; --text:#b80000; --muted:#720000; --accent:#d00000; --on-accent:#000; --pass:#b80000; --fail:#b80000; --step-idle:#060000; --step-done:#150000; --step-done-line:#6a0000; --primary-bg:#260000; --primary-border:#8a0000; --primary-text:#d00000; --glow: rgb(208 0 0 / .45); --zoom-ms: 520ms; --move-ms: 420ms; }
+.app svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+.bar { flex: 0 0 44px; display: flex; align-items: center; gap: 20px; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); font-size: var(--size-bar); color: var(--muted); font-variant-numeric: tabular-nums; position: relative; z-index: 5; background: var(--bg); }
+.bar .brand { font-weight: 800; letter-spacing: .04em; color: var(--text); }
+.bar .ver { margin-left: -12px; font-size: 11px; }
+.bar .prof { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.bar .ava { width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); }
+.bar .devs { display: flex; gap: 14px; flex: 1; }
+.bar .dev { display: inline-flex; align-items: center; gap: 6px; }
+.bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pass); }
+.bar .dev[data-busy="1"] { color: var(--muted); }
+.bar .dev[data-busy="1"] .dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.bar .site { color: var(--text); } .bar .site b { font-weight: 600; margin-right: 6px; }
+.bar .clock { color: var(--text); }
+.tsw { display: grid; grid-template-columns: repeat(3,1fr); padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); }
+.tsw span { min-width: 56px; padding: 3px 10px; border-radius: 8px; color: var(--muted); text-align: center; }
+.tsw span.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
+
+.rail { flex: 0 0 38px; position: relative; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); background: var(--bg); }
+.rail .rs { display: inline-flex; align-items: center; gap: 6px; }
+.rail .mk { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); }
+.rail .rs[data-s="done"] { color: var(--text); } .rail .rs[data-s="done"] .mk { box-shadow: none; color: var(--pass); font-size: 14px; }
+.rail .rs[data-s="now"] { color: var(--text); font-weight: 700; } .rail .rs[data-s="now"] .mk { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.rail .rs[data-s="now"] .mk::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.rail .sep { width: 28px; height: 2px; border-radius: 1px; background: var(--line); } .rail .sep[data-on="1"] { background: var(--accent); }
+.railEnd { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+.railEnd span { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+.railEnd .abort { box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font-weight: 600; cursor: pointer; }
+.railEnd .abort:hover { box-shadow: inset 0 0 0 1.5px var(--fail); color: var(--fail); }
+
+/* ── 무대: 세계(줌·이동) + 초점 층(실제 크기 UI) ── */
+.stage { position: relative; flex: 1; overflow: hidden; }
+.world { position: absolute; left: 0; top: 0; width: 1920px; height: 1118px; transform-origin: 0 0; transition: transform var(--zoom-ms) cubic-bezier(.55, 0, .2, 1), opacity 400ms; }
+.world svg.links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.world line.link { stroke: var(--line); stroke-width: 1.5; }
+.world line.flow { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 10 26; opacity: 0; filter: drop-shadow(0 0 6px var(--glow)); }
+.world line.flow[data-on="1"] { opacity: 1; animation: flow 520ms linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -36; } }
+
+/* 자비스 원 */
+.ring { position: absolute; transform: translate(-50%, -50%); aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; background: var(--bg); }
+.ring svg.arcs { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke-linecap: round; overflow: visible; }
+.ring .track { stroke: var(--line); stroke-width: 1; }
+.ring .a { stroke: var(--accent); transform-origin: 100px 100px; }
+.ring .o { stroke-width: 3; stroke-dasharray: 28 72; animation: spin 2.4s linear infinite; }
+.ring .m { stroke-width: 1.5; stroke-dasharray: 12 8 20 60; opacity: .7; animation: spin 3.6s linear infinite reverse; }
+.ring .n { stroke-width: 5; stroke-dasharray: 6 94; opacity: .5; animation: spin 1.6s linear infinite; }
+.ring .ln { position: relative; font-size: 22px; font-weight: 700; text-align: center; transition: opacity 260ms; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.app[data-t="night"] .ring .o { animation-duration: 6s; } .app[data-t="night"] .ring .m { animation-duration: 9s; } .app[data-t="night"] .ring .n { animation-duration: 4s; }
+
+/* 단계 원 */
+.node { position: absolute; transform: translate(-50%, -50%); width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; background: var(--step-idle); color: var(--muted); font-size: 38px; font-weight: 800; font-variant-numeric: tabular-nums; transition: box-shadow 300ms, background 300ms, color 300ms, opacity 300ms; cursor: default; }
+.node[data-s="hot"] { background: var(--step-done); color: var(--text); box-shadow: inset 0 0 0 2px var(--accent), 0 0 28px var(--glow); }
+.node[data-s="done"] { background: var(--step-done); color: var(--pass); box-shadow: inset 0 0 0 1.5px var(--step-done-line); cursor: pointer; }
+.node .num, .node .chk { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity 260ms; }
+.node .chk { opacity: 0; }
+.node .chk svg { width: 50px; height: 50px; fill: none; stroke: var(--pass); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.node .chk path { stroke-dasharray: 40; stroke-dashoffset: 40; }
+.node[data-s="done"] .num { opacity: 0; }
+.node[data-s="done"] .chk { opacity: 1; }
+.node[data-s="done"] .chk path { animation: draw 450ms cubic-bezier(.6,0,.2,1) 150ms forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+/* 완료: 느린 빛이 둘레를 한 바퀴씩 */
+.node .orbit { position: absolute; inset: -3px; border-radius: 50%; opacity: 0; pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0 78%, var(--pass) 92%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px)); }
+.node[data-s="done"] .orbit { opacity: .9; animation: spin 6s linear infinite; }
+/* 완료된 원을 가리키면: 체크 → 숫자, 이름 툴팁 */
+.node[data-s="done"]:hover .chk { opacity: 0; }
+.node[data-s="done"]:hover .num { opacity: 1; color: var(--text); }
+.node .tip { position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%); padding: 4px 12px; border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 600; white-space: nowrap; opacity: 0; transition: opacity 200ms; pointer-events: none; }
+.node[data-s="done"]:hover .tip { opacity: 1; }
+
+/* 초점 층: 1단계 원(실제 크기) + 호 카드 + 오른쪽 안내 */
+.focus { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: transform var(--move-ms) cubic-bezier(.55, 0, .2, 1), opacity 260ms; opacity: 0; pointer-events: none; }
+.focus[data-on="1"] { opacity: 1; pointer-events: auto; }
+.focusRing { position: absolute; left: -225px; top: -225px; width: 450px; height: 450px; border-radius: 50%; background: var(--step-done); box-shadow: inset 0 0 0 2px var(--accent), 0 0 40px var(--glow); display: grid; place-items: center; }
+.focusRing .ttl { position: absolute; top: 140px; left: 0; right: 0; text-align: center; font-size: 40px; font-weight: 800; letter-spacing: -.02em; }
+.focusRing .ttlNum { position: absolute; inset: 0; display: grid; place-items: center; font-size: 142px; font-weight: 800; color: var(--text); transition: opacity 380ms; }
+.focusRing .ttl { transition: opacity 380ms 120ms; }
+.focus[data-titled="0"] .ttl { opacity: 0; } .focus[data-titled="1"] .ttlNum { opacity: 0; }
+.focusRing .sub { position: absolute; top: 205px; left: 50px; right: 50px; text-align: center; color: var(--muted); font-size: 16px; transition: opacity 300ms; }
+.startBtn { position: absolute; top: 270px; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; justify-content: center; height: 56px; padding: 0 30px; border: 1.5px solid var(--primary-border); border-radius: 14px; background: var(--primary-bg); color: var(--primary-text); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; white-space: nowrap; transition: opacity 300ms; }
+.focus[data-started="1"] .startBtn, .focus[data-started="1"] .sub, .focus[data-titled="0"] .startBtn, .focus[data-titled="0"] .sub { opacity: 0; pointer-events: none; }
+
+svg.arcGroup { position: absolute; left: -500px; top: -500px; width: 1000px; height: 1000px; overflow: visible; pointer-events: none; }
+svg.arcGroup g.rot { transform-origin: 500px 500px; transition: transform var(--move-ms) cubic-bezier(.55, 0, .2, 1); }
+svg.arcGroup path { transition: d var(--move-ms) cubic-bezier(.55, 0, .2, 1), fill 300ms, stroke 300ms, opacity 300ms; fill: var(--step-idle); stroke: var(--line); stroke-width: 1.5; }
+svg.arcGroup path[data-s="now"] { fill: var(--step-done); stroke: var(--accent); stroke-width: 2; }
+svg.arcGroup path[data-s="done"] { fill: var(--step-done); stroke: var(--step-done-line); }
+.arcLbl { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font-size: 17px; font-weight: 700; color: var(--muted); transition: left var(--move-ms) cubic-bezier(.55, 0, .2, 1), top var(--move-ms) cubic-bezier(.55, 0, .2, 1), opacity 300ms, color 300ms; pointer-events: none; }
+.arcLbl[data-s="now"] { color: var(--text); font-size: 19px; }
+.arcLbl[data-s="done"] { color: var(--pass); }
+.arcLbl small { display: block; text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+.connector { position: absolute; height: 2px; background: var(--accent); transform-origin: 0 50%; transition: transform 420ms cubic-bezier(.4,0,.2,1) 200ms, opacity 200ms; transform: scaleX(0); opacity: 0; }
+.connector::after { content: ''; position: absolute; right: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.connector[data-on="1"] { transform: scaleX(1); opacity: 1; }
+.panel { position: absolute; width: 620px; transform: translateY(-50%); display: grid; gap: 22px; justify-items: start; opacity: 0; transition: opacity 360ms 380ms; }
+.panel[data-on="1"] { opacity: 1; }
+.panel .kicker { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: .02em; }
+.panel h2 { margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1.3; text-wrap: balance; }
+.panel p { margin: 0; font-size: 18px; color: var(--muted); line-height: 1.6; max-width: 34em; }
+.panel .row { display: flex; gap: 12px; align-items: center; }
+.panel .primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 220px; height: 56px; padding: 0 28px; border: 1.5px solid var(--primary-border); border-radius: 14px; background: var(--primary-bg); color: var(--primary-text); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
+.panel .quiet { height: 56px; padding: 0 22px; border: 1.5px solid var(--line); border-radius: 14px; background: transparent; color: var(--text); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+.panel .status { display: inline-flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; min-height: 28px; }
+.panel .status[data-k="ok"] { color: var(--pass); } .panel .status[data-k="fail"] { color: var(--fail); }
+.mini { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .world, .focus, svg.arcGroup g.rot, svg.arcGroup path, .arcLbl, .connector, .panel { transition-duration: 1ms !important; }
+}
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>촬영 준비 · 자비스 비서 시안 (1단계)</h1>
+    <p>앱 안의 버튼을 눌러 진행해 보세요. 촬영을 준비합니다 → 6단계 원 → 1단계로 다가가기 → 극축 정렬 시작 → SharpCap 실행 → 정렬 확인 → PHD2 재연결 → 돌아오기(완료 표시). 장비 동작은 흉내만 냅니다.</p>
+    <div class="controls">
+      <button class="ctl" id="replay" type="button">처음부터</button>
+      <button class="ctl" id="failToggle" type="button" aria-pressed="false">PHD2 재연결 실패로 보기</button>
+      <span class="stateLbl" id="stateLbl"></span>
+      <span style="flex:1"></span>
+      <span>앱 테마</span>
+      <div class="seg" id="themes" role="radiogroup" aria-label="앱 테마">
+        <button type="button" role="radio" aria-checked="true" data-t="dark">어둡게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="light">밝게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="night">촬영</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="frame"><div class="app" id="app">
+    <div class="bar"><span class="brand">AA</span><span class="ver">v0.0.30</span><span class="prof"><span class="ava"></span>별보는사람</span>
+      <span class="devs"><span class="dev"><span class="dot"></span>WandererBox</span><span class="dev"><span class="dot"></span>OnStep</span><span class="dev"><span class="dot"></span>X-T5</span><span class="dev" id="phd2Dev"><span class="dot"></span><span id="phd2Txt">PHD2</span></span></span>
+      <span class="site"><b>안반데기 주차장</b>위도 37.62° · 경도 128.74°</span><time class="clock">21:48</time>
+      <span class="tsw"><span data-sw="dark">어둡게</span><span data-sw="light">밝게</span><span data-sw="night">촬영</span></span></div>
+
+    <div class="stage" id="stage">
+      <div class="world" id="world">
+        <svg class="links" id="links" viewBox="0 0 1920 1118"></svg>
+        <div class="ring" id="core" style="left:960px;top:540px;width:300px"></div>
+      </div>
+
+      <div class="focus" id="focus" data-titled="0" data-started="0">
+        <svg class="arcGroup" viewBox="0 0 1000 1000"><g class="rot" id="arcRot"></g></svg>
+        <div class="focusRing">
+          <span class="ttlNum">1</span>
+          <span class="ttl">극축 정렬</span>
+          <span class="sub">SharpCap으로 적도의 회전축을 북극에 맞춥니다</span>
+          <button class="startBtn" id="startBtn" type="button">극축 정렬 시작하기</button>
+        </div>
+        <div id="arcLabels"></div>
+      </div>
+
+      <div class="connector" id="connector"></div>
+      <div class="panel" id="panel"></div>
+    </div>
+
+    <nav class="rail" id="rail"></nav>
+  </div></div>
+</div>
+
+<script>
+(function () {
+  var app = document.getElementById('app');
+  var CHECK = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M20 6 9 17l-5-5"/></svg>';
+  var NAMES = ['극축 정렬', '대상 이동', '초점', '센터링', '가이딩', '시험 사진'];
+  var C = { x: 960, y: 540 }, RING = 300, NODE = 120, ORBIT = 330;
+  var nodes = NAMES.map(function (n, i) {
+    var a = (-90 + i * 60) * Math.PI / 180;
+    return { x: C.x + Math.cos(a) * ORBIT, y: C.y + Math.sin(a) * ORBIT, name: n };
+  });
+  var FOCUS_D = RING * 1.5;                 // 1단계 원이 자비스 원의 150%
+  var ZOOM = FOCUS_D / NODE;                // 세계 확대 배율
+  var F0 = { x: 960, y: 530 }, F1 = { x: 560, y: 520 };   // 초점 자리: 가운데 → 왼쪽
+  var R1 = 240, R_PEEK = 272, R_OPEN = 300, R_NOW = 350, R_FOLD = 252, ARC_W = 30, ARC_GAP = 5;
+  var SUB = [
+    { t: 'SharpCap 실행', k: 'SharpCap', h: 'SharpCap으로 극축 정렬을 합니다',
+      p: 'SharpCap이 실행되면 가이드 카메라를 연결한 뒤 극축 정렬을 합니다. 극축 정렬이 끝나면 이 화면으로 돌아와 다음 단계를 계속합니다.', btn: '확인' },
+    { t: '정렬 확인', k: '정렬 확인', h: '극축 정렬을 완료하셨습니까?',
+      p: 'SharpCap에서 정렬을 마쳤다면 눌러 주세요. 다음으로 가이드 카메라를 PHD2에 다시 연결합니다.', btn: '완료했어요' },
+    { t: 'PHD2 재연결', k: 'PHD2 재연결', h: 'PHD2에 다시 연결합니다', p: '' },
+  ];
+
+  // ── 그리기 도우미 ──
+  function ringHTML(text) {
+    return '<svg class="arcs" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="92"/><circle class="a o" cx="100" cy="100" r="92" pathLength="100"/><circle class="a m" cx="100" cy="100" r="80" pathLength="100"/><circle class="a n" cx="100" cy="100" r="70" pathLength="100"/></svg><span class="ln" id="coreTxt">' + text + '</span>';
+  }
+  function sector(a0, a1, r0, r1) {
+    var p = function (r, a) { a = a * Math.PI / 180; return (500 + r * Math.cos(a)).toFixed(1) + ' ' + (500 + r * Math.sin(a)).toFixed(1); };
+    var large = a1 - a0 > 180 ? 1 : 0;
+    return "path('M " + p(r0, a0) + ' L ' + p(r1, a0) + ' A ' + r1 + ' ' + r1 + ' 0 ' + large + ' 1 ' + p(r1, a1) + ' L ' + p(r0, a1) + ' A ' + r0 + ' ' + r0 + ' 0 ' + large + ' 0 ' + p(r0, a0) + " Z')";
+  }
+  var world = document.getElementById('world'), focus = document.getElementById('focus');
+  var links = document.getElementById('links'), core = document.getElementById('core');
+  var arcRot = document.getElementById('arcRot'), arcLabels = document.getElementById('arcLabels');
+  var panel = document.getElementById('panel'), connector = document.getElementById('connector');
+  core.innerHTML = ringHTML('촬영을 준비합니다…');
+
+  links.innerHTML = nodes.map(function (n, i) {
+    var dx = n.x - C.x, dy = n.y - C.y, l = Math.hypot(dx, dy), ux = dx / l, uy = dy / l;
+    var x1 = C.x + ux * (RING / 2 + 6), y1 = C.y + uy * (RING / 2 + 6), x2 = n.x - ux * (NODE / 2 + 6), y2 = n.y - uy * (NODE / 2 + 6);
+    return '<line class="link" x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '"/>' + (i === 0 ? '<line class="flow" id="flow" x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '"/>' : '');
+  }).join('');
+  nodes.forEach(function (n, i) {
+    var el = document.createElement('div');
+    el.className = 'node'; el.id = 'node' + i; el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; el.style.opacity = 0;
+    el.innerHTML = '<span class="orbit"></span><span class="num">' + (i + 1) + '</span><span class="chk"><svg viewBox="0 0 50 50"><path d="M12 26 21 35 38 16"/></svg></span><span class="tip">' + n.name + ' · 사용자 확인 · 12분</span>';
+    world.appendChild(el);
+  });
+  SUB.forEach(function (s, i) {
+    var p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.id = 'arc' + i; arcRot.appendChild(p);
+    var l = document.createElement('span'); l.className = 'arcLbl'; l.id = 'arcLbl' + i; l.textContent = s.t; arcLabels.appendChild(l);
+  });
+
+  // ── 카메라 ──
+  function camOverview() { world.style.transform = 'translate(0px,0px) scale(1)'; }
+  function camFocus(F) { var n = nodes[0]; world.style.transform = 'translate(' + (F.x - n.x * ZOOM) + 'px,' + (F.y - n.y * ZOOM) + 'px) scale(' + ZOOM + ')'; focus.style.transform = 'translate(' + F.x + 'px,' + F.y + 'px)'; }
+
+  // ── 호 카드 배치: 지금 호(cur)가 0°(오른쪽 가운데). cur=-1이면 아래로 삐져나온 상태 ──
+  function arcs(cur, doneUpTo) {
+    var base = cur < 0 ? 90 - (ARC_W + ARC_GAP) : -cur * (ARC_W + ARC_GAP);
+    SUB.forEach(function (s, i) {
+      var mid = base + i * (ARC_W + ARC_GAP), a0 = mid - ARC_W / 2, a1 = mid + ARC_W / 2;
+      var st = i < doneUpTo ? 'done' : i === cur ? 'now' : 'idle';
+      var r1 = cur < 0 ? R_PEEK : st === 'done' ? R_FOLD : i === cur ? R_NOW : R_OPEN;
+      var p = document.getElementById('arc' + i);
+      p.style.d = sector(a0, a1, R1, r1); p.dataset.s = st;
+      p.style.opacity = (cur >= 0 && st === 'done') ? .55 : 1;
+      var l = document.getElementById('arcLbl' + i), rm = (R1 + r1) / 2 + (i === cur ? 0 : 0), a = mid * Math.PI / 180;
+      var lx = Math.cos(a) * (i === cur ? (R1 + R_NOW) / 2 : rm), ly = Math.sin(a) * (i === cur ? (R1 + R_NOW) / 2 : rm);
+      l.style.left = lx + 'px'; l.style.top = ly + 'px'; l.dataset.s = st;
+      l.style.opacity = cur < 0 ? 0 : (st === 'done' ? 0 : (i === cur ? 1 : .55));
+      l.style.fontSize = '';
+    });
+  }
+
+  // ── 오른쪽 안내 ──
+  function showPanel(html, F) {
+    panel.innerHTML = html; panel.style.left = '1120px'; panel.style.top = F.y + 'px'; panel.dataset.on = '1';
+    var x0 = F.x + R_NOW + 12; connector.style.left = x0 + 'px'; connector.style.top = (F.y - 1) + 'px'; connector.style.width = (1096 - x0) + 'px'; connector.dataset.on = '1';
+  }
+  function hidePanel() { panel.dataset.on = '0'; connector.dataset.on = '0'; }
+
+  // ── 진행 ──
+  var timers = [], failMode = false;
+  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+  function lbl(t) { document.getElementById('stateLbl').textContent = t; }
+  function phd2(busy, txt) { document.getElementById('phd2Dev').dataset.busy = busy ? '1' : '0'; document.getElementById('phd2Txt').textContent = txt; }
+
+  function reset() {
+    timers.forEach(clearTimeout); timers = [];
+    camOverview(); focus.dataset.on = '0'; focus.dataset.titled = '0'; focus.dataset.started = '0'; focus.style.transform = 'translate(' + F0.x + 'px,' + F0.y + 'px)';
+    hidePanel(); arcs(-1, 0); phd2(false, 'PHD2');
+    core.style.opacity = 1; document.getElementById('coreTxt').textContent = '촬영을 준비합니다…'; document.getElementById('coreTxt').style.opacity = 1;
+    links.style.opacity = 0;
+    nodes.forEach(function (n, i) { var el = document.getElementById('node' + i); el.style.opacity = 0; el.dataset.s = ''; });
+    document.getElementById('flow').dataset.on = '0';
+    lbl('① 촬영을 준비합니다');
+    // 1) 잠깐 뒤 6단계 원이 퍼져 나오고 이어짐
+    later(function () {
+      document.getElementById('coreTxt').style.opacity = 0;
+      later(function () { document.getElementById('coreTxt').textContent = '1단계로 갑니다'; document.getElementById('coreTxt').style.opacity = 1; }, 260);
+      links.style.transition = 'opacity 400ms'; links.style.opacity = 1;
+      nodes.forEach(function (n, i) { later(function () { document.getElementById('node' + i).style.opacity = 1; }, 120 * i); });
+      lbl('② 6단계 원');
+    }, 1300);
+    // 2) 1단계로 전류가 흐름 → 원이 달아오름
+    later(function () { document.getElementById('flow').dataset.on = '1'; lbl('③ 1단계로 전류가 흐릅니다'); }, 2500);
+    later(function () { document.getElementById('node0').dataset.s = 'hot'; }, 3200);
+    // 3) 카메라가 1단계 원으로 다가감 (원이 자비스 원의 150%)
+    later(function () { camFocus(F0); lbl('④ 1단계로 다가갑니다'); }, 3500);
+    later(function () { focus.dataset.on = '1'; world.style.opacity = .35; }, 3500 + 650);
+    later(function () { focus.dataset.titled = '1'; lbl('⑤ 숫자 → "극축 정렬", 호 카드가 삐져나옴'); }, 3500 + 900);
+  }
+
+  // 시작: 호 그룹이 회전하며 왼쪽으로, 첫 호가 더 튀어나옴
+  document.getElementById('startBtn').addEventListener('click', function () {
+    focus.dataset.started = '1'; camFocus(F1); arcs(0, 0); lbl('⑥ SharpCap 실행');
+    showPanel('<span class="kicker">1 / 3 · SharpCap 실행</span><h2>' + SUB[0].h + '</h2><p>' + SUB[0].p + '</p><div class="row"><button class="primary" id="b1">' + SUB[0].btn + '</button></div>', F1);
+    document.getElementById('b1').onclick = step2;
+  });
+  function step2() {
+    phd2(true, 'PHD2 · SharpCap 사용 중');
+    hidePanel(); later(function () {
+      arcs(1, 1); lbl('⑦ 정렬 확인 (사용자 차례)');
+      showPanel('<span class="kicker">2 / 3 · 정렬 확인</span><h2>' + SUB[1].h + '</h2><p>' + SUB[1].p + '</p><div class="row"><button class="primary" id="b2">' + SUB[1].btn + '</button></div>', F1);
+      document.getElementById('b2').onclick = step3;
+    }, 200);
+  }
+  function step3() {
+    hidePanel(); later(function () {
+      arcs(2, 2); lbl('⑧ PHD2 재연결');
+      showPanel('<span class="kicker">3 / 3 · PHD2 재연결</span><h2>' + SUB[2].h + '</h2><p>SharpCap이 종료되었다면 가이드 카메라를 PHD2에 다시 연결합니다.</p><span class="status" id="st"><span class="mini"></span>연결 중입니다</span><div class="row" id="row3" style="min-height:56px"></div>', F1);
+      later(function () {
+        var st = document.getElementById('st'), row = document.getElementById('row3');
+        if (failMode) {
+          st.dataset.k = 'fail'; st.innerHTML = '연결하지 못했습니다 · SharpCap이 아직 열려 있으면 닫은 뒤 다시 시도해 주세요';
+          row.innerHTML = '<button class="primary" id="retry">다시 시도</button>';
+          document.getElementById('retry').onclick = function () { failMode = false; document.getElementById('failToggle').setAttribute('aria-pressed', 'false'); step3(); };
+        } else {
+          phd2(false, 'PHD2');
+          st.dataset.k = 'ok'; st.innerHTML = CHECK + ' 연결되었습니다';
+          row.innerHTML = '<button class="primary" id="b3">정렬 완료</button>';
+          document.getElementById('b3').onclick = finish;
+        }
+      }, 1600);
+    }, 200);
+  }
+  // 끝: 진입의 역순 → 1단계 원은 완료 표시
+  function finish() {
+    hidePanel(); arcs(3, 3); lbl('⑨ 돌아갑니다');
+    later(function () { arcs(-1, 3); focus.dataset.started = '0'; camFocus(F0); }, 250);
+    later(function () { focus.dataset.titled = '0'; }, 650);
+    later(function () { focus.dataset.on = '0'; world.style.opacity = 1; camOverview(); }, 1050);
+    later(function () {
+      document.getElementById('node0').dataset.s = 'done'; document.getElementById('flow').dataset.on = '0';
+      document.getElementById('coreTxt').style.opacity = 0;
+      later(function () { document.getElementById('coreTxt').textContent = '2단계로 갑니다'; document.getElementById('coreTxt').style.opacity = 1; }, 260);
+      lbl('⑩ 1단계 완료 · 원을 가리키면 숫자와 이름');
+    }, 1050 + 750);
+  }
+
+  document.getElementById('replay').onclick = reset;
+  document.getElementById('failToggle').onclick = function () { failMode = !failMode; this.setAttribute('aria-pressed', String(failMode)); };
+
+  // 레일 + 오른쪽 끝(준비 중단 · 앱 끄기)
+  var st = ['연결', '점검', '계획', '준비', '촬영', '마무리'], now = 3;
+  document.getElementById('rail').innerHTML = st.map(function (s, i) {
+    var k = i < now ? 'done' : i === now ? 'now' : 'todo';
+    return (i ? '<span class="sep" data-on="' + (i <= now ? 1 : 0) + '"></span>' : '') + '<span class="rs" data-s="' + k + '"><span class="mk">' + (k === 'done' ? CHECK : '') + '</span>' + s + '</span>';
+  }).join('') + '<span class="railEnd"><span class="abort"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>준비 중단</span><span><svg class="i" viewBox="0 0 24 24"><path d="M13 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M9 16l-4-4 4-4"/><path d="M5 12h10"/></svg>앱 끄기</span></span>';
+
+  // 테마
+  function setTheme(t) {
+    app.dataset.t = t; app.querySelectorAll('[data-sw]').forEach(function (s) { s.classList.toggle('on', s.dataset.sw === t); });
+    document.querySelectorAll('#themes button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.t === t)); });
+  }
+  document.querySelectorAll('#themes button').forEach(function (b) { b.addEventListener('click', function () { setTheme(b.dataset.t); }); });
+  setTheme('dark');
+
+  function fit() { var f = document.querySelector('.frame'); app.style.setProperty('--s', f.clientWidth / 1920); }
+  fit(); if (window.ResizeObserver) new ResizeObserver(fit).observe(document.body); else window.addEventListener('resize', fit);
+  reset();
+})();
+</script>

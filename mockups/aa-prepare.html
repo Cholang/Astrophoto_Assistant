@@ -1,0 +1,370 @@
+<title>AA 촬영 준비 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<style>
+/* 레이아웃: 설명·테마 선택 → 대표 화면 세 개(1920×1200 기준 화면을 폭에 맞춰 축소).
+   페이지 바깥은 보는 사람의 라이트/다크, 시안 안은 앱 토큰(web/src/index.css) 그대로. */
+:root {
+  --page-bg: #ececea; --page-surface: #f7f7f5; --page-text: #25272a; --page-muted: #62656a; --page-line: #d4d4cf; --page-accent: #9a5c00;
+  --font: 'Pretendard Variable', Pretendard, 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page-bg); color: var(--page-text); font-family: var(--font); font-size: 15px; line-height: 1.6; word-break: keep-all; }
+.page { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 64px; display: grid; gap: 40px; }
+header.top { display: grid; gap: 14px; }
+header.top h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+header.top p { margin: 0; color: var(--page-muted); max-width: 76ch; }
+.decide { margin: 0; padding: 14px 18px 14px 34px; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-surface); font-size: 14px; display: grid; gap: 4px; }
+.controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.controls span { font-size: 13px; color: var(--page-muted); }
+.seg { display: inline-grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-surface); }
+.seg button { min-width: 72px; padding: 5px 14px; border: none; border-radius: 8px; background: transparent; color: var(--page-muted); font: inherit; font-size: 14px; cursor: pointer; }
+.seg button[aria-checked="true"] { background: var(--page-line); color: var(--page-text); font-weight: 700; }
+section.shot { display: grid; gap: 12px; }
+.shot-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.shot-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.shot-head .step { font-size: 13px; font-weight: 700; color: var(--page-accent); }
+.shot-head p { margin: 0; flex-basis: 100%; color: var(--page-muted); font-size: 14px; max-width: 90ch; }
+.frame { width: 100%; max-width: 100%; aspect-ratio: 16 / 10; position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--page-line); }
+
+/* ───────── 앱 (1920×1200) ───────── */
+.app { position: absolute; left: 0; top: 0; width: 1920px; height: 1200px; transform-origin: 0 0; transform: scale(var(--s, 1));
+  display: flex; flex-direction: column; font-family: var(--font); font-size: 15.5px; line-height: 1.6; color: var(--text); background: var(--bg);
+  --radius: 10px; --gutter: 96px; --size-title: 30px; --size-bar: 12.5px; }
+.app, .app[data-t="dark"] { --bg:#1e1f21; --surface:#27292c; --surface-2:#303236; --line:#3b3e42; --text:#ebe8e3; --muted:#a3a09a; --accent:#f0a93b; --on-accent:#231800; --pass:#72bf8e; --fail:#f07a52; --warn:#f0a93b; --primary-bg:#f0a93b; --primary-border:#f0a93b; --primary-text:#231800; --step-idle:#242528; --step-done:#303337; --step-done-line:#5e8f6f; --photo: 1; --dec: #8fb3a0; }
+.app[data-t="light"] { --bg:#f1f1ef; --surface:#fafaf9; --surface-2:#e7e7e4; --line:#d6d6d2; --text:#25272a; --muted:#676a6e; --accent:#b36b00; --on-accent:#fff; --pass:#2f7d4e; --fail:#c24a26; --warn:#a06200; --primary-bg:#b36b00; --primary-border:#b36b00; --primary-text:#fff; --step-idle:#e7e7e4; --step-done:#fff; --step-done-line:#8fb89d; --photo: 1; --dec: #3f7a5b; }
+.app[data-t="night"] { --bg:#000; --surface:#0c0000; --surface-2:#170000; --line:#3c0000; --text:#b80000; --muted:#720000; --accent:#d00000; --on-accent:#000; --pass:#b80000; --fail:#b80000; --warn:#b80000; --primary-bg:#260000; --primary-border:#8a0000; --primary-text:#d00000; --step-idle:#060000; --step-done:#150000; --step-done-line:#6a0000; --photo: .55; --dec: #7a0000; }
+.app svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+.bar { flex: 0 0 44px; display: flex; align-items: center; gap: 20px; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); font-size: var(--size-bar); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar .brand { font-weight: 800; letter-spacing: .04em; color: var(--text); }
+.bar .ver { margin-left: -12px; font-size: 11px; }
+.bar .prof { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.bar .ava { width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); }
+.bar .devs { display: flex; gap: 14px; flex: 1; }
+.bar .dev { display: inline-flex; align-items: center; gap: 6px; }
+.bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pass); }
+.bar .site { color: var(--text); }
+.bar .site b { font-weight: 600; margin-right: 6px; }
+.bar .clock { color: var(--text); }
+.tsw { display: grid; grid-template-columns: repeat(3,1fr); padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); }
+.tsw span { min-width: 56px; padding: 3px 10px; border-radius: 8px; color: var(--muted); text-align: center; }
+.tsw span.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.rail { flex: 0 0 38px; display: flex; align-items: center; justify-content: center; gap: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.rail .rs { display: inline-flex; align-items: center; gap: 6px; }
+.rail .mk { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); }
+.rail .rs[data-s="done"] { color: var(--text); } .rail .rs[data-s="done"] .mk { box-shadow: none; color: var(--pass); font-size: 14px; }
+.rail .rs[data-s="now"] { color: var(--text); font-weight: 700; } .rail .rs[data-s="now"] .mk { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.rail .rs[data-s="now"] .mk::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.rail .sep { width: 28px; height: 2px; border-radius: 1px; background: var(--line); } .rail .sep[data-on="1"] { background: var(--accent); }
+
+/* 준비 화면: 왼쪽 진행 목록 360 | 오른쪽 작업 영역 */
+.prep { flex: 1; display: grid; grid-template-columns: 360px minmax(0, 1fr); min-height: 0; }
+.side { display: grid; grid-template-rows: auto 1fr auto; gap: 18px; padding: 28px 22px 22px 28px; border-right: 1px solid var(--line); min-height: 0; }
+.plan { display: grid; gap: 4px; padding: 14px 16px; border-radius: 12px; background: var(--surface); }
+.plan .lbl { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.plan .tgt { font-size: 18px; font-weight: 700; }
+.plan .meta { font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plan .elapsed { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plan .elapsed b { color: var(--text); font-weight: 600; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; align-content: start; gap: 4px; position: relative; }
+.st { position: relative; display: grid; grid-template-columns: 30px 1fr; column-gap: 12px; padding: 10px 12px; border-radius: 10px; color: var(--muted); }
+.st .ic { grid-row: span 2; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; align-self: start; }
+.st .nm { font-size: 15.5px; font-weight: 600; line-height: 1.35; }
+.st .nm small { margin-left: 6px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.st .res { font-size: 13px; line-height: 1.4; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+.st[data-s="done"] { color: var(--text); }
+.st[data-s="done"] .ic { box-shadow: none; background: var(--step-done); color: var(--pass); box-shadow: inset 0 0 0 1.5px var(--step-done-line); font-size: 16px; }
+.st[data-s="done"] .res { color: var(--muted); }
+.st[data-s="now"], .st[data-s="user"] { background: var(--surface); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+.st[data-s="now"] .ic { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent); }
+.st[data-s="user"] .ic { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.st[data-s="now"] .res, .st[data-s="user"] .res { color: var(--accent); font-weight: 600; }
+.st[data-s="skip"] .nm { text-decoration: line-through; }
+.stop { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border: 1.5px solid var(--line); border-radius: var(--radius); color: var(--muted); font-weight: 600; font-size: 14px; }
+
+.work { display: grid; grid-template-rows: auto minmax(0, 2fr) minmax(0, 1fr) auto; gap: 18px; padding: 28px var(--gutter) 22px 40px; min-height: 0; }
+.wHead { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 16px; }
+.wHead h1 { margin: 0; font-size: var(--size-title); font-weight: 700; letter-spacing: -.01em; line-height: 1.3; }
+.wHead .now { grid-column: 1 / -1; margin: 0; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 16px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+.chip.auto { background: var(--surface); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.chip.user { background: var(--accent); color: var(--on-accent); }
+.chip.fail { background: transparent; color: var(--fail); box-shadow: inset 0 0 0 1.5px var(--fail); }
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); }
+.big, .low { position: relative; border-radius: 14px; background: var(--surface); min-height: 0; overflow: hidden; }
+.low { display: grid; gap: 18px; background: transparent; }
+.low.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.panel { position: relative; border-radius: 14px; background: var(--surface); padding: 18px 20px; min-height: 0; overflow: hidden; }
+.panel h3 { margin: 0 0 10px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.simTag { position: absolute; right: 12px; top: 10px; z-index: 2; padding: 2px 8px; border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 11.5px; font-weight: 600; box-shadow: inset 0 0 0 1px var(--line); }
+.actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-height: 52px; }
+.actions .hint { margin-right: auto; color: var(--muted); font-size: 14px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 200px; height: 48px; padding: 0 26px; border: 1.5px solid var(--primary-border); border-radius: var(--radius); background: var(--primary-bg); color: var(--primary-text); font-weight: 700; font-size: 16px; }
+.btn.q { min-width: 0; background: transparent; border-color: var(--line); color: var(--text); font-weight: 600; }
+.btn.off { opacity: .4; }
+canvas.photo { display: block; width: 100%; height: 100%; filter: url(#red-only) brightness(var(--photo)); }
+.app:not([data-t="night"]) canvas.photo { filter: none; }
+
+/* 극축정렬 */
+.todo { list-style: none; margin: 0; padding: 26px 30px; display: grid; gap: 14px; align-content: start; counter-reset: t; }
+.todo li { display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: start; font-size: 17px; }
+.todo li .n { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--surface-2); font-weight: 700; font-size: 15px; }
+.todo li small { display: block; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.todo li[data-on="1"] .n { background: var(--accent); color: var(--on-accent); }
+.extApp { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; }
+.extApp .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--step-done); box-shadow: inset 0 0 0 1.5px var(--step-done-line); font-weight: 700; }
+.extApp .badge i { width: 9px; height: 9px; border-radius: 50%; background: var(--pass); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-weight: 600; }
+
+/* 가이딩 */
+.phases { display: flex; gap: 6px; flex-wrap: wrap; }
+.phases span { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.phases span[data-s="done"] { color: var(--text); }
+.phases span[data-s="done"]::before { content: '✓'; color: var(--pass); font-weight: 700; }
+.phases span[data-s="now"] { color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); font-weight: 700; }
+.graph { position: absolute; inset: 0; }
+.graph svg { width: 100%; height: 100%; }
+.graph text { font-family: var(--font); font-size: 13px; fill: var(--muted); }
+.legend { position: absolute; left: 22px; top: 16px; display: flex; gap: 18px; font-size: 13px; color: var(--muted); z-index: 2; }
+.legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.metric { display: grid; gap: 2px; }
+.metric .v { font-size: 44px; font-weight: 800; letter-spacing: -.02em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.metric .v small { font-size: 18px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.metric .ref { font-size: 14px; color: var(--muted); }
+.verdict { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 6px 14px; border-radius: 999px; background: var(--step-done); box-shadow: inset 0 0 0 1.5px var(--step-done-line); color: var(--pass); font-weight: 700; justify-self: start; }
+.ai { margin-top: 10px; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.ai b { color: var(--text); font-weight: 600; }
+.mini { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 22px; margin-top: 12px; font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; justify-content: start; }
+.mini b { color: var(--text); font-weight: 600; }
+.starBox { position: absolute; inset: 44px 20px 18px; display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center; }
+.starBox canvas { width: 220px; height: 220px; border-radius: 10px; }
+
+/* 시험 사진 */
+.loupe { position: absolute; width: 230px; height: 230px; border-radius: 50%; box-shadow: 0 0 0 2px var(--accent), 0 12px 30px rgb(0 0 0 / .5); overflow: hidden; pointer-events: none; }
+.loupe canvas { width: 100%; height: 100%; }
+.loupeTag { position: absolute; z-index: 3; padding: 2px 8px; border-radius: 6px; background: var(--bg); color: var(--text); font-size: 12px; font-weight: 600; }
+.photoNote { position: absolute; left: 14px; bottom: 12px; z-index: 2; padding: 4px 10px; border-radius: 8px; background: color-mix(in srgb, var(--bg) 80%, transparent); color: var(--muted); font-size: 13px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="red-only"><feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></svg>
+
+<div class="page">
+  <header class="top">
+    <h1>AA 촬영 준비 시안</h1>
+    <p>준비 화면을 쉐브론 7칸에서 <b>왼쪽 진행 목록 + 오른쪽 작업 영역</b>으로 바꾸는 시안입니다. Codex 리뷰(CX-PREP-UI-07) 추천대로 성격이 다른 대표 화면 세 개를 먼저 비교합니다. 사진·그래프·수치는 모두 시뮬레이션 예시입니다.</p>
+    <ol class="decide">
+      <li>왼쪽 목록 폭 360px: 위 계획 요약·경과 시간 → 7단계(상태 아이콘, 이름, 결과 한 줄) → 맨 아래 "준비 중단"</li>
+      <li>오른쪽: 제목 + 상태 표시(자동 / 사용자 차례 / 실패) + 지금 하는 일 한 줄 → 큰 자료(약 2/3) → 보조 자료·핵심 수치(약 1/3) → 버튼 줄(항상 같은 자리, 주 버튼 오른쪽)</li>
+      <li>촬영(적색) 테마: 사진은 빨강 채널만 + 밝기 55%, 그래프 선도 빨강 계열</li>
+    </ol>
+    <div class="controls" role="radiogroup" aria-label="앱 테마">
+      <span>앱 테마</span>
+      <div class="seg" id="themes">
+        <button type="button" role="radio" aria-checked="true" data-t="dark">어둡게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="light">밝게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="night">촬영</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">대표 1</span><h2>① 극축정렬 · 다른 프로그램에서 하는 사용자 작업</h2>
+      <p>SharpCap 화면은 가져올 수 없으므로, 큰 영역에는 할 일 순서를 크게 보여 주고 지금 할 차례를 강조합니다. 아래에는 SharpCap 상태와 경과 시간. 목표 숫자는 없습니다(AA가 오차를 재지 않음).</p></div>
+    <div class="frame"><div class="app" data-screen="polar"></div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">대표 2</span><h2>⑥ 가이딩 · 계속 들어오는 측정값</h2>
+      <p>큰 영역은 가이딩 그래프(적경·적위 오차, 가로 2분), 기준선은 주 카메라 한 픽셀. 아래 왼쪽은 PHD2가 잡은 가이드 별 확대, 오른쪽은 핵심 수치와 판정. 세부 진행(별 고르기 → 캘리브레이션 → 안정 → 측정 → 판정)은 제목 아래 칩으로. 판정 뒤에는 사용자 차례가 되고 주 버튼은 "이 상태로 계속".</p></div>
+    <div class="frame"><div class="app" data-screen="guide"></div></div>
+  </section>
+
+  <section class="shot">
+    <div class="shot-head"><span class="step">대표 3</span><h2>⑦ 시험 사진 · 사진을 보고 확정</h2>
+      <p>사진을 오른쪽 영역 거의 전체로 크게. 마우스를 올린 곳을 원래 크기로 보여 주는 돋보기(별 모양 확인용). 아래에는 노출 정보와 별 수·별 크기(화질 판정은 아직 없음). 주 버튼 "촬영 시작", 보조 "다시 찍기"·"다시 센터링".</p></div>
+    <div class="frame"><div class="app" data-screen="test"></div></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var CHECK = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M20 6 9 17l-5-5"/></svg>';
+  var STEPS = [
+    ['극축정렬', 'SharpCap', '사용자 확인 · 12분'],
+    ['가이드 연결', 'PHD2', '연결됨'],
+    ['대상 이동', 'M31', 'M31로 이동 · 고도 42°'],
+    ['초점', '자동초점', '별 크기 2.1 · 위치 12,340'],
+    ['센터링', 'N.I.N.A.', '오차 0.4′ · 카메라 방향 87°'],
+    ['가이딩', 'PHD2', '0.9″ (기준 2.4″) · 충분'],
+    ['시험 사진', '180초', ''],
+  ];
+  // 화면별: 지금 단계, 그 단계 상태(now=자동 진행, user=사용자 차례), 진행 중 한 줄
+  var SCREENS = {
+    polar: { cur: 0, s: 'user', curRes: 'SharpCap에서 작업 중' , elapsed: ['00:12:04', '00:12:04'] },
+    guide: { cur: 5, s: 'user', curRes: '판정: 충분 · 확인 기다림', elapsed: ['00:31:40', '00:04:12'] },
+    test:  { cur: 6, s: 'user', curRes: '사진 확인 기다림', elapsed: ['00:34:05', '00:03:10'] },
+  };
+
+  function bar() {
+    return '<div class="bar"><span class="brand">AA</span><span class="ver">v0.0.30</span><span class="prof"><span class="ava"></span>별보는사람</span>' +
+      '<span class="devs">' + ['WandererBox', 'OnStep', 'X-T5', 'PHD2'].map(function (n) { return '<span class="dev"><span class="dot"></span>' + n + '</span>'; }).join('') + '</span>' +
+      '<span class="site"><b>안반데기 주차장</b>위도 37.62° · 경도 128.74°</span><time class="clock">21:48</time>' +
+      '<span class="tsw"><span data-sw="dark">어둡게</span><span data-sw="light">밝게</span><span data-sw="night">촬영</span></span></div>';
+  }
+  function rail() {
+    var st = ['연결', '점검', '계획', '준비', '촬영', '마무리'], now = 3;
+    return '<nav class="rail">' + st.map(function (s, i) {
+      var k = i < now ? 'done' : i === now ? 'now' : 'todo';
+      return (i ? '<span class="sep" data-on="' + (i <= now ? 1 : 0) + '"></span>' : '') + '<span class="rs" data-s="' + k + '"><span class="mk">' + (k === 'done' ? CHECK : '') + '</span>' + s + '</span>';
+    }).join('') + '</nav>';
+  }
+  function side(cfg) {
+    var list = STEPS.map(function (s, i) {
+      var k = i < cfg.cur ? 'done' : i === cfg.cur ? cfg.s : 'todo';
+      var ic = k === 'done' ? CHECK : String(i + 1);
+      var res = k === 'done' ? s[2] : i === cfg.cur ? cfg.curRes : '';
+      return '<li class="st" data-s="' + k + '"><span class="ic">' + ic + '</span><span class="nm">' + s[0] + '<small>' + s[1] + '</small></span><span class="res">' + res + '</span></li>';
+    }).join('');
+    return '<aside class="side"><div class="plan"><span class="lbl">오늘 계획</span><span class="tgt">M31 안드로메다</span><span class="meta">180초 × 약 40장 · ISO 800 · 04:55 종료</span>' +
+      '<div class="elapsed"><span>준비 <b>' + cfg.elapsed[0] + '</b></span><span>이 단계 <b>' + cfg.elapsed[1] + '</b></span></div></div>' +
+      '<ol class="steps">' + list + '</ol><span class="stop"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>준비 중단</span></aside>';
+  }
+
+  var BODY = {
+    polar: '<div class="work">' +
+      '<div class="wHead"><h1>SharpCap에서 극축정렬을 해 주세요</h1><span class="chip user">사용자 차례</span>' +
+        '<p class="now">AA는 가이드 카메라를 SharpCap에 넘겨주고 기다리는 중입니다.</p></div>' +
+      '<div class="big"><ol class="todo">' +
+        '<li data-on="0"><span class="n">1</span><span>SharpCap에서 가이드 카메라를 연결합니다<small>카메라 목록에서 가이드 카메라 이름을 고릅니다</small></span></li>' +
+        '<li data-on="0"><span class="n">2</span><span>별이 흐리면 가이드 망원경 초점을 맞춥니다<small>별이 작고 또렷한 점이 되면 충분합니다</small></span></li>' +
+        '<li data-on="1"><span class="n">3</span><span>도구 → 극축 정렬을 실행해 안내대로 맞춥니다<small>적도의를 90° 돌리라고 하면 SharpCap 안내를 따르세요</small></span></li>' +
+        '<li data-on="0"><span class="n">4</span><span>끝나면 SharpCap을 닫고 아래 버튼을 누릅니다<small>둘 다 되면 다음 단계로 넘어갑니다 (순서는 상관없음)</small></span></li>' +
+      '</ol></div>' +
+      '<div class="low two">' +
+        '<div class="panel"><h3>SharpCap</h3><div class="extApp"><span class="badge"><i></i>열려 있음</span><span style="color:var(--muted);font-size:14px">닫히면 자동으로 알아챕니다</span></div>' +
+          '<p style="margin:16px 0 0;color:var(--muted);font-size:14px;line-height:1.5">SharpCap 화면은 AA로 가져올 수 없습니다. 정렬 오차는 SharpCap에서 확인해 주세요.</p></div>' +
+        '<div class="panel"><h3>이 단계</h3><dl class="kv"><dt>경과 시간</dt><dd>12분 04초</dd><dt>가이드 카메라</dt><dd>SharpCap 사용 중 (PHD2에서 놓음)</dd><dt>결과</dt><dd>사용자 확인으로 기록</dd></dl></div>' +
+      '</div>' +
+      '<div class="actions"><span class="hint">SharpCap을 닫고 버튼을 누르면 가이드 카메라를 PHD2에 다시 연결합니다</span><span class="btn q off">SharpCap 다시 열기</span><span class="btn">극축정렬을 마쳤어요</span></div>' +
+    '</div>',
+
+    guide: '<div class="work">' +
+      '<div class="wHead"><h1>가이딩이 충분히 안정적이에요</h1><span class="chip user">사용자 차례</span>' +
+        '<div class="now phases"><span data-s="done">별 고르기</span><span data-s="done">캘리브레이션</span><span data-s="done">안정되기</span><span data-s="done">측정 2분</span><span data-s="now">판정 확인</span></div></div>' +
+      '<div class="big"><span class="simTag">시뮬레이션 예시</span><div class="legend"><span><i style="background:var(--accent)"></i>적경 오차</span><span><i style="background:var(--dec)"></i>적위 오차</span><span><i style="background:transparent;border-top:2px dashed var(--muted);height:0"></i>기준 ±2.4″ (주 카메라 한 픽셀)</span></div><div class="graph" data-guide-graph></div></div>' +
+      '<div class="low two">' +
+        '<div class="panel"><span class="simTag">시뮬레이션 예시</span><h3>가이드 별 (PHD2)</h3><div class="starBox"><canvas class="photo" width="220" height="220" data-star></canvas>' +
+          '<dl class="kv"><dt>별 밝기</dt><dd>신호 대 잡음 42</dd><dt>별 잃음</dt><dd>0번</dd><dt>캘리브레이션</dt><dd>오늘 밤 21:40</dd></dl></div></div>' +
+        '<div class="panel"><h3>가이딩 오차 (최근 2분)</h3><div class="metric"><span class="v">0.92<small>″</small></span><span class="ref">기준 2.4″ 이하 = 충분 · 3.6″ 이하 = 지켜보기</span></div>' +
+          '<div class="mini"><span>적경 <b>0.61″</b></span><span>적위 <b>0.69″</b></span><span>최대 <b>2.1″</b></span></div>' +
+          '<span class="verdict">' + CHECK + '충분해요</span>' +
+          '<p class="ai"><b>AI 설명</b> · 적위 오차가 적경보다 조금 크지만 기준의 40% 수준이라 별 모양에 영향이 거의 없습니다.</p></div>' +
+      '</div>' +
+      '<div class="actions"><span class="hint">판정은 AA 규칙(주 카메라 픽셀 기준), 설명은 AI. 확정은 직접 해 주세요</span><span class="btn q">다시 재기</span><span class="btn">이 상태로 계속</span></div>' +
+    '</div>',
+
+    test: '<div class="work" style="grid-template-rows:auto minmax(0,1fr) auto auto">' +
+      '<div class="wHead"><h1>시험 사진을 확인해 주세요</h1><span class="chip user">사용자 차례</span>' +
+        '<p class="now">별이 둥글고 대상이 가운데에 있으면 촬영을 시작하세요.</p></div>' +
+      '<div class="big"><span class="simTag">시뮬레이션 예시</span><canvas class="photo" width="1400" height="760" data-photo></canvas>' +
+        '<div class="loupe" style="left:880px;top:150px"><canvas class="photo" width="230" height="230" data-loupe></canvas></div>' +
+        '<span class="loupeTag" style="left:952px;top:390px">원래 크기</span>' +
+        '<span class="photoNote">마우스를 올린 곳을 원래 크기로 보여 줍니다</span></div>' +
+      '<div class="low" style="grid-template-columns:repeat(4,1fr)">' +
+        '<div class="panel"><h3>노출</h3><div class="metric"><span class="v" style="font-size:30px">180<small>초</small></span><span class="ref">ISO 800 · 광해 필터</span></div></div>' +
+        '<div class="panel"><h3>별 수</h3><div class="metric"><span class="v" style="font-size:30px">312<small>개</small></span><span class="ref">구름이 끼면 줄어듭니다</span></div></div>' +
+        '<div class="panel"><h3>별 크기</h3><div class="metric"><span class="v" style="font-size:30px">2.3<small>픽셀</small></span><span class="ref">초점 직후 2.1</span></div></div>' +
+        '<div class="panel"><h3>가운데 오차</h3><div class="metric"><span class="v" style="font-size:30px">0.4<small>′</small></span><span class="ref">센터링 결과</span></div></div>' +
+      '</div>' +
+      '<div class="actions"><span class="hint">화질 판정은 아직 하지 않습니다 (숫자만)</span><span class="btn q">다시 센터링</span><span class="btn q">다시 찍기</span><span class="btn">촬영 시작</span></div>' +
+    '</div>',
+  };
+
+  document.querySelectorAll('[data-screen]').forEach(function (app) {
+    var k = app.dataset.screen;
+    app.innerHTML = bar() + '<main class="prep">' + side(SCREENS[k]) + BODY[k] + '</main>' + rail();
+  });
+
+  // ── 그림: 고정 시드 난수 ──
+  function rnd(seed) { return function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }; }
+
+  // 가이딩 그래프 (SVG, 2분 = 120점)
+  document.querySelectorAll('[data-guide-graph]').forEach(function (g) {
+    var W = 1260, H = 470, L = 56, R = 20, T = 50, B = 40, r = rnd(11);
+    var y = function (v) { return T + (H - T - B) / 2 - v * (H - T - B) / 2 / 4; };
+    var x = function (i) { return L + i * (W - L - R) / 119; };
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">';
+    [-4, -2.4, 0, 2.4, 4].forEach(function (v) {
+      s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"' + (Math.abs(v) === 2.4 ? ' stroke-dasharray="6 5" stroke="var(--muted)"' : '') + '/>';
+      s += '<text x="' + (L - 10) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + (v > 0 ? '+' : '') + v + '″</text>';
+    });
+    [0, 30, 60, 90, 120].forEach(function (t) { s += '<text x="' + x(t * 119 / 120) + '" y="' + (H - 12) + '" text-anchor="middle">' + (t === 120 ? '지금' : '-' + (120 - t) + '초') + '</text>'; });
+    function path(amp, seed, col) {
+      var rr = rnd(seed), v = 0, d = '';
+      for (var i = 0; i < 120; i++) { v = v * .55 + (rr() - .5) * amp; d += (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); }
+      return '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round"/>';
+    }
+    s += path(2.2, 5, 'var(--accent)') + path(2.5, 9, 'var(--dec)');
+    g.innerHTML = s + '</svg>';
+  });
+
+  // 별 그리기 (가우스)
+  function star(ctx, x0, y0, sig, amp) {
+    var rad = Math.ceil(sig * 4), img = ctx.getImageData(x0 - rad, y0 - rad, rad * 2, rad * 2), d = img.data;
+    for (var yy = 0; yy < rad * 2; yy++) for (var xx = 0; xx < rad * 2; xx++) {
+      var dx = xx - rad, dy = yy - rad, v = amp * Math.exp(-(dx * dx + dy * dy) / (2 * sig * sig)), p = (yy * rad * 2 + xx) * 4;
+      d[p] = Math.min(255, d[p] + v); d[p + 1] = Math.min(255, d[p + 1] + v * .97); d[p + 2] = Math.min(255, d[p + 2] + v * .92);
+    }
+    ctx.putImageData(img, x0 - rad, y0 - rad);
+  }
+  // 가이드 별 확대
+  document.querySelectorAll('[data-star]').forEach(function (c) {
+    var ctx = c.getContext('2d'), r = rnd(3);
+    ctx.fillStyle = '#0b0b0c'; ctx.fillRect(0, 0, 220, 220);
+    var img = ctx.getImageData(0, 0, 220, 220);
+    for (var i = 0; i < img.data.length; i += 4) { var n = 12 + r() * 14; img.data[i] = img.data[i + 1] = img.data[i + 2] = n; }
+    ctx.putImageData(img, 0, 0);
+    star(ctx, 112, 106, 7, 230);
+    ctx.strokeStyle = '#72bf8e'; ctx.lineWidth = 2; ctx.strokeRect(80, 74, 64, 64);
+  });
+  // 시험 사진 (은하 + 별) 과 돋보기
+  function sky(c, scale, ox, oy) {
+    var ctx = c.getContext('2d'), w = c.width, h = c.height, r = rnd(21);
+    ctx.fillStyle = '#121214'; ctx.fillRect(0, 0, w, h);
+    // 은하 (기울어진 타원 빛)
+    ctx.save(); ctx.translate((700 - ox) * scale, (380 - oy) * scale); ctx.rotate(-0.6);
+    var g = ctx.createRadialGradient(0, 0, 0, 0, 0, 330 * scale); g.addColorStop(0, 'rgba(255,240,220,.9)'); g.addColorStop(.12, 'rgba(230,210,190,.45)'); g.addColorStop(.5, 'rgba(160,150,150,.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.scale(1, .3); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 330 * scale, 0, 7); ctx.fill(); ctx.restore();
+    for (var i = 0; i < 520; i++) {
+      var x = r() * 1400, y = r() * 760, b = r(), sx = (x - ox) * scale, sy = (y - oy) * scale;
+      var sig = (0.7 + b * b * 1.6) * scale, amp = 70 + b * 185;
+      if (sx < -20 || sy < -20 || sx > w + 20 || sy > h + 20) continue;
+      star(ctx, Math.round(sx), Math.round(sy), Math.max(.6, sig), amp);
+    }
+  }
+  document.querySelectorAll('[data-photo]').forEach(function (c) { sky(c, 1, 0, 0); });
+  document.querySelectorAll('[data-loupe]').forEach(function (c) { sky(c, 3.2, 1000 - 230 / 6.4, 250 - 230 / 6.4); });
+
+  // 테마
+  var apps = document.querySelectorAll('.app');
+  function setTheme(t) {
+    apps.forEach(function (a) { a.dataset.t = t; a.querySelectorAll('[data-sw]').forEach(function (s) { s.classList.toggle('on', s.dataset.sw === t); }); });
+    document.querySelectorAll('#themes button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.t === t)); });
+    try { localStorage.setItem('aa-prep-theme', t); } catch (e) {}
+  }
+  document.querySelectorAll('#themes button').forEach(function (b) { b.addEventListener('click', function () { setTheme(b.dataset.t); }); });
+  var saved = 'dark'; try { saved = localStorage.getItem('aa-prep-theme') || 'dark'; } catch (e) {}
+  setTheme(saved);
+
+  function fit() { document.querySelectorAll('.frame').forEach(function (f) { f.firstElementChild.style.setProperty('--s', f.clientWidth / 1920); }); }
+  fit();
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(document.body); else window.addEventListener('resize', fit);
+})();
+</script>

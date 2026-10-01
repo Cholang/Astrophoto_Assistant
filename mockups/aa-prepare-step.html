@@ -1,0 +1,158 @@
+<title>AA 촬영 준비 단계 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<style>
+/* 레이아웃: 설명·테마 선택 → 1단계 화면 시안(1920×1200 기준 화면을 폭에 맞춰 축소).
+   한 화면 = 목표 하나 (윈도우 첫 설치 화면 방식). 시안 안은 앱 토큰(web/src/index.css) 그대로. */
+:root {
+  --page-bg: #ececea; --page-surface: #f7f7f5; --page-text: #25272a; --page-muted: #62656a; --page-line: #d4d4cf; --page-accent: #9a5c00;
+  --font: 'Pretendard Variable', Pretendard, 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page-bg); color: var(--page-text); font-family: var(--font); font-size: 15px; line-height: 1.6; word-break: keep-all; }
+.page { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 64px; display: grid; gap: 28px; }
+header.top { display: grid; gap: 12px; }
+header.top h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+header.top p { margin: 0; color: var(--page-muted); max-width: 78ch; }
+.controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.controls span { font-size: 13px; color: var(--page-muted); }
+.seg { display: inline-grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-surface); }
+.seg button { min-width: 72px; padding: 5px 14px; border: none; border-radius: 8px; background: transparent; color: var(--page-muted); font: inherit; font-size: 14px; cursor: pointer; }
+.seg button[aria-checked="true"] { background: var(--page-line); color: var(--page-text); font-weight: 700; }
+.frame { width: 100%; max-width: 100%; aspect-ratio: 16 / 10; position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--page-line); }
+
+.app { position: absolute; left: 0; top: 0; width: 1920px; height: 1200px; transform-origin: 0 0; transform: scale(var(--s, 1));
+  display: flex; flex-direction: column; font-family: var(--font); font-size: 15.5px; line-height: 1.6; color: var(--text); background: var(--bg);
+  --radius: 10px; --gutter: 96px; --size-bar: 12.5px; }
+.app, .app[data-t="dark"] { --bg:#1e1f21; --surface:#27292c; --surface-2:#303236; --line:#3b3e42; --text:#ebe8e3; --muted:#a3a09a; --accent:#f0a93b; --on-accent:#231800; --pass:#72bf8e; --step-done-line:#5e8f6f; --step-done:#303337; --primary-bg:#f0a93b; --primary-border:#f0a93b; --primary-text:#231800; }
+.app[data-t="light"] { --bg:#f1f1ef; --surface:#fafaf9; --surface-2:#e7e7e4; --line:#d6d6d2; --text:#25272a; --muted:#676a6e; --accent:#b36b00; --on-accent:#fff; --pass:#2f7d4e; --step-done-line:#8fb89d; --step-done:#fff; --primary-bg:#b36b00; --primary-border:#b36b00; --primary-text:#fff; }
+.app[data-t="night"] { --bg:#000; --surface:#0c0000; --surface-2:#170000; --line:#3c0000; --text:#b80000; --muted:#720000; --accent:#d00000; --on-accent:#000; --pass:#b80000; --step-done-line:#6a0000; --step-done:#150000; --primary-bg:#260000; --primary-border:#8a0000; --primary-text:#d00000; }
+.app svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+.bar { flex: 0 0 44px; display: flex; align-items: center; gap: 20px; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); font-size: var(--size-bar); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar .brand { font-weight: 800; letter-spacing: .04em; color: var(--text); }
+.bar .ver { margin-left: -12px; font-size: 11px; }
+.bar .prof { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.bar .ava { width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); }
+.bar .devs { display: flex; gap: 14px; flex: 1; }
+.bar .dev { display: inline-flex; align-items: center; gap: 6px; }
+.bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pass); }
+.bar .site { color: var(--text); } .bar .site b { font-weight: 600; margin-right: 6px; }
+.bar .clock { color: var(--text); }
+.tsw { display: grid; grid-template-columns: repeat(3,1fr); padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); }
+.tsw span { min-width: 56px; padding: 3px 10px; border-radius: 8px; color: var(--muted); text-align: center; }
+.tsw span.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.rail { flex: 0 0 38px; display: flex; align-items: center; justify-content: center; gap: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.rail .rs { display: inline-flex; align-items: center; gap: 6px; }
+.rail .mk { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); }
+.rail .rs[data-s="done"] { color: var(--text); } .rail .rs[data-s="done"] .mk { box-shadow: none; color: var(--pass); font-size: 14px; }
+.rail .rs[data-s="now"] { color: var(--text); font-weight: 700; } .rail .rs[data-s="now"] .mk { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.rail .rs[data-s="now"] .mk::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.rail .sep { width: 28px; height: 2px; border-radius: 1px; background: var(--line); } .rail .sep[data-on="1"] { background: var(--accent); }
+
+/* ── 준비 한 단계: 가운데 한 줄기 ── */
+.step { position: relative; flex: 1; display: grid; justify-items: center; align-content: center; gap: 0; padding: 40px var(--gutter) 56px; }
+.stop { position: absolute; left: var(--gutter); top: 36px; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1.5px solid var(--line); border-radius: var(--radius); color: var(--muted); font-size: 14px; font-weight: 600; }
+.progress { display: grid; justify-items: center; gap: 12px; margin-bottom: 30px; }
+.progress .lbl { font-size: 15px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.progress .lbl b { color: var(--accent); }
+.dots { display: flex; gap: 10px; }
+.dots i { width: 34px; height: 5px; border-radius: 3px; background: var(--line); }
+.dots i[data-s="now"] { background: var(--accent); }
+.dots i[data-s="done"] { background: var(--pass); }
+h1.title { margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -.02em; line-height: 1.25; text-align: center; text-wrap: balance; }
+.lead { margin: 14px 0 0; font-size: 18px; color: var(--muted); text-align: center; }
+
+/* 할 일: 한 장의 카드 안에 번호 순서 */
+.todo { list-style: none; margin: 44px 0 0; padding: 30px 40px; width: 760px; border-radius: 16px; background: var(--surface); display: grid; gap: 22px; }
+.todo li { display: grid; grid-template-columns: 40px 1fr; gap: 18px; align-items: start; font-size: 19px; font-weight: 600; line-height: 1.4; }
+.todo li .n { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--surface-2); font-size: 17px; font-weight: 800; color: var(--text); }
+.todo li small { display: block; margin-top: 4px; font-size: 14.5px; font-weight: 400; color: var(--muted); }
+
+/* 상태 한 줄: SharpCap 열림 · 경과 */
+.status { display: flex; align-items: center; gap: 14px; margin-top: 26px; min-height: 32px; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.badge { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; background: var(--step-done); box-shadow: inset 0 0 0 1.5px var(--step-done-line); color: var(--text); font-weight: 700; }
+.badge i { width: 8px; height: 8px; border-radius: 50%; background: var(--pass); }
+
+/* 주 버튼: 가운데, 크게 */
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 360px; height: 60px; margin-top: 30px; padding: 0 36px; border: 1.5px solid var(--primary-border); border-radius: 14px; background: var(--primary-bg); color: var(--primary-text); font-size: 19px; font-weight: 800; }
+.after { margin-top: 12px; font-size: 14px; color: var(--muted); min-height: 1.6em; }
+.more { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; font-size: 14px; color: var(--muted); font-weight: 600; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>촬영 준비 · 1단계 시안</h1>
+    <p>한 화면에 목표 하나(윈도우 첫 설치 화면 방식). 가운데 한 줄기로: 진행 표시 → 큰 제목 → 짧은 설명 → 할 일 → 상태 한 줄 → 큰 주 버튼 → 자세히. 기준 화면 1920×1200, 값은 예시입니다.</p>
+    <div class="controls" role="radiogroup" aria-label="앱 테마">
+      <span>앱 테마</span>
+      <div class="seg" id="themes">
+        <button type="button" role="radio" aria-checked="true" data-t="dark">어둡게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="light">밝게</button>
+        <button type="button" role="radio" aria-checked="false" data-t="night">촬영</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="frame"><div class="app">
+    <div class="bar"><span class="brand">AA</span><span class="ver">v0.0.30</span><span class="prof"><span class="ava"></span>별보는사람</span>
+      <span class="devs"><span class="dev"><span class="dot"></span>WandererBox</span><span class="dev"><span class="dot"></span>OnStep</span><span class="dev"><span class="dot"></span>X-T5</span><span class="dev"><span class="dot"></span>PHD2</span></span>
+      <span class="site"><b>안반데기 주차장</b>위도 37.62° · 경도 128.74°</span><time class="clock">21:48</time>
+      <span class="tsw"><span data-sw="dark">어둡게</span><span data-sw="light">밝게</span><span data-sw="night">촬영</span></span></div>
+
+    <main class="step">
+      <span class="stop"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>준비 중단</span>
+
+      <div class="progress">
+        <span class="lbl"><b>1</b> / 7 · 극축정렬</span>
+        <span class="dots"><i data-s="now"></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+
+      <h1 class="title">SharpCap에서 극축정렬을 해 주세요</h1>
+      <p class="lead">가이드 카메라를 SharpCap에 넘겨 두었어요. 끝나면 이 화면으로 돌아오세요.</p>
+
+      <ol class="todo">
+        <li><span class="n">1</span><span>SharpCap에서 가이드 카메라를 연결합니다<small>카메라 목록에서 가이드 카메라 이름을 고릅니다</small></span></li>
+        <li><span class="n">2</span><span>별이 흐리면 가이드 망원경 초점을 맞춥니다<small>별이 작고 또렷한 점이 되면 충분합니다</small></span></li>
+        <li><span class="n">3</span><span>도구 메뉴의 극축 정렬을 안내대로 진행합니다<small>적도의를 돌리라고 하면 SharpCap 안내를 따르세요</small></span></li>
+        <li><span class="n">4</span><span>SharpCap을 닫습니다<small>가이드 카메라를 PHD2가 다시 쓸 수 있게 됩니다</small></span></li>
+      </ol>
+
+      <div class="status"><span class="badge"><i></i>SharpCap 열려 있음</span><span>12분 04초째</span></div>
+
+      <span class="primary">극축정렬을 마쳤어요</span>
+      <span class="after">SharpCap을 닫으면 다음 단계(가이드 연결)로 넘어갑니다</span>
+
+      <span class="more"><svg class="i" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>자세히 · SharpCap 다시 열기, 극축정렬이 처음이라면</span>
+    </main>
+
+    <nav class="rail"></nav>
+  </div></div>
+</div>
+
+<script>
+(function () {
+  var CHECK = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M20 6 9 17l-5-5"/></svg>';
+  var st = ['연결', '점검', '계획', '준비', '촬영', '마무리'], now = 3;
+  document.querySelector('.rail').innerHTML = st.map(function (s, i) {
+    var k = i < now ? 'done' : i === now ? 'now' : 'todo';
+    return (i ? '<span class="sep" data-on="' + (i <= now ? 1 : 0) + '"></span>' : '') + '<span class="rs" data-s="' + k + '"><span class="mk">' + (k === 'done' ? CHECK : '') + '</span>' + s + '</span>';
+  }).join('');
+  var app = document.querySelector('.app');
+  function setTheme(t) {
+    app.dataset.t = t;
+    app.querySelectorAll('[data-sw]').forEach(function (s) { s.classList.toggle('on', s.dataset.sw === t); });
+    document.querySelectorAll('#themes button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.t === t)); });
+  }
+  document.querySelectorAll('#themes button').forEach(function (b) { b.addEventListener('click', function () { setTheme(b.dataset.t); }); });
+  setTheme('dark');
+  function fit() { var f = document.querySelector('.frame'); app.style.setProperty('--s', f.clientWidth / 1920); }
+  fit();
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(document.body); else window.addEventListener('resize', fit);
+})();
+</script>
