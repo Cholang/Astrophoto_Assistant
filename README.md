@@ -17,14 +17,16 @@ N.I.N.A. 위에서 동작하는 천체사진 촬영 비서. 개인용 프로토�
 - 문장 속 조사(이/가, 을/를, 은/는, 과/와)는 이름의 마지막 글자에 맞춰 자동으로 바뀐다. 영문·숫자는 읽는 소리로 판단 (예: "AA가", "AL이")
 - 코드에서는 웹 `PRODUCT`(`web/src/product.ts`), .NET `Astro.Core.Product`를 쓴다
 
-- 기획: [nina-ai-assistant-plan.md](nina-ai-assistant-plan.md)
+- 기획: [nina-ai-assistant-plan.md](docs/nina-ai-assistant-plan.md)
 - 앱 흐름: [flow.mmd](flow.mmd)
-- 구조와 온보딩: [onboarding-and-architecture.md](onboarding-and-architecture.md)
-- NINA 사전 준비: [nina-prerequisites.md](nina-prerequisites.md)
-- API 대응표: [api-coverage.md](api-coverage.md)
+- 구조와 온보딩: [onboarding-and-architecture.md](docs/onboarding-and-architecture.md)
+- NINA 사전 준비: [nina-prerequisites.md](docs/nina-prerequisites.md)
+- API 대응표: [api-coverage.md](docs/api-coverage.md)
 - 화면 시안: [mockups/aa-screens.html](mockups/aa-screens.html) (브라우저로 열기)
 - 대화 기록: [conversations/](conversations/) — 새 세션은 가장 최근 파일의 "다음 세션에서 이어서 하려면"부터
 - 변경 기록: [HISTORY.md](HISTORY.md) — 커밋마다 "요청 / 변경 / 확인" 요약 (리뷰용)
+- 화면 규칙: [DESIGN.md](DESIGN.md)
+- Codex 리뷰·요청서: [docs/codex/](docs/codex/) — 리뷰 결과는 [REVIEW_CODEX.md](docs/codex/REVIEW_CODEX.md)
 
 ## 구성
 

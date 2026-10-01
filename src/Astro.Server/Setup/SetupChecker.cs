@@ -27,7 +27,7 @@ public sealed class SetupOptions
 /// <summary>
 /// 0단계 설치 확인. 파일과 레지스트리만 본다 — 아무것도 실행하지 않는다.
 /// 지금은 사용자 환경(PHD2 가이딩, ASTAP 솔버)에 맞춰 5개 모두 필수로 본다.
-/// 다른 가이더·솔버를 쓰는 사람 대응은 배포 단계 과제 (onboarding-and-architecture.md).
+/// 다른 가이더·솔버를 쓰는 사람 대응은 배포 단계 과제 (docs/onboarding-and-architecture.md).
 /// </summary>
 public sealed class SetupChecker(IOptions<NinaOptions> nina, IOptions<SetupOptions> setup)
 {

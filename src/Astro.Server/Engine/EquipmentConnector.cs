@@ -99,7 +99,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     private const CheckSeverity Recommended = CheckSeverity.Recommended;
     private const CheckSeverity Optional = CheckSeverity.Optional;
 
-    /// <summary>연결 순서: 허브가 다른 장비에 전원을 주므로 가장 먼저 (onboarding-and-architecture.md 4.2).</summary>
+    /// <summary>연결 순서: 허브가 다른 장비에 전원을 주므로 가장 먼저 (docs/onboarding-and-architecture.md 4.2).</summary>
     // Fix: 연결에 실패했을 때 상태 옆 ? 툴팁에 보여 줄 해결 방법 (장비마다 다르게)
     private static readonly Slot[] Slots =
     [

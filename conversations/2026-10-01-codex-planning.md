@@ -72,7 +72,7 @@
 
 - 자연어 응답만으로 실행 가능하다고 판단하지 않는다. UI에서 숨긴 미지원 기능은 생성 시퀀스에서도 제외한다.
 - ‘필터 없음’과 ‘필터 미확인’, ‘회전 없음’과 ‘회전각 0°’처럼 실행 의미가 다른 값을 구분한다.
-- [api-coverage.md](../api-coverage.md)의 템플릿 로드·대상 설정 방향을 참고했다. 해당 문서에 남은 시퀀스 세부 수정·JSON 로드 확인 과제를 해결했다고 주장하지 않는다.
+- [api-coverage.md](../docs/api-coverage.md)의 템플릿 로드·대상 설정 방향을 참고했다. 해당 문서에 남은 시퀀스 세부 수정·JSON 로드 확인 과제를 해결했다고 주장하지 않는다.
 - 실제 장비 검증은 이후 일괄 수행하는 현재 개발 단계를 유지한다. 이번 상담은 코드 리뷰나 구현 완료 판정이 아니다.
 
 ## 7. Git 작업과 이번 기록 범위
@@ -96,4 +96,4 @@
 - [N.I.N.A. 로테이터·Manual Rotator](https://nighttime-imaging.eu/docs/master/site/tabs/equipment/rotator/)
 - [N.I.N.A. Advanced Sequencer 트리거](https://nighttime-imaging.eu/docs/master/site/sequencer/advanced/triggers/)
 - [Advanced API 저장소](https://github.com/christian-photo/ninaAPI)
-- [프로젝트 API 대응표](../api-coverage.md)
+- [프로젝트 API 대응표](../docs/api-coverage.md)

@@ -2,7 +2,7 @@
 
 > 작성일: 2026-09-28 (집 PC에서 논의)
 > 앱 이름: **AA (Astrophoto Assistant)** — 가칭
-> 관련 문서: [기획서](nina-ai-assistant-plan.md) · [사전 준비](nina-prerequisites.md) · [API 대응표](api-coverage.md) · [플로우](flow.mmd)
+> 관련 문서: [기획서](nina-ai-assistant-plan.md) · [사전 준비](nina-prerequisites.md) · [API 대응표](api-coverage.md) · [플로우](../flow.mmd)
 
 ---
 

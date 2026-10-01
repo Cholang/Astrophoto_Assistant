@@ -28,9 +28,15 @@
 - 커밋 해시는 커밋 뒤에야 알 수 있으므로, 다음 커밋 때 바로 앞 항목 제목에 해시를 붙인다.
 - HISTORY.md는 Claude와 Codex가 함께 쓴다. 내 항목 제목에는 `[Claude]`, Codex 항목은 `[Codex]`로 표시한다. 다른 쪽 항목은 바로 앞 항목에 해시를 붙이는 것 말고는 고치지 않는다.
 
+## 문서 위치
+
+- 저장소 맨 위에는 README.md · CLAUDE.md · AGENTS.md · DESIGN.md · HISTORY.md만 둔다.
+- 기획·조사 자료는 `docs/`(기획서, 구조와 온보딩, NINA 사전 준비, API 대응표), Codex와 주고받는 문서는 `docs/codex/`, 대화 기록은 `conversations/`.
+- 새 문서가 필요하면 만들어도 되지만 위 위치에 맞추고, 기존 문서에 절을 더하는 것으로 충분한지 먼저 본다. 검토가 끝난 임시 문서(예: `docs/PREPARE_SCREEN_CONTENT.md`)는 내용을 DESIGN.md 등에 합치고 지운다.
+
 ## 리뷰 규칙 (Claude 구현 → GPT Codex 리뷰)
 
-- Codex의 리뷰 결과는 [REVIEW_CODEX.md](REVIEW_CODEX.md)에 있다. 사용자가 "리뷰 검토해 줘", "리뷰했어" 등으로 말하면 이 파일을 읽는다.
+- Codex의 리뷰 결과는 [docs/codex/REVIEW_CODEX.md](docs/codex/REVIEW_CODEX.md)에 있다. 사용자가 "리뷰 검토해 줘", "리뷰했어" 등으로 말하면 이 파일을 읽는다.
 - 리뷰를 바로 반영하지 않는다. 항목마다 내 판단(동의·반대·이미 처리됨·사용자 결정 필요)과 근거를 사용자에게 먼저 말하고, 논의해서 정한 것만 적용한다.
 - 적용한 뒤에는 HISTORY.md 항목에 어떤 리뷰(ID)를 어떻게 적용했는지, 적용하지 않은 것은 이유를 남긴다.
 - REVIEW_CODEX.md에는 끝의 "처리 및 재리뷰 기록" 표만 채운다: 항목마다 한 줄(상태 — 반영 / 반영 안 함 / 후속 단계 / 결정 대기, 근거 한 문장, 커밋 해시). 자세한 변경은 HISTORY.md에만 쓰고, Codex가 쓴 리뷰 본문과 재리뷰 칸은 고치지 않는다.
