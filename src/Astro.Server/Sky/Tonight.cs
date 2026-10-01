@@ -42,7 +42,7 @@ public sealed class TonightService(NinaApiClient nina, IHttpClientFactory httpFa
         var site = new Site(Num("AstrometrySettings", "Latitude"), Num("AstrometrySettings", "Longitude"), Num("AstrometrySettings", "Elevation"));
         var camera = Str("CameraSettings", "LastDeviceName");
         var paren = camera.IndexOf(" (", StringComparison.Ordinal);
-        // 경통은 AA의 경통 목록이 기준 (N.I.N.A.에도 써 넣지만, 아직 안 썼을 수 있으니 여기서 직접)
+        // 망원경은 AA의 망원경 목록이 기준 (N.I.N.A.에도 써 넣지만, 아직 안 썼을 수 있으니 여기서 직접)
         var scope = optics.Current;
         var rig = new Rig(
             scope?.Name ?? Str("TelescopeSettings", "Name"),

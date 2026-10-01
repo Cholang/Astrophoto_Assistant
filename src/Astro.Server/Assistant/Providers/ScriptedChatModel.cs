@@ -136,7 +136,7 @@ public sealed class ScriptedChatModel(Func<ShootingPlan> plan) : IChatModel
             }
 
             case "set_framing":
-                return ("좋아요. 오늘 경통에 어떤 필터를 끼우셨나요?", [Offer("settings", FilterChoices)]);
+                return ("좋아요. 오늘 망원경에 어떤 필터를 끼우셨나요?", [Offer("settings", FilterChoices)]);
 
             case "recommend_settings":
             {

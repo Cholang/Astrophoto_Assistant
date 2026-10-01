@@ -28,9 +28,10 @@ const LINK_MIN = 40 // 가운데 원과 장비 원 사이 최소 간격 (px). �
 // 자동 진행 (DESIGN.md 3장 "장비 연결"): 4초 막대, "장비 변경"은 3.5초까지만 받는다
 const ADVANCE_MS = 4000
 const CHANGE_UNTIL_MS = 3500
+const SLOW_RATE = 0.3 // 변경 버튼을 가리키는 동안 막대가 흐르는 배속
 const ABSORB_MS = 960 // 원들이 가운데 원 뒤로 흡수되는 시간·펼쳐지는 시간 (CSS와 같게)
 const LIST_ROOM = 310 // 드라이버 목록 폭 280 + 간격 (CSS와 같게)
-/** 경통 (서버 EquipmentConnector.Scope): 드라이버 목록 대신 경통 목록을 연다 */
+/** 망원경 (서버 EquipmentConnector.Scope): 드라이버 목록 대신 망원경 목록을 연다 */
 const SCOPE = 'scope'
 
 type Mode = 'connect' | 'edit'
@@ -148,28 +149,41 @@ function EquipmentGraph({
     })
   }, [box, shrinkFrom, from])
 
-  // ── 자동 진행: 모두 되면 4초 막대. 그동안 "장비 변경"을 누르면 멈춘다 ─────────
+  // ── 자동 진행: 모두 되면 4초 막대. 그동안 "장비 변경"을 누르면 변경 모드로 ─────────
   const counting = mode === 'connect' && phase === 'connect' && allPass
   const [late, setLate] = useState(false) // 3.5초가 지났으면 "장비 변경"을 받지 않는다
-  // 막대·관측지 문장 위에 마우스를 올리면 멈춘다 (2026-10-01 사용자 결정). 멈춘 동안 흐른 시간은 빼고 이어서
-  const [paused, setPaused] = useState(false)
-  const elapsed = useRef(0)
+  // "장비 변경"·관측지 "변경" 버튼을 가리키는(또는 포커스) 동안은 시간이 0.3배로 흐른다 (2026-10-01 사용자 결정, 멈춤 대신)
+  const slow = useRef(false)
+  const fillRef = useRef<HTMLDivElement>(null)
+  const slowProps = {
+    onPointerEnter: () => (slow.current = true),
+    onPointerLeave: () => (slow.current = false),
+    onFocus: () => (slow.current = true),
+    onBlur: () => (slow.current = false),
+  }
+  const elapsed = useRef(0) // 막대가 흐른 시간(배속 반영). 장비 목록이 바뀌어 효과가 다시 돌아도 이어서
   useEffect(() => {
+    const fill = fillRef.current
     if (!counting) {
       elapsed.current = 0
       setLate(false)
+      if (fill) fill.style.width = '0%'
       return
     }
-    if (paused) return
-    const startedAt = performance.now()
-    const lateTimer = setTimeout(() => setLate(true), Math.max(0, CHANGE_UNTIL_MS - elapsed.current))
-    const goTimer = setTimeout(() => onContinue(items, { changeSite: false }), Math.max(0, ADVANCE_MS - elapsed.current))
-    return () => {
-      clearTimeout(lateTimer)
-      clearTimeout(goTimer)
-      elapsed.current += performance.now() - startedAt
+    // 흐른 시간을 프레임마다 배속을 곱해 더하고, 막대 길이도 같은 값으로 그린다
+    let last = performance.now()
+    let frame = 0
+    const tick = (now: number) => {
+      elapsed.current += (now - last) * (slow.current ? SLOW_RATE : 1)
+      last = now
+      if (fill) fill.style.width = `${Math.min(100, (elapsed.current / ADVANCE_MS) * 100)}%`
+      if (elapsed.current >= CHANGE_UNTIL_MS) setLate(true)
+      if (elapsed.current >= ADVANCE_MS) return onContinue(items, { changeSite: false })
+      frame = requestAnimationFrame(tick)
     }
-  }, [counting, paused, items, onContinue])
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [counting, items, onContinue])
 
   // ── 모드 전환: 원들이 가운데로 흡수됐다가 다른 배치로 펼쳐진다 ─────────
   const [returned, setReturned] = useState(false) // 한 번이라도 모드를 바꿨으면 원이 기다리지 않고 나타난다
@@ -191,6 +205,7 @@ function EquipmentGraph({
 
   const startEdit = () => {
     if (mode !== 'connect' || late) return
+    slow.current = false // 버튼이 "변경 완료"로 바뀌어 가리킴이 끝났다는 알림을 못 받으므로
     changed.current.clear()
     switchMode('edit')
   }
@@ -252,7 +267,7 @@ function EquipmentGraph({
               : `장비 ${without.length}개 없이 진행합니다`
           : state === 'failed'
             ? hubFailed
-              ? '전원 허브를 먼저 연결해 주세요'
+              ? '전원 허브를\n먼저 연결해 주세요'
               : `연결되지 않은 장비가\n${missing}개 있습니다`
             : '장비 연결 중입니다'
 
@@ -350,9 +365,12 @@ function EquipmentGraph({
                 className={styles.ring}
                 action={
                   mode === 'connect' ? (
-                    <button type="button" className={styles.quiet} onClick={startEdit} disabled={!done || late || phase !== 'connect'}>
-                      장비 변경
-                    </button>
+                    // 막대가 도는 동안 가리키면 시간이 느리게 흐른다. 버튼이 꺼져도 가리킨 상태를 놓치지 않게 감싼 칸에서 받는다
+                    <span className={styles.slowZone} {...slowProps}>
+                      <button type="button" className={styles.quiet} onClick={startEdit} disabled={!done || late || phase !== 'connect'}>
+                        장비 변경
+                      </button>
+                    </span>
                   ) : (
                     <button type="button" className={styles.primary} onClick={finishEdit} disabled={phase !== 'edit'}>
                       변경 완료
@@ -431,9 +449,15 @@ function EquipmentGraph({
                   aria-label={absent ? `${item.title}: 등록되지 않음` : `${item.title} ${item.term ?? ''}: ${statusText(item)}`}
                 >
                   {absent ? (
-                    <span className={styles.smallIcon}>
-                      <DeviceIcon kind={item.id} />
-                    </span>
+                    <>
+                      <span className={styles.smallIcon}>
+                        <DeviceIcon kind={item.id} />
+                      </span>
+                      {/* 가리키면 원 위에 장비 종류 이름 (2026-10-01 사용자 결정) */}
+                      <span className={styles.nodeTip} aria-hidden="true">
+                        {item.title}
+                      </span>
+                    </>
                   ) : (
                     <>
                       <span className={styles.kind}>{item.title}</span>
@@ -445,7 +469,7 @@ function EquipmentGraph({
                       </span>
                       {/* 연결 안 된 원을 가리키면(hover·포커스): 이름·경고 대신 가운데에 다시 연결 아이콘 (준필수는 그 아래 "없이 진행") */}
                       {canPick && (
-                        <span className={styles.hoverBody}>
+                        <span className={styles.hoverBody} data-without={item.status === 'Fail' && item.severity === 'Recommended'}>
                           <button
                             type="button"
                             className={styles.retryIcon}
@@ -481,8 +505,8 @@ function EquipmentGraph({
       </div>
 
       {/* 아래: 지금 관측지 문장 + 진행 막대. 높이는 고정이라 무엇이 보이든 위의 원들은 움직이지 않는다.
-          막대가 도는 동안에만 문장이 보이고, 가리키면 막대가 멈춘다 */}
-      <div className={styles.bottom} onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)}>
+          막대가 도는 동안에만 문장·막대가 보이고, "변경"을 가리키면 막대가 느려진다 */}
+      <div className={styles.bottom}>
         <div className={styles.siteLine} data-shown={counting && site !== undefined} data-none={!site?.current}>
           {site?.current ? (
             <>
@@ -490,7 +514,7 @@ function EquipmentGraph({
                 현재 관측지는 <b className={styles.siteCoord}>{coordText(site.current)}</b>
                 {site.name && ` (${site.name})`}입니다
               </span>
-              <button type="button" className={styles.siteChange} onClick={() => onContinue(items, { changeSite: true })} disabled={!counting}>
+              <button type="button" className={styles.siteChange} onClick={() => onContinue(items, { changeSite: true })} disabled={!counting} {...slowProps}>
                 변경
               </button>
             </>
@@ -498,9 +522,9 @@ function EquipmentGraph({
             <span>현재 관측지가 없습니다</span>
           )}
         </div>
-        {/* 4초 진행 막대: 모두 되면 차오르고, 다 차면 다음 단계로 */}
-        <div className={styles.progress} aria-hidden="true">
-          <div className={styles.progressFill} data-running={counting} data-paused={paused} key={counting ? 'run' : 'stop'} />
+        {/* 4초 진행 막대: 모두 연결되면 나타나 차오르고, 다 차면 다음 단계로. 그 전·변경 모드에서는 자리만 둔다. 길이는 위 효과가 그린다 */}
+        <div className={styles.progress} data-shown={counting} aria-hidden="true">
+          <div ref={fillRef} className={styles.progressFill} />
         </div>
       </div>
 
@@ -806,7 +830,7 @@ function editLayout(items: CheckItem[], w: number, h: number, screenX?: (frac: n
     [-120, 60],
     [-30, 30, 150, 210],
   ]
-  // 경통은 필수지만 사용자가 정한 적도의·카메라 자리를 바꾸지 않게 따로: 가운데 원 바로 위
+  // 망원경은 필수지만 사용자가 정한 적도의·카메라 자리를 바꾸지 않게 따로: 가운데 원 바로 위
   const byTier = [0, 1, 2].map((t) => items.filter((i) => i.id !== SCOPE && tierOf(i) === t))
   const nodes = items.map((item) => {
     if (item.id === SCOPE) return { x: cx, y: cy - ry[1], d }

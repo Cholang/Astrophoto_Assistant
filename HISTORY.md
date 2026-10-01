@@ -8,7 +8,29 @@
 
 ---
 
-## 2026-10-01 · [Claude] 리뷰 처리 결과 기록 규칙
+## 2026-10-01 · [Claude] 장비 연결 화면 다듬기, 경통 → 망원경, 리프트 공통 규칙
+
+**요청**
+- 장비 연결: 진행 막대는 모두 연결됐을 때만(변경 모드에서는 숨김), 멈춤 대신 "변경" 버튼을 가리키는 동안 0.3배속, 다시 연결 아이콘 두 배, 허브 문구 줄바꿈, 망원경 원은 이름만, 등록 안 된 작은 원에 종류 이름표 + 떠오름, 연결된 원도 떠오름
+- 화면 문구 "경통"을 모두 "망원경"으로. 떠오름(lift)을 공통 규칙으로 하되 나중의 앱 전체 공간감 작업과 부딪히지 않게
+- 규칙: 수정을 시작하면 실행 중인 AA를 먼저 종료
+
+**변경**
+- `EquipmentScreen.tsx`: 진행 막대를 CSS 애니메이션 → `requestAnimationFrame`으로 직접 그림(`elapsed`·`slow`·`SLOW_RATE`), `slowProps`를 "장비 변경"(감싼 `slowZone`)·관측지 "변경"에. 작은 원 `nodeTip`, `hoverBody[data-without]`
+- `EquipmentScreen.module.css`: `.progress[data-shown]`, `.retryIcon` 크기, 연결된 원·작은 원 hover lift, `.nodeTip`
+- `index.css`: 공통 토큰 `--lift`·`--lift-ms`, 테마별 `--lift-shadow`
+- `EquipmentConnector.cs`: 슬롯 이름 "망원경", 칸 글씨는 이름만. 그 밖의 "경통" 문구·주석을 "망원경"으로 (ScopeList·PreflightScreen·OpticsStore·ScriptedChatModel·flow.mmd 등)
+- DESIGN.md 3장(장비 연결·관측지 막대·망원경), 6장 "업계 용어보다 일상어", 9장 lift 공통 규칙. CLAUDE.md "실행 중인 앱"
+
+**확인**
+- 헤드리스 1920×1200(연습 대화·시뮬레이션): 연결 중 막대 숨김, 모두 연결 뒤 600ms에 15%·"장비 변경" 가리키면 4.6%(≈0.3배), 연결된 원·작은 원 lift(transform 확인), 작은 원 이름표 "필터휠", 실패 시 아이콘 99~112px로 원 안에 들어감, 허브 문구 두 줄, 점검 화면 "망원경 캡"·"망원경 밸런스" 안 잘림, 전 화면 스크롤 없음
+- 실제 앱 창에서는 아직 못 봄
+
+**남은 것**: 앱 전체 공간감(z축) 검토 때 lift를 그 체계로 흡수
+
+---
+
+## 2026-10-01 · ad79424 [Claude] 리뷰 처리 결과 기록 규칙
 
 **요청**
 - Codex 리뷰를 반영한 결과를 REVIEW_CODEX.md에도 남길지 → 짧게 남기기로

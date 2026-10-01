@@ -112,7 +112,7 @@ public static class AppServer
         api.MapPost("/equipment/select", async (RigSelect input, RigSetup rig, CancellationToken ct) =>
             await rig.SelectAsync(input.Kind, input.DeviceId, input.Name, ct) is { } result ? Results.Ok(result) : Results.BadRequest());
 
-        // 경통 목록 (장비 변경 모드의 경통 원). 고르기는 /equipment/select (kind=scope)
+        // 망원경 목록 (장비 변경 모드의 망원경 원). 고르기는 /equipment/select (kind=scope)
         api.MapGet("/optics", (OpticsStore optics) =>
         {
             var (scopes, currentId) = optics.List();

@@ -119,8 +119,8 @@ public sealed class RigSetup(NinaApiClient nina, RigOverrides overrides, LiveDev
     public async Task<RigSelectResult?> SelectAsync(string kind, string? deviceId, string? name, CancellationToken ct)
     {
         if (EquipmentConnector.FindSlot(kind) is not { } slot) return null;
-        if (deviceId is null && slot.Tier == CheckSeverity.Required) return null; // 카메라·적도의·경통은 제거할 수 없다
-        // 경통: 목록에서 고르기만 (N.I.N.A.에는 "변경 완료" 뒤 다시 확인할 때 써 넣는다)
+        if (deviceId is null && slot.Tier == CheckSeverity.Required) return null; // 카메라·적도의·망원경은 제거할 수 없다
+        // 망원경: 목록에서 고르기만 (N.I.N.A.에는 "변경 완료" 뒤 다시 확인할 때 써 넣는다)
         if (kind == EquipmentConnector.Scope)
             return optics.Use(deviceId!) && await connector.DescribeAsync(kind, ct) is { } scopeItem ? new RigSelectResult(scopeItem, null) : null;
         var choice = deviceId is null ? null : new RigChoice(deviceId, string.IsNullOrWhiteSpace(name) ? deviceId : name);

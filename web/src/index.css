@@ -26,6 +26,7 @@
   --step-hover: #2a2c30;
   --step-done: #303337;
   --step-done-line: #5e8f6f;
+  --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.35);
   color-scheme: dark;
 }
 
@@ -50,6 +51,7 @@
   --step-hover: #e0e0dc;
   --step-done: #ffffff;
   --step-done-line: #8fb89d;
+  --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.14);
   color-scheme: light;
 }
 
@@ -76,6 +78,7 @@
   --step-hover: #0e0000;
   --step-done: #150000;
   --step-done-line: #6a0000;
+  --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
 
@@ -91,6 +94,10 @@
   --gutter: clamp(20px, 6vw, 96px);
   /* 하단 단계 레일 높이 (모든 화면 같은 높이) */
   --rail-h: 38px;
+  /* 공간감(z축): 지금은 "가리키면 살짝 떠오름" 한 단계만 (DESIGN.md 9장). 나중에 앱 전체 높이 단계를 정하면 이 토큰들을 그 체계의 한 단계로 바꾼다.
+     그림자 색은 테마마다 위에서 (--lift-shadow) */
+  --lift: translateY(-4px) scale(1.04);
+  --lift-ms: 180ms;
 
   font-family: var(--font);
   font-size: var(--size-body);

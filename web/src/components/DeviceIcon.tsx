@@ -10,7 +10,7 @@ const ICONS = {
   rotator: Rotate3d,
   flatdevice: Sun,
   guider: Crosshair,
-  // 경통(광학): 연결 장비가 아니라 AA의 경통 목록 — 조리개 모양
+  // 망원경(광학): 연결 장비가 아니라 AA의 망원경 목록 — 조리개 모양
   scope: Aperture,
 } as const
 

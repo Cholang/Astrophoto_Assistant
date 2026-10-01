@@ -14,7 +14,7 @@ interface Item {
 const ITEMS: Item[] = [
   {
     title: '적도의 시작 위치',
-    question: '경통은 북극성 쪽, 균형추는 아래를 향하게 두었나요?',
+    question: '망원경은 북극성 쪽, 균형추는 아래를 향하게 두었나요?',
     pic: (
       <>
         <path className={styles.acc} d="M50 8l1.6 3.4 3.7.4-2.8 2.5.8 3.7-3.3-1.9-3.3 1.9.8-3.7-2.8-2.5 3.7-.4z" />
@@ -28,8 +28,8 @@ const ITEMS: Item[] = [
     ),
   },
   {
-    title: '경통 캡',
-    question: '경통 앞 뚜껑과 가이드 경통 뚜껑을 모두 열었나요?',
+    title: '망원경 캡',
+    question: '망원경 앞 뚜껑과 가이드 망원경 뚜껑을 모두 열었나요?',
     pic: (
       <>
         <rect x="10" y="24" width="30" height="16" rx="3" />
@@ -55,8 +55,8 @@ const ITEMS: Item[] = [
     ),
   },
   {
-    title: '경통 밸런스',
-    question: '클러치를 풀었을 때 경통이 어느 쪽으로도 쏠리지 않나요?',
+    title: '망원경 밸런스',
+    question: '클러치를 풀었을 때 망원경이 어느 쪽으로도 쏠리지 않나요?',
     pic: (
       <>
         <path d="M32 40l-7 12h14z" />
@@ -85,7 +85,7 @@ const ITEMS: Item[] = [
   },
   {
     title: '이슬 방지 열선',
-    question: '경통 끝과 가이드 경통에 열선을 감고 허브에 연결했나요?',
+    question: '망원경 끝과 가이드 망원경에 열선을 감고 허브에 연결했나요?',
     tag: '제안 항목',
     pic: (
       <>

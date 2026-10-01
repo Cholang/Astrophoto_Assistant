@@ -107,9 +107,9 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             "허브의 12V 전원 어댑터와 PC로 가는 USB 케이블을 확인해 주세요. 허브가 켜져야 다른 장비에도 전원이 들어갑니다."),
         new("mount", "TelescopeSettings", Required, "적도의", "망원경을 움직이고 별을 따라 돌려 주는 받침대입니다.",
             "적도의 전원과 케이블(USB·네트워크)을 확인해 주세요. 무선으로 연결한다면 PC가 적도의의 와이파이에 연결되어 있는지도 확인해 주세요."),
-        // 경통: 연결되는 장비가 아니라 AA의 경통 목록(OpticsStore)에서 고른 것. 초점거리가 있어야 화각·플레이트 솔빙이 된다 (2026-10-01)
-        new(Scope, "", Required, "경통", "빛을 모으는 망원경(또는 렌즈)입니다. 초점거리와 F값으로 화각과 노출을 계산합니다.",
-            "아래 \"장비 변경\"에서 경통 원을 눌러 쓰는 경통을 고르거나 추가해 주세요."),
+        // 망원경: 연결되는 장비가 아니라 AA의 망원경 목록(OpticsStore)에서 고른 것. 초점거리가 있어야 화각·플레이트 솔빙이 된다 (2026-10-01)
+        new(Scope, "", Required, "망원경", "빛을 모으는 망원경(또는 렌즈)입니다. 초점거리와 F값으로 화각과 노출을 계산합니다.",
+            "아래 \"장비 변경\"에서 망원경 원을 눌러 쓰는 망원경을 고르거나 추가해 주세요."),
         new("camera", "CameraSettings", Required, "카메라", "사진을 찍는 카메라입니다.",
             "카메라 전원과 USB 케이블을 확인하고, 카메라의 PC 연결 방식이 테더링(PC 촬영)으로 되어 있는지 확인해 주세요."),
         new("focuser", "FocuserSettings", Recommended, "포커서", "초점을 자동으로 맞춰 주는 모터입니다. 없으면 초점을 손으로 맞춥니다.",
@@ -118,7 +118,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             "필터휠 전원과 USB 케이블을 확인해 주세요."),
         new("rotator", "RotatorSettings", Optional, "회전장치", "카메라를 돌려 구도의 각도를 맞춰 주는 장치입니다. 없으면 손으로 돌립니다.",
             "회전장치 전원과 USB 케이블을 확인해 주세요."),
-        new("flatdevice", "FlatDeviceSettings", Optional, "플랫패널", "플랫(밝기 고르게 맞추기용 사진)을 찍을 때 경통 앞을 고르게 비추는 판입니다.",
+        new("flatdevice", "FlatDeviceSettings", Optional, "플랫패널", "플랫(밝기 고르게 맞추기용 사진)을 찍을 때 망원경 앞을 고르게 비추는 판입니다.",
             "플랫패널 전원과 USB 케이블을 확인해 주세요."),
         new("guider", "GuiderSettings", Recommended, "가이딩", "보조 카메라로 별을 지켜보며 흔들림을 바로잡습니다. 없으면 노출을 짧게 찍습니다.",
             "PHD2가 켜져 있는지, PHD2 안에서 가이드 카메라와 적도의가 연결되어 있는지 확인해 주세요."),
@@ -212,11 +212,11 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     {
         if (d.Absent) return Make(d, CheckStatus.Absent, "");
 
-        // 경통: 연결 대신 고른 경통의 초점거리·F값을 N.I.N.A.에 써 넣는다 (시뮬레이션이어도 — N.I.N.A.가 화각·솔빙에 쓴다)
+        // 망원경: 연결 대신 고른 망원경의 초점거리·F값을 N.I.N.A.에 써 넣는다 (시뮬레이션이어도 — N.I.N.A.가 화각·솔빙에 쓴다)
         if (d.Slot.Kind == Scope)
         {
             if (optics.Current is not { } scope)
-                return Make(d, CheckStatus.Fail, "등록된 경통이 없습니다", new Diagnosis([], d.Slot.Fix));
+                return Make(d, CheckStatus.Fail, "등록된 망원경이 없습니다", new Diagnosis([], d.Slot.Fix));
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             await nina.ChangeProfileValueAsync("TelescopeSettings-FocalLength", Math.Round(scope.EffectiveFocalLength, 1).ToString(inv), ct);
             await nina.ChangeProfileValueAsync("TelescopeSettings-FocalRatio", Math.Round(scope.EffectiveFocalRatio, 2).ToString(inv), ct);
@@ -292,9 +292,9 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         {
             if (slot.Kind == Scope)
             {
-                // 칸 아래 작은 글씨: "Pleiades 68 · 260mm · f/3.8"
+                // 칸 아래 작은 글씨: 이름만 (초점거리·F값은 장비 변경의 목록에서, 2026-10-01 사용자 결정)
                 list.Add(optics.Current is { } scope
-                    ? new Device(slot, scope.Id, $"{scope.Name} · {scope.Optics}", scope.Name)
+                    ? new Device(slot, scope.Id, scope.Name, scope.Name)
                     : new Device(slot, null, "등록 안 됨", ""));
                 continue;
             }

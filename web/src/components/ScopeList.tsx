@@ -28,9 +28,9 @@ const num = (s: string) => (s.trim() === '' ? null : Number(s.replace(',', '.'))
 const text = (n: number | null) => (n == null ? '' : String(n))
 
 /**
- * 경통 목록 (DESIGN.md 3장 "경통"): 장비 변경 모드에서 경통 원을 누르면 원 옆에 열린다.
- * 누르면 그 경통으로(onPick), 연필로 고치기, 휴지통으로 지우기(지금 경통은 불가), 맨 아래 "경통 추가".
- * 입력: 이름 · 초점거리(mm) · 구경(mm) 또는 F값 · 리듀서·플래트너 배율(선택). 경통 정보는 표준 데이터가 없어 모두 직접 입력한다.
+ * 망원경 목록 (DESIGN.md 3장 "망원경"): 장비 변경 모드에서 망원경 원을 누르면 원 옆에 열린다.
+ * 누르면 그 망원경으로(onPick), 연필로 고치기, 휴지통으로 지우기(지금 망원경은 불가), 맨 아래 "망원경 추가".
+ * 입력: 이름 · 초점거리(mm) · 구경(mm) 또는 F값 · 리듀서·플래트너 배율(선택). 망원경 정보는 표준 데이터가 없어 모두 직접 입력한다.
  */
 export default function ScopeList({
   left,
@@ -85,7 +85,7 @@ export default function ScopeList({
     if (!res.ok) return setError(result.error ?? '저장하지 못했습니다')
     setEditing(null)
     await load()
-    // 새로 추가했거나 지금 경통을 고쳤으면 그 경통으로 (칸의 이름·초점거리를 바꾼다)
+    // 새로 추가했거나 지금 망원경을 고쳤으면 그 망원경으로 (칸의 이름·초점거리를 바꾼다)
     if (!editing.id || editing.id === data?.currentId) onPick({ id: result.id, name: result.name })
   }
 
@@ -100,7 +100,7 @@ export default function ScopeList({
     setEditing((ed) => (ed ? { ...ed, form: { ...ed.form, [key]: e.target.value } } : ed))
 
   return (
-    <div className={styles.panel} data-left={left} role="dialog" aria-label="경통 목록">
+    <div className={styles.panel} data-left={left} role="dialog" aria-label="망원경 목록">
       {editing ? (
         <form
           className={styles.form}
@@ -109,7 +109,7 @@ export default function ScopeList({
             void save()
           }}
         >
-          <b className={styles.formTitle}>{editing.id ? '경통 고치기' : '경통 추가'}</b>
+          <b className={styles.formTitle}>{editing.id ? '망원경 고치기' : '망원경 추가'}</b>
           <label>
             이름
             <input value={editing.form.name} onChange={set('name')} placeholder="예: Pleiades 68" autoFocus />
@@ -152,8 +152,8 @@ export default function ScopeList({
         </form>
       ) : (
         <>
-          {data === null && <p className={styles.note}>경통 목록을 읽는 중입니다</p>}
-          {data?.scopes.length === 0 && <p className={styles.note}>등록된 경통이 없습니다. 쓰는 경통을 추가해 주세요.</p>}
+          {data === null && <p className={styles.note}>망원경 목록을 읽는 중입니다</p>}
+          {data?.scopes.length === 0 && <p className={styles.note}>등록된 망원경이 없습니다. 쓰는 망원경을 추가해 주세요.</p>}
           <ul className={styles.list}>
             {data?.scopes.map((s) => {
               const current = s.id === data.currentId
@@ -188,7 +188,7 @@ export default function ScopeList({
                     type="button"
                     className={styles.icon}
                     aria-label={`${s.name} 지우기`}
-                    title={current ? '지금 쓰는 경통은 지울 수 없습니다' : '지우기'}
+                    title={current ? '지금 쓰는 망원경은 지울 수 없습니다' : '지우기'}
                     disabled={current}
                     onClick={() => remove(s)}
                   >
@@ -204,7 +204,7 @@ export default function ScopeList({
           {data && data.scopes.length < data.max && (
             <button type="button" className={styles.add} onClick={() => setEditing({ id: null, form: EMPTY })}>
               <Plus strokeWidth={2} aria-hidden="true" />
-              경통 추가
+              망원경 추가
             </button>
           )}
         </>

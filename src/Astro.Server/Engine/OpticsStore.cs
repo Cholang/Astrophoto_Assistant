@@ -4,7 +4,7 @@ using Astro.Core;
 namespace Astro.Server.Engine;
 
 /// <summary>
-/// 경통(또는 렌즈) 하나. 초점거리(mm)는 필수, 구경(mm)과 F값은 둘 중 하나만 있으면 된다.
+/// 망원경(또는 렌즈) 하나. 초점거리(mm)는 필수, 구경(mm)과 F값은 둘 중 하나만 있으면 된다.
 /// 리듀서·플래트너 배율은 선택 (없으면 1). 실제로 쓰는 값은 배율을 곱한 Effective…
 /// </summary>
 public sealed record Scope(string Id, string Name, double FocalLength, double? Aperture, double? FocalRatio, double? Reducer, double? Flattener)
@@ -19,9 +19,9 @@ public sealed record Scope(string Id, string Name, double FocalLength, double? A
 public sealed record NewScope(string? Name, double FocalLength, double? Aperture, double? FocalRatio, double? Reducer, double? Flattener);
 
 /// <summary>
-/// 경통 목록 (DESIGN.md 3장 "경통"). 프로필과 관계없이 AA 전체에 하나 — 경통은 사람이 아니라 장비라서.
+/// 망원경 목록 (DESIGN.md 3장 "망원경"). 프로필과 관계없이 AA 전체에 하나 — 망원경은 사람이 아니라 장비라서.
 /// 장비 연결 화면의 "장비 변경"에서 고르고·추가·수정·삭제한다. 데이터 폴더의 optics.json.
-/// 경통은 연결되는 장비가 아니므로 N.I.N.A.는 모른다 → 고른 경통의 초점거리·F값을 N.I.N.A. 프로필에 써 넣는다 (EquipmentConnector)
+/// 망원경은 연결되는 장비가 아니므로 N.I.N.A.는 모른다 → 고른 망원경의 초점거리·F값을 N.I.N.A. 프로필에 써 넣는다 (EquipmentConnector)
 /// </summary>
 public sealed class OpticsStore
 {
@@ -60,14 +60,14 @@ public sealed class OpticsStore
         }
     }
 
-    /// <summary>추가하고 바로 지금 경통으로 고른다</summary>
+    /// <summary>추가하고 바로 지금 망원경으로 고른다</summary>
     public (Scope? Scope, string? Error) Add(NewScope input)
     {
         if (Validate(input) is { } error) return (null, error);
         lock (_gate)
         {
             var d = Load();
-            if (d.Scopes.Count >= Max) return (null, $"경통은 {Max}개까지 저장할 수 있습니다. 하나를 지운 뒤 추가해 주세요.");
+            if (d.Scopes.Count >= Max) return (null, $"망원경은 {Max}개까지 저장할 수 있습니다. 하나를 지운 뒤 추가해 주세요.");
             var scope = Make(Guid.NewGuid().ToString("N"), input);
             Save(new Data([.. d.Scopes, scope], scope.Id));
             return (scope, null);
@@ -80,20 +80,20 @@ public sealed class OpticsStore
         lock (_gate)
         {
             var d = Load();
-            if (d.Scopes.All(s => s.Id != id)) return (null, "경통을 찾지 못했습니다.");
+            if (d.Scopes.All(s => s.Id != id)) return (null, "망원경을 찾지 못했습니다.");
             var scope = Make(id, input);
             Save(d with { Scopes = d.Scopes.Select(s => s.Id == id ? scope : s).ToList() });
             return (scope, null);
         }
     }
 
-    /// <summary>지우기. 지금 쓰는 경통은 지울 수 없다 (관측지와 같은 규칙)</summary>
+    /// <summary>지우기. 지금 쓰는 망원경은 지울 수 없다 (관측지와 같은 규칙)</summary>
     public string? Remove(string id)
     {
         lock (_gate)
         {
             var d = Load();
-            if (d.CurrentId == id) return "지금 쓰는 경통은 지울 수 없습니다.";
+            if (d.CurrentId == id) return "지금 쓰는 망원경은 지울 수 없습니다.";
             Save(d with { Scopes = d.Scopes.Where(s => s.Id != id).ToList() });
             return null;
         }
@@ -113,8 +113,8 @@ public sealed class OpticsStore
     private static string? Validate(NewScope s)
     {
         var name = s.Name?.Trim() ?? "";
-        if (name.Length == 0) return "경통 이름을 입력해 주세요.";
-        if (Profiles.ProfileStore.TextBytes(name) > NameMaxBytes) return $"경통 이름은 최대 {NameMaxBytes}byte(한글 {NameMaxBytes / 2}자)까지 쓸 수 있습니다.";
+        if (name.Length == 0) return "망원경 이름을 입력해 주세요.";
+        if (Profiles.ProfileStore.TextBytes(name) > NameMaxBytes) return $"망원경 이름은 최대 {NameMaxBytes}byte(한글 {NameMaxBytes / 2}자)까지 쓸 수 있습니다.";
         if (s.FocalLength is not (> 0 and < 20000)) return "초점거리를 mm로 입력해 주세요.";
         if (s.Aperture is not > 0 && s.FocalRatio is not > 0) return "구경(mm)이나 F값 중 하나를 입력해 주세요.";
         if (s.Reducer is <= 0 or > 5 || s.Flattener is <= 0 or > 5) return "배율은 0보다 크고 5 이하로 입력해 주세요 (예: 0.8).";

@@ -7,7 +7,8 @@
  * - selected : 고른 것. 강조색 고리(바깥 2px) — 오류 색과 섞이지 않게 항상 강조색
  * - disabled : 투명도 40%, 가리켜도 바뀌지 않음, 커서 기본
  * 키보드 포커스는 selected와 같은 고리를 포커스 색으로.
- * 누를 수 없는 표시(연결된 장비 원 등)는 disabled처럼 흐리게 하지 않고, 가리켜도 바뀌지 않게만 한다.
+ * 누를 수 없는 표시(연결된 장비 원 등)는 disabled처럼 흐리게 하지 않는다. 대신 가리키면 살짝 떠오른다(lift: 위로 조금 + 약간 커짐 + 그림자)
+ * — 면·테두리 색은 그대로라 누를 수 있는 것의 hover와 구분된다 (2026-10-01 사용자 결정)
  */
 .stage {
   --state-disabled-opacity: 0.4;
@@ -302,9 +303,12 @@
   visibility: hidden;
 }
 
+/* 다시 연결 아이콘: 예전(0.42배·36~56px)의 두 배 (2026-10-01 사용자 결정).
+   "없이 진행" 글자가 아래에 붙는 원은 글자 자리만큼 줄여 원 밖으로 나가지 않게 */
 .retryIcon {
-  width: clamp(36px, calc(var(--d) * 0.42), 56px);
-  height: clamp(36px, calc(var(--d) * 0.42), 56px);
+  --retry: clamp(72px, calc(var(--d) * 0.84), 112px);
+  width: var(--retry);
+  height: var(--retry);
   display: grid;
   place-items: center;
   border: 1.5px solid var(--line);
@@ -313,6 +317,10 @@
   color: var(--text);
   cursor: pointer;
   transition: background-color 160ms, border-color 160ms, color 160ms;
+}
+
+.hoverBody[data-without='true'] .retryIcon {
+  --retry: clamp(48px, min(calc(var(--d) * 0.84), calc(var(--d) - 64px)), 112px);
 }
 
 .retryIcon svg {
@@ -438,6 +446,17 @@
   overflow: hidden;
 }
 
+/* 모두 연결되어 막대가 돌 때만 보인다 (자리는 항상 있어서 위의 원이 움직이지 않는다) */
+.progress {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+.progress[data-shown='true'] {
+  opacity: 1;
+}
+
+/* 길이는 EquipmentScreen.tsx가 프레임마다 정한다 (변경 버튼을 가리키면 0.3배속) */
 .progressFill {
   width: 0;
   height: 100%;
@@ -445,18 +464,9 @@
   background: var(--accent);
 }
 
-/* 4초 동안 차오른다 (EquipmentScreen.tsx ADVANCE_MS와 같게) */
-.progressFill[data-running='true'] {
-  animation: fill 4000ms linear forwards;
-}
-
-@keyframes fill {
-  to { width: 100%; }
-}
-
-/* 가리키면 멈춤 (EquipmentScreen.tsx의 타이머와 함께) */
-.progressFill[data-paused='true'] {
-  animation-play-state: paused;
+/* "장비 변경" 버튼을 감싼 칸: 꺼진 버튼 위에서도 가리킴을 받는다 */
+.slowZone {
+  display: inline-flex;
 }
 
 /* 막대 위 지금 관측지 문장: 자리는 항상 있고 막대가 돌 때만 보인다 */
@@ -526,11 +536,42 @@
   height: calc(var(--d) * 0.55);
 }
 
+/* 연결된 원·등록 안 된 작은 원: 가리키면 살짝 떠오른다 (공통 토큰 --lift, DESIGN.md 9장) */
+.graph[data-phase='connect'] .node[data-status='Pass']:hover,
+.graph[data-phase='connect'] .node[data-absent='true']:hover {
+  z-index: 2;
+  transform: var(--lift);
+  box-shadow: var(--lift-shadow);
+}
+
+/* 등록 안 된 작은 원의 이름표: 가리키면 원 위에 */
+.nodeTip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  translate: -50% 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--size-small);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease-out, translate 140ms ease-out;
+}
+
+.node[data-absent='true']:hover .nodeTip {
+  opacity: 1;
+  translate: -50% 0;
+}
+
 /* ── 모드 전환: 원들이 가운데로 작아지며 흡수됐다가, 다른 배치로 펼쳐진다 ───────── */
 .node,
 .editNode {
-  transition-property: left, top, width, background-color, border-color, color;
-  transition-duration: 960ms, 960ms, 960ms, 260ms, 260ms, 260ms;
+  transition-property: left, top, width, background-color, border-color, color, transform, box-shadow;
+  transition-duration: 960ms, 960ms, 960ms, 260ms, 260ms, 260ms, var(--lift-ms), var(--lift-ms);
   transition-timing-function: cubic-bezier(0.45, 0, 0.25, 1);
 }
 
