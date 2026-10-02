@@ -11,3 +11,6 @@ obj/
 
 # web/ 빌드 결과 (npm run build로 다시 만든다)
 src/Astro.Server/wwwroot/
+
+# Obsidian 설정 (개인용)
+.obsidian/
