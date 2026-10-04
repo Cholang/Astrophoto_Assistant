@@ -8,7 +8,17 @@
 
 ---
 
-## 2026-10-05 · [Claude] 준비 7단계 검토·실기 시험, 시안 v4(7단계 새 흐름), 준비 구현 계획(Codex 리뷰용)
+## 2026-10-05 · [Claude] 준비 시안 정리: Codex v3 추가, 수식어 붙은 시안 삭제
+
+**요청**: `aa-prepare-arcs`로 시작하는 시안 중 v2·v3·v4만 남기고 뒤에 수식어가 붙은 것은 저장소에서도 삭제
+
+**변경**: `mockups/aa-prepare-arcs-codex.html` 삭제, 미추적이던 `aa-prepare-arcs-v2-orbit-codex.html` 삭제, Codex의 `aa-prepare-arcs-v3.html`(v4의 바탕) 추가. v1 `aa-prepare-arcs.html`은 수식어가 없어 남김
+
+**확인**: 남은 시안 v1·v2·v3·v4. 다른 문서에서 삭제한 파일을 가리키는 곳은 과거 기록(대화·HISTORY·REVIEW_CODEX)뿐
+
+---
+
+## 2026-10-05 · 0668730 [Claude] 준비 7단계 검토·실기 시험, 시안 v4(7단계 새 흐름), 준비 구현 계획(Codex 리뷰용)
 
 **요청**
 - 준비 7단계를 하나씩 검토하고 결정마다 v4 시안에 반영 (Codex v3 바탕)

@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AA 촬영 준비 원호 시안 v3</title>
+<!--
+  촬영 준비 7단계 시안 v2 (Claude, 2026-10-02). v1(aa-prepare-arcs.html)에서 화면 구성만 바꿨다 — 사용자 제안:
+  - 보조 화면(실시간 화면)을 오른쪽에 매우 크게: 왼쪽 "준비" 행성(원) 바깥 전체가 하늘 화면이다
+  - 글(할 일·설명·상태·버튼)은 화면 위에 얹는다 — 왼쪽 아래 고정 자리, 뒤만 살짝 어둡게
+  - 핵심 수치는 오른쪽 위 계기판 자리에 고정
+  - 화면 배경 우선순위: 실제 사진·가이드 카메라 화면 → 그 단계의 지도·그래프 → 어두운 하늘
+  - 주 카메라는 찍을 때만 사진이 생긴다(라이브뷰 없음) → 대상 이동은 적도의 위치(하늘 지도)로, 캘리브레이션·가이딩은 가이드 카메라(PHD2) 화면
+  - 모의 시안: 장비는 움직이지 않는다. 사진·별은 그림으로 흉내
+-->
+<style>
+:root {
+  --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b;
+  --font: 'Pretendard Variable', Pretendard, 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page-bg); color: var(--page-text); font-family: var(--font); font-size: 15px; line-height: 1.6; word-break: keep-all; }
+.page { max-width: 1760px; margin: 0 auto; padding: 24px 20px 56px; display: grid; gap: 16px; }
+.top h1 { margin: 0; font-size: 22px; font-weight: 800; }
+.top p { margin: 4px 0 0; color: var(--page-muted); font-size: 14px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.controls .lbl { font-size: 13px; color: var(--page-muted); margin-left: 8px; }
+.ctl { padding: 5px 12px; border: 1px solid var(--page-line); border-radius: 8px; background: var(--page-surface); color: var(--page-text); font: inherit; font-size: 13px; cursor: pointer; }
+.ctl[aria-pressed="true"] { border-color: var(--page-accent); color: var(--page-accent); font-weight: 700; }
+.frame { position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; border: 1px solid var(--page-line); border-radius: 12px; }
+
+/* ───────── 앱 (1920×1200 기준) ───────── */
+.app { position: absolute; left: 0; top: 0; width: 1920px; height: 1200px; transform-origin: 0 0; transform: scale(var(--s, 1));
+  display: flex; flex-direction: column; font-family: var(--font); font-size: 15.5px; line-height: 1.6; color: var(--text); background: var(--bg); overflow: hidden;
+  --radius: 10px; --gutter: 96px; }
+.app, .app[data-t="dark"] { --bg:#1e1f21; --sky:#0e0f11; --surface:#27292c; --surface-2:#303236; --line:#3b3e42; --text:#ebe8e3; --muted:#a3a09a; --accent:#f0a93b; --pass:#72bf8e; --fail:#f07a52; --warn:#f0a93b; --step-done-line:#5e8f6f; --primary-bg:#f0a93b; --primary-border:#f0a93b; --primary-text:#231800; --glow: rgb(240 169 59 / .55); --scrim: rgb(14 15 17 / .88); }
+.app[data-t="light"] { --bg:#f1f1ef; --sky:#16181b; --surface:#fafaf9; --surface-2:#e7e7e4; --line:#d6d6d2; --text:#25272a; --muted:#676a6e; --accent:#b36b00; --pass:#2f7d4e; --fail:#c24a26; --warn:#a06200; --step-done-line:#8fb89d; --primary-bg:#b36b00; --primary-border:#b36b00; --primary-text:#fff; --glow: rgb(179 107 0 / .4); --scrim: rgb(241 241 239 / .9); }
+.app[data-t="night"] { --bg:#000; --sky:#000; --surface:#0c0000; --surface-2:#170000; --line:#3c0000; --text:#b80000; --muted:#720000; --accent:#d00000; --pass:#b80000; --fail:#b80000; --warn:#b80000; --step-done-line:#6a0000; --primary-bg:#260000; --primary-border:#8a0000; --primary-text:#d00000; --glow: rgb(208 0 0 / .4); --scrim: rgb(0 0 0 / .9); }
+/* 하늘 화면 위의 별·선: 밝게 테마에서도 하늘은 어둡다 (사진이니까) → 별 색은 하늘 전용 */
+.app { --star: #e8e6e1; --skyline: rgb(255 255 255 / .16); --skymuted: rgb(255 255 255 / .55); }
+.app[data-t="night"] { --star: #b80000; --skyline: rgb(184 0 0 / .3); --skymuted: #720000; }
+.app svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+.bar { flex: 0 0 44px; display: flex; align-items: center; gap: 20px; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; position: relative; z-index: 5; background: var(--bg); }
+.bar .brand { font-weight: 800; letter-spacing: .04em; color: var(--text); }
+.bar .ver { margin-left: -12px; font-size: 11px; }
+.bar .prof { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.bar .ava { width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); }
+.bar .devs { display: flex; gap: 14px; flex: 1; }
+.bar .dev { display: inline-flex; align-items: center; gap: 6px; }
+.bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pass); }
+.bar .dev[data-busy="1"] .dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.bar .site { color: var(--text); } .bar .site b { font-weight: 600; margin-right: 6px; }
+.bar .clock { color: var(--text); }
+.rail { flex: 0 0 38px; position: relative; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); background: var(--bg); }
+.rail .rs { display: inline-flex; align-items: center; gap: 6px; }
+.rail .mk { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); }
+.rail .rs[data-s="done"] { color: var(--text); } .rail .rs[data-s="done"] .mk { box-shadow: none; color: var(--pass); font-size: 14px; }
+.rail .rs[data-s="now"] { color: var(--text); font-weight: 700; } .rail .rs[data-s="now"] .mk { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.rail .rs[data-s="now"] .mk::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.rail .sep { width: 28px; height: 2px; border-radius: 1px; background: var(--line); } .rail .sep[data-on="1"] { background: var(--accent); }
+.railEnd { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); display: flex; gap: 8px; }
+.railEnd span { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+.railEnd .abort { box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font-weight: 600; }
+
+/* ── 무대: 맨 뒤 하늘 화면(전체) → 행성 원(왼쪽) → 글·계기판 ── */
+.stage { position: relative; flex: 1; overflow: hidden; background: var(--bg); }
+.view { position: absolute; inset: 0; background: var(--sky); opacity: 0; transition: opacity 900ms 700ms; }
+.app[data-edge="open"] .view { opacity: 1; }
+.view svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.view .star { fill: var(--star); }
+.view .grid { stroke: var(--skyline); stroke-width: 1.2; fill: none; }
+.view .acc { stroke: var(--accent); fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.view .sub2 { stroke: var(--skymuted); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.view .accFill { fill: var(--accent); }
+.view text { font-family: var(--font); font-size: 17px; fill: var(--skymuted); }
+.edgeCanvas { position: absolute; inset: 0; width: 1920px; height: 1118px; pointer-events: none; }
+.edgeShape { transform: translate(960px, 559px) scale(.065); transition: transform 1600ms cubic-bezier(.65, 0, .2, 1); }
+.app[data-edge="open"] .edgeShape { transform: translate(var(--ox), 559px) scale(1); }
+.fullOrbit { fill: var(--bg); stroke: var(--accent); stroke-width: 22; transition: stroke 1200ms, stroke-width 1200ms; }
+.app[data-edge="open"] .fullOrbit { stroke: color-mix(in srgb, var(--accent) 35%, var(--line)); stroke-width: 2; }
+.seg { fill: none; stroke: var(--line); stroke-width: 24; stroke-linecap: round; opacity: 0; transition: opacity 700ms 500ms, stroke 400ms, filter 400ms; }
+.app[data-edge="open"] .seg { opacity: .8; }
+.app[data-edge="open"] .seg[data-s="done"] { stroke: var(--step-done-line); opacity: 1; }
+.app[data-edge="open"] .seg[data-s="now"] { stroke: var(--accent); opacity: 1; filter: drop-shadow(0 0 7px var(--glow)); }
+.introWords { position: absolute; left: 0; right: 0; top: 530px; text-align: center; font-size: 30px; font-weight: 600; transition: opacity 300ms; }
+.app[data-edge="open"] .introWords { opacity: 0; }
+
+/* 글이 얹히는 자리 뒤만 살짝 어둡게 (왼쪽 아래) */
+.scrim { position: absolute; left: 230px; right: 0; bottom: 0; height: 560px; pointer-events: none; opacity: 0; transition: opacity 400ms;
+  background: radial-gradient(120% 100% at 14% 100%, var(--scrim) 0%, color-mix(in srgb, var(--scrim) 60%, transparent) 45%, transparent 75%); }
+.app[data-ready="1"] .scrim { opacity: 1; }
+
+/* 지금 단계 이름: 지금 조각 바로 옆 (하늘 위라 그림자) */
+.stepName { position: absolute; left: 250px; display: grid; gap: 2px; opacity: 0; transition: top 600ms cubic-bezier(.55, 0, .2, 1), opacity 400ms; text-shadow: 0 1px 8px var(--sky); }
+.app[data-ready="1"] .stepName { opacity: 1; }
+.stepName b { font-size: 26px; font-weight: 700; line-height: 1.2; white-space: nowrap; color: var(--star); }
+.app[data-t="light"] .stepName b { color: #ebe8e3; }
+.stepName span { font-size: 15px; color: var(--skymuted); font-variant-numeric: tabular-nums; }
+.segHit { position: absolute; width: 56px; height: 96px; transform: translate(-50%, -50%); }
+.segTip { position: absolute; transform: translateY(-50%); padding: 6px 12px; border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 14px; white-space: nowrap; opacity: 0; transition: opacity 160ms; pointer-events: none; z-index: 6; }
+.segTip small { color: var(--muted); margin-left: 8px; }
+.segTip[data-on="1"] { opacity: 1; }
+
+/* 오른쪽 위 계기판: 핵심 수치 + 설명 + (단계에 따라) 작은 표·그래프 */
+.hud { position: absolute; right: 72px; top: 44px; width: 560px; display: grid; justify-items: end; gap: 6px; opacity: 0; transition: opacity 400ms; text-align: right; color: var(--star); }
+.app[data-ready="1"] .hud { opacity: 1; }
+.hud .num { font-size: 60px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1; min-height: 60px; }
+.hud .num small { font-size: 22px; font-weight: 600; color: var(--skymuted); margin-left: 6px; }
+.hud .num[data-weak="1"] { font-size: 32px; color: var(--skymuted); min-height: 60px; display: flex; align-items: flex-end; }
+.hud .num[data-weak="1"] small { font-size: 17px; }
+.hud .cap { font-size: 16px; color: var(--skymuted); min-height: 26px; }
+.hud .extra { margin-top: 12px; min-height: 0; }
+.hud .rows { display: grid; gap: 8px; font-size: 18px; }
+.hud .rows div { display: flex; gap: 22px; justify-content: flex-end; }
+.hud .rows span { color: var(--skymuted); }
+.hud .rows b[data-k="busy"] { color: var(--accent); } .hud .rows b[data-k="ok"] { color: var(--pass); } .hud .rows b[data-k="fail"] { color: var(--fail); }
+.hud .graph { width: 520px; height: 170px; border-radius: 12px; background: rgb(0 0 0 / .35); position: relative; }
+.hud .graph svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hud .graph text { font-family: var(--font); font-size: 13px; fill: var(--skymuted); }
+
+/* 왼쪽 아래: 할 일 (항상 같은 자리). 단계 안 진행은 맨 위 한 줄에만 */
+.panel { position: absolute; left: 460px; bottom: 60px; width: 720px; display: grid; gap: 18px; justify-items: start; opacity: 0; transition: opacity 300ms; }
+.app[data-ready="1"] .panel { opacity: 1; }
+.panel[data-swap="1"] { opacity: 0 !important; }
+.app[data-t="light"] .panel { color: var(--text); }
+.inner { display: flex; align-items: center; gap: 12px; min-height: 29px; font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.pips { display: inline-flex; gap: 8px; }
+.pips i { width: 13px; height: 13px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--skymuted); }
+.pips i[data-s="done"] { background: var(--pass); box-shadow: none; }
+.pips i[data-s="now"] { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.panel h2 { margin: 0; font-size: 38px; font-weight: 800; letter-spacing: -.02em; line-height: 1.3; text-wrap: balance; color: var(--star); }
+.app[data-t="light"] .panel h2 { color: var(--text); }
+.panel p { margin: 0; font-size: 20px; color: var(--skymuted); line-height: 1.7; min-height: calc(2 * 1.7em); max-width: 36em; }
+.app[data-t="light"] .panel p { color: var(--muted); }
+.status { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; min-height: 34px; color: var(--star); }
+.app[data-t="light"] .status { color: var(--text); }
+.status[data-k="ok"] { color: var(--pass); } .status[data-k="fail"] { color: var(--fail); } .status[data-k="warn"] { color: var(--warn); }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; min-height: 64px; }
+.primary { display: inline-flex; align-items: center; justify-content: center; min-width: 220px; height: 64px; padding: 0 28px; border: 1.5px solid var(--primary-border); border-radius: 14px; background: var(--primary-bg); color: var(--primary-text); font: inherit; font-size: 21px; font-weight: 800; cursor: pointer; }
+.quiet { height: 64px; padding: 0 22px; border: 1.5px solid var(--skyline); border-radius: 14px; background: rgb(0 0 0 / .35); color: var(--star); font: inherit; font-size: 18px; font-weight: 600; cursor: pointer; }
+.app button:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.mini { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--skyline); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
+/* 시험 사진: 글을 잠깐 걷고 사진만 */
+/* 위성: 라이브뷰가 없는 단계에서 단계 안 과정을 보여 준다 (항성계 비유 — 시안 실험) */
+.moons { position: absolute; inset: 0; width: 1920px; height: 1118px; pointer-events: none; opacity: 0; transition: opacity 500ms; }
+.moons[data-on="1"] { opacity: 1; }
+.moons .orbit { fill: none; stroke: var(--skyline); stroke-width: 1.5; stroke-dasharray: 2 10; }
+.moons .m { stroke-width: 2; }
+.moons .m[data-s="idle"] { fill: #26282c; stroke: var(--skyline); }
+.moons .m[data-s="now"] { fill: color-mix(in srgb, var(--accent) 35%, #26282c); stroke: var(--accent); filter: drop-shadow(0 0 14px var(--glow)); }
+.moons .m[data-s="done"] { fill: color-mix(in srgb, var(--pass) 28%, #26282c); stroke: var(--step-done-line); }
+.app[data-t="night"] .moons .m { fill: #0c0000 !important; }
+.moons .mi-l { font-family: var(--font); font-size: 21px; fill: var(--skymuted); text-anchor: middle; }
+.moons .mi-b { font-family: var(--font); font-weight: 700; fill: var(--star); text-anchor: middle; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.moons .mi-b[data-k="busy"] { fill: var(--accent); } .moons .mi-b[data-k="ok"] { fill: var(--pass); } .moons .mi-b[data-k="fail"] { fill: var(--fail); }
+.moons .mi-s { font-family: var(--font); font-size: 19px; fill: var(--skymuted); text-anchor: middle; }
+.moons .lbl { font-family: var(--font); font-size: 17px; fill: var(--skymuted); text-anchor: middle; }
+.moons .lbl[data-s="now"] { fill: var(--star); font-weight: 700; font-size: 20px; }
+.peek { position: absolute; right: 72px; bottom: 60px; padding: 10px 18px; border: 1px solid var(--skyline); border-radius: 10px; background: rgb(0 0 0 / .45); color: var(--star); font: inherit; font-size: 16px; cursor: pointer; display: none; }
+.peek[data-on="1"] { display: block; }
+.app[data-peek="1"] .panel, .app[data-peek="1"] .hud, .app[data-peek="1"] .scrim, .app[data-peek="1"] .stepName { opacity: 0 !important; pointer-events: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes jitter { 0%,100% { transform: translate(0,0); } 25% { transform: translate(1.5px,-1px); } 50% { transform: translate(-1px,.8px); } 75% { transform: translate(.8px,1.2px); } }
+@media (prefers-reduced-motion: reduce) { .edgeShape, .seg, .stepName, .view, .panel, .hud { transition-duration: 1ms !important; transition-delay: 0ms !important; } }
+</style>
+<style>
+.moonReadout { display:none; }
+.app[data-polar="1"] .panel { width:1390px; gap:14px; }
+.app[data-polar="1"] .panel h2 { display:none; }
+.app[data-polar="1"] .panel p { white-space:nowrap; max-width:none; min-height:34px; font-size:19px; }
+.app[data-polar="1"] .moonReadout { display:flex; flex-direction:column; gap:8px; min-height:112px; justify-content:flex-end; color:var(--star); text-shadow:0 2px 12px var(--sky); }
+.moonReadout .reading { display:flex; align-items:baseline; gap:18px; font-size:19px; }
+.moonReadout strong { font-size:30px; font-weight:600; }
+.moonReadout small { font-size:17px; color:var(--skymuted); }
+.moonReadout [data-k="busy"] { color:var(--accent); }
+.moonReadout [data-k="ok"] { color:var(--pass); }
+.moonReadout [data-k="fail"] { color:var(--fail); }
+</style></head>
+<body>
+<div class="page">
+  <header class="top">
+    <h1>촬영 준비 · 원호 시안 v2 (큰 화면 + 글 얹기)</h1>
+    <p>왼쪽 "준비" 행성 바깥 전체가 하늘 화면이고, 할 일은 왼쪽 아래, 핵심 수치는 오른쪽 위에 얹었습니다. 주 카메라는 찍을 때만 사진이 생기므로 이동은 하늘 지도로, 캘리브레이션·가이딩은 가이드 카메라 화면으로 보여 줍니다. 장비는 움직이지 않습니다.</p>
+  </header>
+  <div class="controls">
+    <button class="ctl" id="replay" type="button">처음부터</button>
+    <span class="lbl">단계로 바로</span>
+    <span id="jump"></span>
+  </div>
+  <div class="controls">
+    <span class="lbl" style="margin-left:0">경우</span>
+    <button class="ctl" id="failT" type="button" aria-pressed="false">다음 동작 실패</button>
+    <button class="ctl" id="lowT" type="button" aria-pressed="false">대상이 아직 낮음</button>
+    <button class="ctl" id="reuseT" type="button" aria-pressed="false">같은 밤 두 번째 대상 (캘리브레이션 재사용)</button>
+    <span class="lbl">테마</span>
+    <button class="ctl" data-t="dark" type="button" aria-pressed="true">어둡게</button>
+    <button class="ctl" data-t="light" type="button" aria-pressed="false">밝게</button>
+    <button class="ctl" data-t="night" type="button" aria-pressed="false">촬영</button>
+  </div>
+
+  <div class="frame"><div class="app" id="app" data-edge="intro" data-ready="0">
+    <div class="bar"><span class="brand">AA</span><span class="ver">v0.0.31</span><span class="prof"><span class="ava"></span>별보는사람</span>
+      <span class="devs"><span class="dev"><span class="dot"></span>WandererBox</span><span class="dev"><span class="dot"></span>OnStep</span><span class="dev"><span class="dot"></span>Pleiades68</span><span class="dev"><span class="dot"></span>X-T5</span><span class="dev"><span class="dot"></span>Oasis Focuser</span><span class="dev" id="phd2Dev"><span class="dot"></span><span id="phd2Txt">PHD2</span></span></span>
+      <span class="site"><b>안반데기 주차장</b>위도 37.62° · 경도 128.74°</span><time class="clock">21:48</time></div>
+
+    <div class="stage" id="stage">
+      <div class="view" id="view"></div>
+      <svg class="moons" id="moons" viewBox="0 0 1920 1118" aria-hidden="true"></svg>
+      <svg class="edgeCanvas" viewBox="0 0 1920 1118" aria-hidden="true"><g class="edgeShape" id="edgeShape"><circle class="fullOrbit" cx="0" cy="0" r="3178"/></g></svg>
+      <div class="introWords">촬영을 준비합니다</div>
+      <div class="scrim"></div>
+      <div id="hits"></div><div class="segTip" id="segTip"></div>
+      <div class="stepName" id="stepName"><b id="stepNameB"></b><span id="stepNameN"></span></div>
+
+      <div class="hud" aria-live="polite"><span class="num" id="num"></span><span class="cap" id="cap"></span><div class="extra" id="extra"></div></div>
+
+      <section class="panel" id="panel" aria-live="polite">
+        <div class="moonReadout" id="moonReadout"></div><span class="inner" id="inner"></span>
+        <h2 id="title"></h2>
+        <p id="desc"></p>
+        <span class="status" id="status"></span>
+        <div class="row" id="row"></div>
+      </section>
+      <button type="button" class="peek" id="peek">사진만 보기</button>
+    </div>
+
+    <nav class="rail" id="rail"></nav>
+  </div></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var app = document.getElementById('app');
+  var $ = function (id) { return document.getElementById(id); };
+  var CHECK = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M20 6 9 17l-5-5"/></svg>';
+  var WARN = '<svg class="i" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>';
+  var X = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  var STEPS = ['극축 정렬', '캘리브레이션', '대상 이동', '초점', '센터링', '가이딩', '시험 사진'];
+  var N = STEPS.length;
+  var TARGET = 'M31 안드로메다';
+  var EXPOSURE = 120;
+  var VW = 1920, VH = 1118;          // 하늘 화면 = 무대 전체
+  var FX = 1120, FY = 470;           // 화면에서 보이는 하늘의 가운데 (행성 원·글 자리를 피한 곳)
+
+  // ── 원호: 중심 (OX, 559), 반지름 3200. 가장 오른쪽 x ≈ 210 ──
+  var OX = -2990, R = 3200, SPAN = 7.22, GAP = 0.5;
+  app.style.setProperty('--ox', OX + 'px');
+  var segLen = (2 * SPAN - (N - 1) * GAP) / N, segMid = [], shape = $('edgeShape');
+  for (var k = 0; k < N; k++) {
+    var a0 = -SPAN + k * (segLen + GAP), a1 = a0 + segLen, mid = (a0 + a1) / 2, dg = Math.PI / 180;
+    var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('class', 'seg');
+    p.setAttribute('d', 'M ' + (R * Math.cos(a0 * dg)).toFixed(3) + ' ' + (R * Math.sin(a0 * dg)).toFixed(3) + ' A ' + R + ' ' + R + ' 0 0 1 ' + (R * Math.cos(a1 * dg)).toFixed(3) + ' ' + (R * Math.sin(a1 * dg)).toFixed(3));
+    shape.appendChild(p);
+    segMid.push({ x: OX + R * Math.cos(mid * dg), y: 559 + R * Math.sin(mid * dg) });
+  }
+  var segs = Array.prototype.slice.call(document.querySelectorAll('.seg'));
+
+  // ── 상태 ──
+  var cur = 0, segState = [], results = [];
+  var timers = [], ivals = [];
+  var failNext = false, targetLow = false, reuseCal = false;
+  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+  function every(fn, ms) { var h = setInterval(fn, ms); ivals.push(h); return h; }
+  function clearAll() { timers.forEach(clearTimeout); ivals.forEach(clearInterval); timers = []; ivals = []; }
+  function takeFail() { if (!failNext) return false; failNext = false; $('failT').setAttribute('aria-pressed', 'false'); return true; }
+
+  // ── 그리기 도우미 ──
+  function paintSegs() { app.dataset.polar = cur === 0 ? "1" : "0";
+    segs.forEach(function (p, i) { p.dataset.s = segState[i]; });
+    $('stepName').style.top = (segMid[cur].y - 34) + 'px';
+    $('stepNameB').textContent = STEPS[cur];
+    $('stepNameN').textContent = (cur + 1) + ' / ' + N;
+  }
+  function inner(v) {
+    if (!v) return '';
+    if (typeof v === 'string') return v;
+    return '<span class="pips">' + v.names.map(function (n, i) { return '<i data-s="' + (i < v.at || v.all ? 'done' : i === v.at ? 'now' : '') + '"></i>'; }).join('') + '</span><span>' + v.names[Math.min(v.at, v.names.length - 1)] + '</span>';
+  }
+  function setPanel(o) {
+    var panel = $('panel');
+    panel.dataset.swap = '1';
+    later(function () {
+      $('inner').innerHTML = inner(o.inner);
+      $('title').textContent = o.title || '';
+      $('desc').textContent = o.desc || '';
+      status(o.status);
+      buttons(o.buttons || []);
+      panel.dataset.swap = '0';
+    }, 180);
+  }
+  function setInner(v) { $('inner').innerHTML = inner(v); }
+  function status(s) {
+    var el = $('status');
+    if (!s) { el.innerHTML = ''; el.dataset.k = ''; return; }
+    el.dataset.k = s.k || '';
+    var icon = s.k === 'busy' ? '<span class="mini"></span>' : s.k === 'ok' ? CHECK : s.k === 'fail' ? X : s.k === 'warn' ? WARN : '';
+    el.innerHTML = icon + '<span>' + s.t + '</span>';
+  }
+  function buttons(list) {
+    var row = $('row'); row.innerHTML = '';
+    list.forEach(function (b) {
+      var el = document.createElement('button');
+      el.type = 'button'; el.className = b.primary ? 'primary' : 'quiet'; el.textContent = b.label;
+      el.onclick = function () { b.onClick(); };
+      row.appendChild(el);
+    });
+  }
+  function head(num, unit, cap, weak) {
+    var el = $('num');
+    el.innerHTML = num === null ? '' : num + (unit ? '<small>' + unit + '</small>' : '');
+    el.dataset.weak = weak ? '1' : '0';
+    $('cap').textContent = cap || '';
+  }
+  function extra(html) { $('extra').innerHTML = html || ''; }
+  function view(inner, slice) { $('view').innerHTML = '<svg viewBox="0 0 ' + VW + ' ' + VH + '"' + (slice === false ? '' : ' preserveAspectRatio="xMidYMid slice"') + '>' + inner + '</svg>'; }
+  function phd2(busy, txt) { $('phd2Dev').dataset.busy = busy ? '1' : '0'; $('phd2Txt').textContent = txt; }
+  function peek(on) { $('peek').dataset.on = on ? '1' : '0'; app.dataset.peek = '0'; $('peek').textContent = '사진만 보기'; }
+  function finishStep(result) { segState[cur] = 'done'; results[cur] = result; paintSegs(); }
+  function goto(n) { clearAll(); cur = n; extra(''); peek(false); moonsHide(); for (var i = 0; i < N; i++) segState[i] = i < n ? 'done' : i === n ? 'now' : 'idle'; paintSegs(); RUN[n](); }
+  function next() { goto(cur + 1); }
+  function endStep(o) {
+    finishStep(o.result);
+    setPanel({ inner: o.inner, title: o.title, desc: o.desc, status: { k: 'ok', t: o.ok }, buttons: [{ label: o.nextLabel, primary: true, onClick: o.onNext || next }].concat(o.more || []) });
+  }
+
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  // 별밭. sparse = 가이드 카메라처럼 별이 적고 크게
+  function starfield(n, seed, opts) {
+    opts = opts || {};
+    var r = rng(seed), s = '', k = opts.scale || 1;
+    for (var i = 0; i < n; i++) {
+      var m = r(), rad = (m > .985 ? 3.4 : m > .93 ? 2.1 : m > .7 ? 1.4 : .9) * k;
+      s += '<circle class="star" cx="' + (r() * VW).toFixed(1) + '" cy="' + (r() * VH).toFixed(1) + '" r="' + rad.toFixed(2) + '" opacity="' + ((opts.dim || 1) * (.35 + m * .65)).toFixed(2) + '"/>';
+    }
+    return s;
+  }
+  function galaxy(cx, cy, k) {
+    return '<g transform="translate(' + cx + ' ' + cy + ') rotate(-38) scale(' + k + ')" opacity=".9">' +
+      '<ellipse rx="150" ry="42" class="star" opacity=".08"/><ellipse rx="105" ry="28" class="star" opacity=".12"/><ellipse rx="60" ry="16" class="star" opacity=".2"/><ellipse rx="22" ry="8" class="star" opacity=".55"/></g>';
+  }
+  function mmss(sec) { var m = Math.floor(sec / 60), s = sec % 60; return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s; }
+  var RUN = [];
+
+  // ───────── ① 극축 정렬: 보여 줄 화면 없음 → 어두운 하늘 + 오른쪽 위에 장비 상태 ─────────
+  // ── 위성: 비스듬한 궤도 위를 n개가 돈다. 맨 앞(지금 과정) 위성이 크게 나오고 그 안에 그 과정의 정보만 담는다.
+  //    지난·다음 위성은 과장되게 작고 흐리고 멀다 (2026-10-03 사용자 피드백: 신호등이 아니라 정보 그릇, 도형은 크게) ──
+  // v3: 행성 뒤의 먼 지점 → 기존 정보 위치 → 관찰자 앞으로 확대·퇴장.
+  // 원근 연출용 경로이며 실제 천체 궤도를 수치 재현하는 모델은 아니다.
+  var MO = { n:0, at:0, done:0, phase:0, names:[], raf:0, info:null, moving:false, textAlpha:0, sizes:[] };
+  var REST_X = 1290 + 200 * Math.sin(14 * Math.PI / 180) - 230;
+  var REST_Y = 380 + 200 * Math.cos(14 * Math.PI / 180);
+  function esc(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+  function moonPose(q) {
+    if(q < -1 || q >= 1) return null;
+    if(q <= 0) {
+      var t=q+1, u=1-t;
+      // 넓은 곡률: 왼쪽 행성에 가려진 먼 곳에서 위쪽을 크게 돌아 들어온다.
+      return {x:u*u*60+2*u*t*600+t*t*REST_X,
+        y:u*u*290+2*u*t*40+t*t*REST_Y,
+        r:345*(.10+.90*Math.pow(t,1.8)),
+        opacity:.12+.88*t, blur:9*Math.pow(u,1.5), depth:q};
+    }
+    // 좌우 반대편으로 돌아가지 않고 시선 방향으로 계속 가까워진다.
+    var scale=1+5.5*q*q;
+    return {x:REST_X+110*q, y:REST_Y+100*q*q,
+      r:345*scale, opacity:Math.pow(1-q,1.15), blur:0, depth:q};
+  }
+  function moonsDraw() {
+    var items=[];
+    for(var i=0;i<MO.n;i++) {
+      var p=moonPose(MO.phase-i); if(!p)continue;
+      p.r *= MO.sizes[i] || 1; p.i=i; p.st=i<MO.done?'done':i===MO.at?'now':'idle'; items.push(p);
+    }
+    items.sort(function(a,b){return a.depth-b.depth;});
+    // 납작한 타원선 대신 가림·크기·흐림 변화로 깊이를 표현한다.
+    var g='';
+    items.forEach(function(o){
+      g+='<g opacity="'+o.opacity.toFixed(3)+'" style="filter:blur('+o.blur.toFixed(2)+'px)"><circle class="m" data-s="'+o.st+'" cx="'+o.x.toFixed(2)+'" cy="'+o.y.toFixed(2)+'" r="'+o.r.toFixed(2)+'"/>';
+      if(o.i===MO.at && !MO.moving && MO.textAlpha>0) {
+        var title=$('title').textContent, lines=[], line='';
+        // 큰 제목만 위성 안으로. 원 안에 들어오도록 단어 단위로 줄바꿈한다.
+        title.split(' ').forEach(function(word){
+          if((line+' '+word).trim().length>17 && line){lines.push(line);line=word;}
+          else line=(line+' '+word).trim();
+        });
+        if(line)lines.push(line);
+        g+='<g opacity="'+MO.textAlpha.toFixed(3)+'">'+lines.map(function(t,j){
+          return '<text class="mi-b" x="'+o.x+'" y="'+(o.y+(j-(lines.length-1)/2)*58+16)+'" style="font-size:42px">'+esc(t)+'</text>';
+        }).join('')+'</g>';
+      }      g+='</g>';
+    });
+    $('moons').innerHTML=g;
+  }
+  function moonsShow(names,at,done) {
+    cancelAnimationFrame(MO.raf); MO.n=names.length; MO.names=names; MO.info=null; MO.sizes=names.map(function(){return .9+Math.random()*.2;});
+    MO.phase=at-1; MO.at=at; MO.done=done; MO.textAlpha=0;
+    $('moons').dataset.on='1'; moonsGo(at,done);
+  }
+  function moonsGo(at,done) {
+    cancelAnimationFrame(MO.raf);
+    var from=MO.phase, reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var t0=performance.now(), lead=reduced?0:100, duration=reduced?1:2400;
+    MO.at=at; MO.done=done; MO.moving=true; MO.textAlpha=0; moonsDraw();
+    function step(now) {
+      var f=Math.max(0,Math.min(1,(now-t0-lead)/duration));
+      var e=f*f*(3-2*f); MO.phase=from+(at-from)*e; moonsDraw();
+      if(f<1) { MO.raf=requestAnimationFrame(step); return; }
+      MO.phase=at; MO.moving=false;
+      var settled=now;
+      function reveal(time) {
+        MO.textAlpha=reduced?1:Math.min(1,(time-settled)/240); moonsDraw();
+        if(MO.textAlpha<1)MO.raf=requestAnimationFrame(reveal);
+      }
+      MO.raf=requestAnimationFrame(reveal);
+    }
+    MO.raf=requestAnimationFrame(step);
+  }
+  function moonsInfo(info) {
+    MO.info=info;
+    $('moonReadout').innerHTML='<div class="reading"><span>'+esc(info.label)+'</span><strong data-k="'+(info.k||'')+'">'+esc(info.big)+'</strong></div><small>'+(info.lines||[]).map(esc).join(' · ')+'</small>';
+    moonsDraw();
+  }
+  function moonsHide() { cancelAnimationFrame(MO.raf); MO.info=null; MO.moving=false; MO.textAlpha=0; $('moons').dataset.on='0'; }
+  var POLAR = ['SharpCap 실행', '정렬 확인', 'PHD2 재연결'];
+  RUN[0] = function () {
+    view(starfield(260, 5, { dim: .35 }));
+    moonsShow(POLAR, 0, 0);
+    var t0 = Date.now(), sharp = '닫힘', sharpK = '', phd = '카메라 연결됨', phdK = 'ok';
+    // 오른쪽 위 계기판 대신, 맨 앞 위성 안에 지금 과정의 정보만
+    function readout() {
+      head(null, '', ''); extra('');
+      var el = mmss(Math.floor((Date.now() - t0) / 1000) * 4);
+      if (MO.at === 0) moonsInfo({ label: 'SharpCap', big: sharp, k: sharpK, lines: ['PHD2 가이드 카메라 · ' + phd, '적도의 추적 속도 · 항성'] });
+      else if (MO.at === 1) moonsInfo({ label: '정렬 경과 시간', big: el, lines: ['SharpCap · ' + sharp, '(시안은 4배 빠르게)'] });
+      else moonsInfo({ label: 'PHD2 가이드 카메라', big: phd, k: phdK, lines: ['SharpCap · ' + sharp] });
+    }
+    readout(); every(readout, 1000);
+    function set(s, sk, p, pk) { sharp = s; sharpK = sk; phd = p; phdK = pk; readout(); }
+    function open() {
+      setPanel({ inner: POLAR[0], title: 'SharpCap을 열어 정렬을 시작하세요', desc: '가이드 카메라를 SharpCap에 연결하고 극축 정렬을 진행하세요. 정렬을 마치면 이 화면으로 돌아오면 됩니다.',
+        buttons: [{ label: 'SharpCap 열기', primary: true, onClick: release }] });
+    }
+    function release() {
+      var fail = takeFail();
+      setPanel({ inner: POLAR[0], title: 'PHD2가 가이드 카메라를 놓게 하고 있습니다', desc: '적도의 추적 속도도 항성으로 맞춥니다.', status: { k: 'busy', t: '가이드 카메라 연결을 해제하는 중입니다' } });
+      set('닫힘', '', '해제하는 중', 'busy');
+      later(function () {
+        if (fail) {
+          set('닫힘', '', '해제하지 못함', 'fail');
+          setPanel({ inner: POLAR[0], title: 'PHD2에서 가이드 카메라 연결을 해제해 주세요', desc: 'PHD2의 장비 연결 창에서 가이드 카메라 연결을 끊은 뒤 다음을 눌러 주세요.',
+            status: { k: 'fail', t: 'PHD2가 가이드 카메라를 놓지 않았습니다 (30초 동안 시도)' }, buttons: [{ label: '다음', primary: true, onClick: launched }] });
+        } else launched();
+      }, 1400);
+    }
+    function launched() {
+      phd2(true, 'PHD2 · SharpCap 사용 중');
+      if (MO.at !== 1) moonsGo(1, 1);
+      set('열림', 'busy', 'SharpCap이 사용 중', '');
+      setPanel({ inner: POLAR[1], title: '정렬을 마치면 알려 주세요', desc: 'SharpCap에서 정렬을 마친 뒤 SharpCap을 닫아 주세요. 이어서 가이드 카메라를 PHD2에 다시 연결합니다.',
+        buttons: [{ label: '극축 정렬을 마쳤어요', primary: true, onClick: reconnect }] });
+    }
+    function reconnect() {
+      var stillOpen = takeFail();
+      setPanel({ inner: POLAR[2], title: 'PHD2에 다시 연결합니다', desc: '가이드 카메라를 PHD2에 다시 연결합니다.', status: { k: 'busy', t: '연결하는 중입니다' } });
+      if (MO.at !== 2) moonsGo(2, 2);
+      if (!stillOpen) set('닫힘', '', '연결하는 중', 'busy');
+      later(function () {
+        if (stillOpen) {
+          set('열림', 'fail', '연결하지 못함', 'fail');
+          setPanel({ inner: POLAR[2], title: 'SharpCap이 아직 열려 있습니다', desc: 'SharpCap을 닫은 뒤 다시 시도해 주세요. 가이드 카메라는 한 프로그램만 쓸 수 있습니다.',
+            status: { k: 'fail', t: '가이드 카메라를 다시 연결하지 못했습니다' }, buttons: [{ label: '다시 시도', primary: true, onClick: reconnect }] });
+          return;
+        }
+        phd2(false, 'PHD2'); set('닫힘', '', '카메라 연결됨', 'ok');
+        MO.done = 3; moonsDraw();
+        endStep({ result: '사용자 확인 · 12분', inner: POLAR[2], title: '극축 정렬을 마쳤습니다', desc: '가이드 카메라가 PHD2에 다시 연결되었습니다. 다음은 가이딩 보정값을 만드는 캘리브레이션입니다.',
+          ok: '가이드 카메라가 연결되었습니다', nextLabel: '캘리브레이션 시작' });
+      }, 1600);
+    }
+    open();
+  };
+
+  // ───────── ② 캘리브레이션: 가이드 카메라 화면, 고른 별이 L자로 움직인다 ─────────
+  var CAL = ['위치로 이동', '별 선택', '캘리브레이션'];
+  RUN[1] = function () {
+    var field = starfield(70, 11, { scale: 1.8 });
+    var path = [], star = null, streak = false;
+    function draw(note) {
+      var s = (streak ? '<g opacity=".7" transform="translate(0 0)">' + starfield(70, 11, { scale: 1.2 }).replace(/<circle /g, '<ellipse rx="40" ry="1.6" ') + '</g>' : field);
+      if (path.length > 1) s += '<path class="acc" opacity=".6" d="M' + path.map(function (q) { return (FX + q.x).toFixed(1) + ',' + (FY + q.y).toFixed(1); }).join(' L') + '"/>';
+      if (star) s += '<circle cx="' + (FX + star.x) + '" cy="' + (FY + star.y) + '" r="7" class="star"/><rect x="' + (FX + star.x - 34) + '" y="' + (FY + star.y - 34) + '" width="68" height="68" rx="4" fill="none" style="stroke:var(--pass);stroke-width:2"/>';
+      if (note) s += '<text x="' + FX + '" y="' + (FY + 300) + '" text-anchor="middle">' + note + '</text>';
+      view(s);
+    }
+    if (reuseCal) {
+      view(field);
+      head('같은 밤', '', '이번 밤 캘리브레이션 사용', true);
+      endStep({ result: '이번 밤 보정값 재사용', inner: '', title: '이번 밤 캘리브레이션을 그대로 씁니다', desc: '오늘 극축 정렬 뒤에 만든 보정값이 있습니다. 같은 밤 대상만 바꿀 때는 다시 하지 않습니다.',
+        ok: '보정값을 다시 쓸 수 있습니다', nextLabel: '대상으로 이동', more: [{ label: '새로 하기', onClick: function () { reuseCal = false; $('reuseT').setAttribute('aria-pressed', 'false'); goto(1); } }] });
+      return;
+    }
+    var fail = takeFail();
+    head(null, '', '가이드 카메라 (PHD2)');
+    streak = true; draw('적위 0° · 자오선 근처로 이동 중 — 별이 흐릅니다');
+    setPanel({ inner: { names: CAL, at: 0 }, title: '캘리브레이션 위치로 이동하고 있습니다', desc: '보정값을 정확히 재기 좋은 적위 0° 근처로 옮깁니다. 극 근처는 캘리브레이션에 맞지 않습니다.', status: { k: 'busy', t: '이동 중입니다' } });
+    later(function () { streak = false; star = { x: 0, y: 0 }; path = [{ x: 0, y: 0 }]; draw(''); setInner({ names: CAL, at: 1 }); status({ k: 'busy', t: '가이드 별을 고르는 중입니다' }); }, 1800);
+    later(function () {
+      if (fail) {
+        setPanel({ inner: { names: CAL, at: 2 }, title: '캘리브레이션에 실패했습니다', desc: '별이 충분히 움직이지 않았습니다. 적도의 클러치가 잠겨 있는지, 가이드 케이블이 연결되어 있는지 확인해 주세요.',
+          status: { k: 'fail', t: '적위 쪽 움직임이 너무 작습니다' }, buttons: [{ label: '다시 시도', primary: true, onClick: function () { goto(1); } }, { label: 'PHD2 화면 열기', onClick: function () {} }] });
+        return;
+      }
+      setInner({ names: CAL, at: 2 }); status({ k: 'busy', t: '적도의를 조금씩 밀며 별의 움직임을 재는 중입니다' });
+      var k = 0;
+      every(function () {
+        if (k >= 24) return;
+        k++;
+        star = k <= 12 ? { x: k * 18, y: -k * 1.2 } : { x: 216 + (k - 12) * 1.3, y: -14 - (k - 12) * 17 };
+        path.push(star);
+        head(k, '걸음', '캘리브레이션 진행 (적경 12 · 적위 12)', true);
+        draw('');
+        if (k === 24) later(function () {
+          head('1.2', '°', '직교 오차 (두 축이 직각에서 벗어난 정도, 작을수록 좋음)');
+          endStep({ result: '직교 오차 1.2°', inner: { names: CAL, at: 2, all: true }, title: '캘리브레이션을 마쳤습니다', desc: '적경·적위 두 축의 움직임이 정상입니다. 다음은 ' + TARGET + '로 이동합니다.',
+            ok: '보정값을 만들었습니다 · 직교 오차 1.2°', nextLabel: '대상으로 이동' });
+        }, 400);
+      }, 140);
+    }, 3200);
+  };
+
+  // ───────── ③ 대상 이동: 주 카메라 라이브뷰는 없음 → 적도의 위치를 하늘 지도에 ─────────
+  RUN[2] = function () {
+    var CX = FX, CY = FY + 20, RR = 400;
+    function pos(alt, az) { var rr = RR * (90 - alt) / 90, a = (az - 90) * Math.PI / 180; return { x: CX + rr * Math.cos(a), y: CY + rr * Math.sin(a) }; }
+    var tgt = { alt: targetLow ? 14 : 42, az: 64 }, start = { alt: 52, az: 180 };
+    var bg = starfield(220, 21, { dim: .3 });
+    function map(scope, trail) {
+      var t = pos(tgt.alt, tgt.az), s = pos(scope.alt, scope.az);
+      view(bg + '<circle class="grid" cx="' + CX + '" cy="' + CY + '" r="' + RR + '"/><circle class="grid" cx="' + CX + '" cy="' + CY + '" r="' + (RR * 2 / 3) + '" stroke-dasharray="5 8"/><circle class="grid" cx="' + CX + '" cy="' + CY + '" r="' + (RR / 3) + '"/>' +
+        '<text x="' + CX + '" y="' + (CY - RR - 14) + '" text-anchor="middle">북</text><text x="' + (CX + RR + 16) + '" y="' + (CY + 6) + '">동</text><text x="' + CX + '" y="' + (CY + RR + 30) + '" text-anchor="middle">남</text><text x="' + (CX - RR - 16) + '" y="' + (CY + 6) + '" text-anchor="end">서</text>' +
+        '<text x="' + (CX + 8) + '" y="' + (CY - RR * 2 / 3 - 8) + '">30°</text>' +
+        (trail ? '<path class="sub2" stroke-dasharray="3 8" d="' + trail + '"/>' : '') +
+        '<circle cx="' + t.x + '" cy="' + t.y + '" r="20" class="acc"/><text x="' + (t.x + 28) + '" y="' + (t.y + 6) + '" style="fill:var(--star)">M31</text>' +
+        '<circle cx="' + s.x + '" cy="' + s.y + '" r="10" class="accFill"/>', false);
+    }
+    function sep(a, b) { var d = Math.PI / 180; var c = Math.sin(a.alt * d) * Math.sin(b.alt * d) + Math.cos(a.alt * d) * Math.cos(b.alt * d) * Math.cos((a.az - b.az) * d); return Math.acos(Math.max(-1, Math.min(1, c))) / d; }
+    head(sep(start, tgt).toFixed(1), '°', '대상까지 남은 거리 (적도의 위치)');
+    map(start, '');
+    if (targetLow) {
+      setPanel({ title: 'M31은 아직 낮습니다', desc: '지금 고도 14°로 아직 보이지 않습니다. 19:42쯤 30° 위로 올라옵니다. 그때 다시 확인해 주세요.',
+        status: { k: 'warn', t: '대상이 30° 아래에 있습니다' }, buttons: [{ label: '다시 확인', primary: true, onClick: function () { targetLow = false; $('lowT').setAttribute('aria-pressed', 'false'); goto(2); } }] });
+      return;
+    }
+    var fail = takeFail();
+    setPanel({ title: TARGET + '로 이동하고 있습니다', desc: '적도의가 대상 쪽으로 돌고 있습니다. 케이블이 걸리지 않는지 봐 주세요.', status: { k: 'busy', t: '이동 중입니다' } });
+    var k = 0, M = 30, pts = [];
+    every(function () {
+      if (k > M) return;
+      var f = k / M, e = 1 - Math.pow(1 - f, 2.2);
+      var sc = { alt: start.alt + (tgt.alt - start.alt) * e, az: start.az + (tgt.az - start.az) * e };
+      var pp = pos(sc.alt, sc.az); pts.push(pp.x.toFixed(1) + ',' + pp.y.toFixed(1));
+      map(sc, 'M' + pts.join(' L'));
+      head(Math.max(0.3, sep(sc, tgt)).toFixed(1), '°', '대상까지 남은 거리 (적도의 위치)');
+      if (fail && k === 18) {
+        k = M + 1;
+        setPanel({ title: '이동이 멈췄습니다', desc: '적도의가 이동을 마치지 못했습니다. 적도의 전원과 케이블을 확인한 뒤 다시 시도해 주세요.', status: { k: 'fail', t: '이동하지 못했습니다' },
+          buttons: [{ label: '다시 시도', primary: true, onClick: function () { goto(2); } }] });
+        return;
+      }
+      if (k === M) endStep({ result: '고도 42° · 방위 64°', title: TARGET + '에 도착했습니다', desc: '지금 고도 42°입니다. 다음은 대상 근처의 별로 초점을 맞춥니다.', ok: '이동했습니다', nextLabel: '초점 맞추기' });
+      k++;
+    }, 100);
+  };
+
+  // ───────── ④ 초점: 화면 없음 → 초점 곡선을 하늘 위에 크게 (흐리게) ─────────
+  RUN[3] = function () {
+    var fail = takeFail();
+    var POS = [11200, 11500, 11800, 12100, 12400, 12700, 13000, 13300, 13600], best = 12340;
+    var HFR = POS.map(function (p, i) { return +(2.05 + Math.pow((p - best) / 520, 2) * .55 + (i % 2 ? .06 : -.04)).toFixed(2); });
+    var X0 = 760, X1 = 1600, Y0 = 760, Y1 = 230, hmax = 6.5, hmin = 1.5;
+    var bg = starfield(200, 41, { dim: .25 });
+    function px(i) { return X0 + (X1 - X0) * i / (POS.length - 1); }
+    function py(h) { return Y0 - (Y0 - Y1) * (h - hmin) / (hmax - hmin); }
+    function draw(n, fit) {
+      var s = bg + '<line class="grid" x1="' + X0 + '" y1="' + Y0 + '" x2="' + X1 + '" y2="' + Y0 + '"/><line class="grid" x1="' + X0 + '" y1="' + Y0 + '" x2="' + X0 + '" y2="' + Y1 + '"/>' +
+        '<text x="' + X0 + '" y="' + (Y0 + 32) + '">포커서 위치</text><text x="' + (X0 - 12) + '" y="' + (Y1 + 6) + '" text-anchor="end">별 크기</text>';
+      if (fit) {
+        var dd = '';
+        for (var t = 0; t <= 40; t++) { var p = POS[0] + (POS[8] - POS[0]) * t / 40, h = 2.05 + Math.pow((p - best) / 520, 2) * .55; dd += (t ? 'L' : 'M') + (X0 + (X1 - X0) * (p - POS[0]) / (POS[8] - POS[0])).toFixed(1) + ',' + py(h).toFixed(1); }
+        var bx = X0 + (X1 - X0) * (best - POS[0]) / (POS[8] - POS[0]);
+        s += '<path class="acc" d="' + dd + '" opacity=".8"/><line class="acc" x1="' + bx + '" y1="' + Y0 + '" x2="' + bx + '" y2="' + py(2.05) + '" stroke-dasharray="4 6"/><text x="' + bx + '" y="' + (Y0 + 32) + '" text-anchor="middle" style="fill:var(--accent)">12,340</text>';
+      }
+      for (var i = 0; i < n; i++) s += '<circle cx="' + px(i) + '" cy="' + py(HFR[i]) + '" r="8" class="' + (i === n - 1 && !fit ? 'accFill' : 'star') + '"/>';
+      view(s, false);
+    }
+    head(null, '', '별 크기 (HFR)');
+    draw(0, false);
+    setPanel({ inner: '0 / 9 지점', title: '초점을 맞추고 있습니다', desc: '포커서를 조금씩 옮기며 별 크기를 잽니다. 가장 작아지는 위치를 찾습니다.', status: { k: 'busy', t: '자동초점 중입니다' } });
+    var n = 0;
+    every(function () {
+      if (n >= 9) return;
+      n++;
+      setInner(n + ' / 9 지점');
+      head(HFR[n - 1].toFixed(1), '', '별 크기 (HFR) · 이번 지점');
+      draw(n, false);
+      if (fail && n === 4) {
+        n = 99;
+        setPanel({ inner: '4 / 9 지점', title: '자동초점을 마치지 못했습니다', desc: '별을 충분히 찾지 못했습니다. 구름이 지나가는 중이거나 초점이 많이 나가 있을 수 있습니다.',
+          status: { k: 'fail', t: '자동초점에서 별을 찾지 못했습니다' },
+          buttons: [{ label: '다시 시도', primary: true, onClick: function () { goto(3); } }, { label: '손으로 맞췄어요', onClick: function () { finishStep('직접 맞춤'); next(); } }] });
+        return;
+      }
+      if (n === 9) later(function () {
+        draw(9, true); head('2.1', '', '별 크기 (HFR) · 가장 좋은 위치');
+        endStep({ result: 'HFR 2.1 · 위치 12,340', inner: '9 / 9 지점', title: '초점을 맞췄습니다', desc: '포커서를 12,340 위치로 옮겼습니다. 다음은 사진을 찍어 대상을 화면 가운데로 맞춥니다.', ok: '별 크기 HFR 2.1', nextLabel: '센터링 시작' });
+      }, 500);
+    }, 520);
+  };
+
+  // ───────── ⑤ 센터링: 솔빙 사진 전체 + 대상·화면 가운데 표시 ─────────
+  RUN[4] = function () {
+    var fail = takeFail();
+    var offs = [{ x: 300, y: -170, e: 12.4 }, { x: 46, y: -28, e: 2.1 }, { x: 6, y: -3, e: 0.4 }];
+    function shot(o, solving) {
+      var cx = FX + o.x, cy = FY + o.y;
+      view(starfield(620, 31 + Math.round(o.x)) + galaxy(cx, cy, 2.2) +
+        '<line class="sub2" x1="' + (FX - 40) + '" y1="' + FY + '" x2="' + (FX + 40) + '" y2="' + FY + '"/><line class="sub2" x1="' + FX + '" y1="' + (FY - 40) + '" x2="' + FX + '" y2="' + (FY + 40) + '"/>' +
+        '<circle class="acc" cx="' + cx + '" cy="' + cy + '" r="42"/>' +
+        (solving ? '<text x="' + FX + '" y="' + (FY + 330) + '" text-anchor="middle">사진에서 위치를 계산하는 중…</text>' : '<text x="' + FX + '" y="' + (FY + 330) + '" text-anchor="middle">+ 화면 가운데 · ○ 대상 M31</text>'));
+    }
+    head(null, '', '대상과 화면 가운데의 거리');
+    view(starfield(260, 5, { dim: .3 }));
+    setPanel({ inner: '1회차', title: '대상을 화면 가운데로 맞추고 있습니다', desc: '사진을 찍어 실제 위치를 계산하고, 적도의를 조금씩 옮깁니다. 카메라 방향은 그대로 둡니다.', status: { k: 'busy', t: '사진을 찍는 중입니다' } });
+    var i = 0;
+    function iter() {
+      var o = offs[i];
+      setInner((i + 1) + '회차');
+      status({ k: 'busy', t: '사진에서 위치를 계산하는 중입니다' });
+      shot(o, true);
+      later(function () {
+        if (fail && i === 0) {
+          setPanel({ inner: '1회차', title: '위치를 계산하지 못했습니다', desc: '사진에서 별 배치를 찾지 못했습니다 (솔빙 실패). 구름이나 초점 문제일 수 있습니다.', status: { k: 'fail', t: '센터링에 실패했습니다' },
+            buttons: [{ label: '다시 시도', primary: true, onClick: function () { goto(4); } }, { label: '초점 다시 맞추기', onClick: function () { goto(3); } }] });
+          return;
+        }
+        shot(o, false); head(o.e.toFixed(1), '′', '대상과 화면 가운데의 거리');
+        i++;
+        if (i < offs.length) { status({ k: 'busy', t: '적도의를 조금 옮기는 중입니다' }); later(iter, 900); }
+        else endStep({ result: '오차 0.4′ · 카메라 방향 87°', inner: '3회차', title: '대상을 가운데로 맞췄습니다', desc: '오차 0.4′, 지금 카메라 방향은 87°입니다. 다음은 가이딩을 시작합니다.', ok: '센터링을 마쳤습니다', nextLabel: '가이딩 시작' });
+      }, 1300);
+    }
+    later(iter, 500);
+  };
+
+  // ───────── ⑥ 가이딩: 가이드 카메라 화면 전체 + 오른쪽 위 그래프 ─────────
+  var GUIDE = ['별 선택', '안정화', '측정'];
+  RUN[5] = function () {
+    var fail = takeFail();
+    var field = starfield(70, 13, { scale: 1.8 });
+    var ra = [], de = [], r = rng(7), tick = 0, phase = 0, star = false;
+    function draw() {
+      var s = field;
+      if (star) s += '<g style="animation:jitter 1.4s steps(4) infinite"><circle cx="' + FX + '" cy="' + FY + '" r="34" class="star" opacity=".12"/><circle cx="' + FX + '" cy="' + FY + '" r="16" class="star" opacity=".35"/><circle cx="' + FX + '" cy="' + FY + '" r="7" class="star"/></g>' +
+        '<rect x="' + (FX - 40) + '" y="' + (FY - 40) + '" width="80" height="80" rx="4" fill="none" style="stroke:var(--pass);stroke-width:2"/>';
+      else s += '<text x="' + FX + '" y="' + FY + '" text-anchor="middle">별을 찾는 중</text>';
+      view(s);
+      var gx0 = 16, gx1 = 504, gy = 85, gh = 110, n = 70, g = '';
+      g += '<line x1="' + gx0 + '" y1="' + gy + '" x2="' + gx1 + '" y2="' + gy + '" style="stroke:var(--skyline)"/><line x1="' + gx0 + '" y1="' + (gy - gh / 2) + '" x2="' + gx1 + '" y2="' + (gy - gh / 2) + '" style="stroke:var(--skyline)" stroke-dasharray="3 6"/><line x1="' + gx0 + '" y1="' + (gy + gh / 2) + '" x2="' + gx1 + '" y2="' + (gy + gh / 2) + '" style="stroke:var(--skyline)" stroke-dasharray="3 6"/>';
+      function line(arr, col) { if (arr.length < 2) return ''; var dd = ''; var st = Math.max(0, arr.length - n); for (var i = st; i < arr.length; i++) dd += (i === st ? 'M' : 'L') + (gx0 + (gx1 - gx0) * (i - st) / (n - 1)).toFixed(1) + ',' + (gy - arr[i] * gh / 2 / 2.4).toFixed(1); return '<path d="' + dd + '" style="fill:none;stroke:' + col + ';stroke-width:2"/>'; }
+      g += line(de, 'var(--skymuted)') + line(ra, 'var(--accent)');
+      g += '<text x="' + gx1 + '" y="20" text-anchor="end">— 적경  — 적위 · ±2.4″</text>';
+      extra('<div class="graph"><svg viewBox="0 0 520 170">' + g + '</svg></div>');
+    }
+    function rms(a) { if (!a.length) return 0; var s = 0; a.forEach(function (v) { s += v * v; }); return Math.sqrt(s / a.length); }
+    head(null, '', '가이딩 오차 (전체) · 기준 2.4″');
+    setPanel({ inner: { names: GUIDE, at: 0 }, title: '가이딩을 시작합니다', desc: '가이드 별을 따라 적도의를 미세하게 보정합니다. 안정되면 오차를 재어 보여 드립니다.', status: { k: 'busy', t: '가이드 별을 고르는 중입니다' } });
+    draw();
+    every(function () {
+      tick++;
+      if (tick === 6) {
+        if (fail) {
+          clearAll();
+          setPanel({ inner: { names: GUIDE, at: 0 }, title: '가이드 별을 찾지 못했습니다', desc: '가이드 카메라에 별이 보이지 않습니다. 가이드 망원경 덮개나 초점을 확인한 뒤 다시 시도해 주세요.',
+            status: { k: 'fail', t: '별 없음' }, buttons: [{ label: '다시 시도', primary: true, onClick: function () { goto(5); } }, { label: 'PHD2 화면 열기', onClick: function () {} }] });
+          return;
+        }
+        star = true; phase = 1; setInner({ names: GUIDE, at: 1 }); status({ k: 'busy', t: '가이딩이 안정되기를 기다리는 중입니다' });
+      }
+      if (tick === 18) { phase = 2; setInner({ names: GUIDE, at: 2 }); status({ k: 'busy', t: '가이딩 오차를 재는 중입니다' }); }
+      if (phase >= 1) {
+        var amp = phase === 1 ? 1.6 - (tick - 6) * .07 : .75;
+        ra.push((r() - .5) * 2 * amp); de.push((r() - .5) * 2 * amp * .8);
+        if (phase === 2) head(Math.sqrt(rms(ra.slice(-28)) * rms(ra.slice(-28)) + rms(de.slice(-28)) * rms(de.slice(-28))).toFixed(1), '″', '가이딩 오차 (전체) · 기준 2.4″');
+      }
+      draw();
+      if (tick === 50) {
+        clearAll();
+        var mra = ra.slice(-28), mde = de.slice(-28), tot = Math.sqrt(rms(mra) * rms(mra) + rms(mde) * rms(mde));
+        head(tot.toFixed(1), '″', '가이딩 오차 (전체) · 기준 2.4″');
+        setPanel({ inner: { names: GUIDE, at: 2, all: true }, title: '충분해요', desc: '가이딩 오차 ' + tot.toFixed(1) + '″로 주 카메라 한 픽셀(2.4″)보다 작습니다. 사진에서 흔들림이 거의 보이지 않을 수준이에요.',
+          status: { k: 'ok', t: '적경 ' + rms(mra).toFixed(1) + '″ · 적위 ' + rms(mde).toFixed(1) + '″ · 별 잃음 없음' },
+          buttons: [{ label: '시험 사진 찍기', primary: true, onClick: function () { finishStep(tot.toFixed(1) + '″ · 충분'); next(); } }, { label: '다시 재기', onClick: function () { goto(5); } }] });
+      }
+    }, 160);
+  };
+
+  // ───────── ⑦ 시험 사진: 사진 전체 + "사진만 보기"(구도 확인) ─────────
+  RUN[6] = function () {
+    var fail = takeFail(), left = EXPOSURE;
+    head(left, '초', '남은 노출');
+    view(starfield(260, 5, { dim: .25 }) + '<text x="' + FX + '" y="' + FY + '" text-anchor="middle">노출 중</text>');
+    setPanel({ inner: '120초 · ISO 800', title: '시험 사진을 찍고 있습니다', desc: '계획한 노출 그대로 한 장 찍어 초점·추적·구도를 확인합니다.', status: { k: 'busy', t: '노출 중입니다' } });
+    every(function () {
+      if (left <= 0) return;
+      left = Math.max(0, left - 8);
+      head(left, '초', '남은 노출 (시안은 15배 빠르게)');
+      if (left === 0) {
+        clearAll();
+        if (fail) {
+          setPanel({ inner: '120초 · ISO 800', title: '사진을 받지 못했습니다', desc: '카메라에서 사진을 내려받지 못했습니다. 카메라 연결을 확인한 뒤 다시 찍어 주세요.', status: { k: 'fail', t: '시험 사진을 찍지 못했습니다' },
+            buttons: [{ label: '다시 찍기', primary: true, onClick: function () { goto(6); } }] });
+          return;
+        }
+        view(starfield(900, 99, { scale: 1.1 }) + galaxy(FX, FY, 2.6));
+        head('312', '개', '별 수 · 별 크기 HFR 2.3', true);
+        peek(true);
+        setPanel({ inner: '120초 · ISO 800', title: '시험 사진을 확인해 주세요', desc: '별이 둥글고 구도가 원하는 대로면 촬영을 시작하세요. 끝나는 시각은 04:58입니다.', status: { k: 'ok', t: '별 312개 · 별 크기 HFR 2.3' },
+          buttons: [{ label: '촬영 시작', primary: true, onClick: function () { finishStep('별 312개 · HFR 2.3'); peek(false); setPanel({ title: '촬영을 시작합니다', desc: '(시안 끝) 다음 화면은 촬영 단계입니다.', status: { k: 'ok', t: '준비를 마쳤습니다' }, buttons: [{ label: '처음부터 다시 보기', primary: true, onClick: reset }] }); } },
+            { label: '다시 찍기', onClick: function () { goto(6); } }, { label: '다시 센터링', onClick: function () { goto(4); } }] });
+      }
+    }, 70);
+  };
+  $('peek').onclick = function () { var on = app.dataset.peek !== '1'; app.dataset.peek = on ? '1' : '0'; this.textContent = on ? '글 다시 보기' : '사진만 보기'; };
+
+  // ── 끝난 조각을 가리키면 이름 · 결과 ──
+  $('hits').innerHTML = segMid.map(function (m, i) { return '<span class="segHit" data-i="' + i + '" style="left:' + m.x + 'px;top:' + m.y + 'px"></span>'; }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('.segHit'), function (h) {
+    h.addEventListener('mouseenter', function () {
+      var i = +h.dataset.i; if (segState[i] !== 'done') return;
+      var tip = $('segTip'); tip.innerHTML = STEPS[i] + '<small>' + results[i] + '</small>';
+      tip.style.left = (segMid[i].x + 36) + 'px'; tip.style.top = segMid[i].y + 'px'; tip.dataset.on = '1';
+    });
+    h.addEventListener('mouseleave', function () { $('segTip').dataset.on = '0'; });
+  });
+
+  // ── 시작 ──
+  var PRESET = ['사용자 확인 · 12분', '직교 오차 1.2°', '고도 42° · 방위 64°', 'HFR 2.1 · 위치 12,340', '오차 0.4′ · 카메라 방향 87°', '0.9″ · 충분'];
+  function reset() {
+    // 이미 펼쳐진 상태에서 다시 보기면, 원이 처음 모양으로 다 돌아올 때까지(1.6초) 기다린 뒤 다시 펼친다
+    var wait = app.dataset.edge === 'open' ? 1700 : 0;
+    clearAll(); cur = 0; segState = []; results = []; extra(''); peek(false); moonsHide();
+    for (var i = 0; i < N; i++) { segState.push(i === 0 ? 'now' : 'idle'); results.push(''); }
+    phd2(false, 'PHD2'); app.dataset.edge = 'intro'; app.dataset.ready = '0'; paintSegs(); view('');
+    later(function () { app.dataset.edge = 'open'; }, wait + 1100);
+    later(function () { app.dataset.ready = '1'; RUN[0](); }, wait + 2700);
+  }
+  $('replay').onclick = reset;
+  $('jump').innerHTML = STEPS.map(function (s, i) { return '<button class="ctl" type="button" data-j="' + i + '">' + (i + 1) + ' ' + s + '</button>'; }).join(' ');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-j]'), function (b) {
+    b.onclick = function () { app.dataset.edge = 'open'; app.dataset.ready = '1'; phd2(false, 'PHD2'); var n = +b.dataset.j; for (var i = 0; i < n; i++) results[i] = results[i] || PRESET[i]; goto(n); };
+  });
+  $('failT').onclick = function () { failNext = !failNext; this.setAttribute('aria-pressed', String(failNext)); };
+  $('lowT').onclick = function () { targetLow = !targetLow; this.setAttribute('aria-pressed', String(targetLow)); };
+  $('reuseT').onclick = function () { reuseCal = !reuseCal; this.setAttribute('aria-pressed', String(reuseCal)); };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (b) {
+    b.onclick = function () { app.dataset.t = b.dataset.t; Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (x) { x.setAttribute('aria-pressed', String(x === b)); }); };
+  });
+
+  var stg = ['연결', '점검', '계획', '준비', '촬영', '마무리'];
+  $('rail').innerHTML = stg.map(function (s, i) {
+    var k = i < 3 ? 'done' : i === 3 ? 'now' : 'todo';
+    return (i ? '<span class="sep" data-on="' + (i <= 3 ? 1 : 0) + '"></span>' : '') + '<span class="rs" data-s="' + k + '"><span class="mk">' + (k === 'done' ? CHECK : '') + '</span>' + s + '</span>';
+  }).join('') + '<span class="railEnd"><span class="abort"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>준비 중단</span><span><svg class="i" viewBox="0 0 24 24"><path d="M13 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M9 16l-4-4 4-4"/><path d="M5 12h10"/></svg>앱 끄기</span></span>';
+
+  function fit() { app.style.setProperty('--s', document.querySelector('.frame').clientWidth / 1920); }
+  fit(); if (window.ResizeObserver) new ResizeObserver(fit).observe(document.body); else window.addEventListener('resize', fit);
+  reset();
+})();
+</script>
+</body>
+</html>
