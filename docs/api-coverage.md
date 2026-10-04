@@ -33,7 +33,7 @@
 | 장비 연결 | `GET /equipment/{종류}/connect?to=<id>` | ✅ | 장비별 개별 연결 → "장비별 상태 개별 표시"와 일치 |
 | 전체 연결 상태 | `GET /equipment/info` | ✅ | 한 번에 전체 상태 |
 | 연결 끊김 감지 | 이벤트 `*-CONNECTED`, `*-DISCONNECTED` | ✅ | 상시 처리의 "연결 끊김 → 이상 감지" |
-| Wanderer Box 전원·히터 | `GET /equipment/switch/info`, `/equipment/switch/set?index=&value=` | ✅🔍 | 포트 번호와 실제 장비 대응 확인 |
+| Wanderer Box 전원·히터 | `GET /equipment/switch/info`, `/equipment/switch/set?index=&value=` | ✅🔍 | 포트 번호와 실제 장비 대응 확인. 2026-10-05 사용자 장비(Plus V3): index 1 = DC2(적도의), 3 = DC4-6, 4 = USB(적도의·가이드 카메라·포커서가 여기 뒤), 읽기 전용 0 = DC1 Always On, 2 = DC3 PWM(열선). **N.I.N.A. `switch/set`은 "성공" 응답인데 실제로 안 바뀜** (Empire 2.4.0·2.4.3 모두, DC4-6로 확인). Wanderer ASCOM 드라이버(`ASCOM.WandererBox1.Switch`)는 켜고 끄는 출력에 `GetSwitchValue`를 지원하지 않음 → N.I.N.A.의 값 방식 명령이 안 닿는 것으로 보임. **드라이버에 직접 `SetSwitch(i, bool)` / `GetSwitch(i)`는 동작**(반영까지 몇 초, N.I.N.A.와 동시 연결 가능) → AA는 전원 켜고 끄기를 ASCOM 직접으로 |
 | 온도·습도 | `GET /equipment/weather/info` | ✅ | Wanderer의 Observing Conditions 드라이버 |
 | 날씨 **예보** (구름, 시잉) | — | ❌ | 외부 예보 서비스 연동 필요 (NINA weather는 현재 센서값) |
 | 과거 기록 불러오기 | — | ❌ | 우리 앱의 세션 기록 DB |
@@ -45,7 +45,7 @@
 | 대상 이름 → 좌표 | — | ❌ | 우리 앱이 천체 카탈로그/조회 서비스로 처리 |
 | 고도·자오선 통과·박명 계산 | — | ❌ | 우리 앱이 천문 계산 라이브러리로 처리. 지평선은 `/profile/horizon`에서 받음 |
 | 달과의 거리 | `GET /astro-util/moon-separation` | ✅ | |
-| 후보 goto·프레이밍 비교 | `/equipment/mount/slew?ra=&dec=&center=true&waitForResult=true` → `/equipment/camera/capture?solve=true&stream=true` | ✅ | 이동 전 승인은 우리 앱 UI에서 |
+| 후보 goto·프레이밍 비교 | `/equipment/mount/slew?ra=&dec=&center=true&waitForResult=true` → `/equipment/camera/capture?solve=true&stream=true` | ✅ | 이동 전 승인은 우리 앱 UI에서. **`ra`는 도(°) 단위** (시간으로 보내면 엉뚱한 곳으로 감, 2026-10-05 실기 확인) |
 | 프레이밍 도우미 활용 | `/framing/set-coordinates`, `/framing/slew?slew_option=Center` | ⚠️ | NINA에서 프레이밍 도우미를 한 번 열어 둬야 동작 |
 | 계획 → 시퀀스 | `/sequence/list-available` → `/sequence/load?sequenceName=` → `/sequence/set-target` | ✅ | 기획서의 "템플릿 + 대상" 방식과 정확히 맞음 |
 | 시퀀스 세부 수정 (노출, 장수, 종료 시각) | `GET /sequence/edit`, `POST /sequence/load` (JSON) | ⚠️🔍 | edit의 경로 문법 확인 필요. 안 되면 템플릿 JSON을 우리가 고쳐서 POST |
@@ -119,6 +119,8 @@ node tools/api-check.mjs --listen 120
 |---|---|---|
 | 장비 연결/해제 | `connect`, `disconnect` | 문제 없음 |
 | Wanderer 포트 on/off | `switch/set` | 어떤 포트가 어떤 장비인지 먼저 확인. 카메라·마운트 전원 포트는 건드리지 않기 |
+
+**WandererBox Plus V3 직렬 규격** (제조사 문서 https://28647633.s21i.faiusr.com/61/ABUIABA9GAAg7ZPcqwYowafj6gU.pdf, 2023-12): 19200bps 8N1. 명령은 숫자 하나 — DC2 켜기 121/끄기 120, DC2 전압 20000+V×10(20132 = 13.2V), DC3 3000+세기(0~255), DC4-6 101/100, USB 111/110 (문서 표가 깨져 짝은 추정 — 쓰기 전 확인). 허브가 상태 줄을 계속 보냄: `ZXWBPlusV3A펌웨어A프로브온도(-127=없음)A습도A기온A입력전류A입력전압AUSBADC2ADC3세기ADC4-6ADC2설정전압×10A`. COM 포트는 한 프로그램만 → N.I.N.A.(Empire)가 잡고 있으면 AA는 직접 못 씀. 쓸모: N.I.N.A. 스위치 명령이 안 먹을 때 대안, 입력 전압(배터리)·습도 감시
 | 냉각/워밍 | `camera/cool`, `camera/warm` | 문제 없음 |
 | 슬루·파킹 | `mount/slew`, `mount/park` | ⚠️ **낮에는 경통 캡을 반드시 닫기** (태양 방향 통과 위험). 케이블 걸림 확인하며 옆에서 지켜보기 |
 | 시퀀스 로드·시작·중지·재시작 | `sequence/load` → `start` → `stop` → `start` | ✅ 시뮬레이터로 확인함 (2026-10-01). JSON으로 만든 시퀀스를 `POST /sequence/load`로 넣을 수 있음. 실장비에서는 노출 도중 중지했을 때 카메라 상태만 다시 볼 것 |
