@@ -28,6 +28,7 @@ public sealed class EngineStarter(NinaApiClient nina, InternetCheck internet, Ni
 
         // 1. N.I.N.A. 켜기
         var justLaunched = false;
+        IDisposable? behind = null; // N.I.N.A.가 켜지며 AA 위로 뜨지 않게 (응답할 때까지 + 조금 더)
         if (Process.GetProcessesByName("NINA").Length > 0)
         {
             yield return Launch.Pass("이미 켜져 있습니다");
@@ -49,7 +50,8 @@ public sealed class EngineStarter(NinaApiClient nina, InternetCheck internet, Ni
             string? error = null;
             try
             {
-                Process.Start(new ProcessStartInfo(ninaExe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(ninaExe) });
+                behind = BackgroundWindows.Watch(TimeSpan.FromSeconds(8), BackgroundWindows.Nina);
+                Process.Start(new ProcessStartInfo(ninaExe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(ninaExe), WindowStyle = ProcessWindowStyle.Minimized });
                 justLaunched = true;
             }
             catch (Exception e) { error = e.Message; }
@@ -77,6 +79,8 @@ public sealed class EngineStarter(NinaApiClient nina, InternetCheck internet, Ni
             if (version is not null || DateTime.UtcNow >= deadline) break;
             await Task.Delay(TimeSpan.FromSeconds(2), ct);
         }
+
+        behind?.Dispose(); // 응답이 오면 조금 더(로딩 끝에 다시 뜨는 창) 지켜본 뒤 끝낸다
 
         if (version is null)
         {

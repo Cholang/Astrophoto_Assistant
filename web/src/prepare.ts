@@ -1,6 +1,9 @@
-// 촬영 준비 상태 (서버 Prepare/PrepareRunner.cs와 같은 모양). 서버가 상태를 갖고 화면은 받아서 그리기만 한다.
+// 촬영 준비 상태 (서버 Prepare/Flow/PrepView.cs와 같은 모양). 서버가 상태를 갖고 화면은 받아서 그리기만 한다.
+// 화면 영역 이름(DESIGN.md "촬영 준비"): 안내(guide) · 중앙 정보(center: 측정값 → 상태 줄 → 버튼) · 하늘 화면(live) · 진행 표시(tasks)
 
-export type PrepStatus = 'Pending' | 'Running' | 'Waiting' | 'Pass' | 'Fail' | 'Skipped'
+export type PrepTaskStatus = 'Pending' | 'Running' | 'Waiting' | 'Done' | 'Failed' | 'Skipped' | 'NeedsRecheck'
+export type Tone = 'None' | 'Busy' | 'Ok' | 'Warn' | 'Fail'
+export type Freshness = 'Fresh' | 'Stale' | 'Unverified'
 
 export interface PrepAction {
   id: string
@@ -8,22 +11,29 @@ export interface PrepAction {
   primary: boolean
 }
 
-export interface PrepStep {
-  id: string
-  title: string
-  term: string | null
-  status: PrepStatus
-  hint: string
-  message: string
-  actions: PrepAction[]
-  // 칸마다 다른 추가 정보 (가이딩 수치, 시험 사진 등)
-  detail: Record<string, unknown> | null
+export interface ReadoutView {
+  kind: string
+  big: string
+  caption: string
+  tone: Tone
+  values: Record<string, number>
+  observedAt: string
+  freshness: Freshness
+}
+
+export interface CurrentView {
+  taskId: string
+  runId: number
+  subSteps: { id: string; label: string; status: PrepTaskStatus }[]
+  guide: { title: string; text: string }
+  center: { readout: ReadoutView | null; status: { text: string; tone: Tone } | null; actions: PrepAction[] }
+  live: { kind: string; url: string | null; data: unknown; observedAt: string } | null
 }
 
 export interface PrepView {
   started: boolean
-  current: string | null
-  steps: PrepStep[]
+  tasks: { id: string; title: string; status: PrepTaskStatus; result: string | null }[]
+  current: CurrentView | null
   ready: boolean
   version: number
 }
@@ -51,13 +61,13 @@ export function watchPrepare(onState: (v: PrepView) => void, onError: (message: 
   }
 }
 
-/** 칸의 버튼. 받을 수 없으면 이유를 돌려준다 */
-export async function prepareAct(step: string, action: string): Promise<string | null> {
+/** 버튼. 받을 수 없으면 이유를 돌려준다 */
+export async function prepareAct(action: string): Promise<string | null> {
   try {
     const r = await fetch('/api/prepare/act', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ step, action }),
+      body: JSON.stringify({ action }),
     })
     if (r.ok) return null
     const body = (await r.json().catch(() => null)) as { error?: string } | null

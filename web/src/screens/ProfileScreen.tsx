@@ -1,5 +1,6 @@
 import { Pencil } from 'lucide-react'
 import ProfileAvatar from '../components/ProfileAvatar'
+import UpdateNotice from '../components/UpdateNotice'
 import { profileImageUrl, type Profile } from '../profiles'
 import styles from './ProfileScreen.module.css'
 
@@ -53,6 +54,8 @@ export default function ProfileScreen({
           ))}
         </ul>
       </div>
+      {/* 새 버전 알림: 일을 시작하기 전 화면에만 (작업 화면에는 두지 않는다) */}
+      <UpdateNotice />
     </main>
   )
 }

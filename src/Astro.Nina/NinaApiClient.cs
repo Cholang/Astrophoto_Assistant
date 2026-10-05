@@ -49,6 +49,10 @@ public sealed class NinaApiClient(HttpClient http)
     public async Task<bool> ChangeProfileValueAsync(string settingPath, string value, CancellationToken ct = default) =>
         await GetResponseAsync($"profile/change-value?settingpath={Uri.EscapeDataString(settingPath)}&newValue={Uri.EscapeDataString(value)}", QueryTimeout, ct) is not null;
 
+    /// <summary>장비 정보 (Name, Connected …). 응답이 없으면 null.</summary>
+    public Task<JsonElement?> GetInfoAsync(string kind, CancellationToken ct = default) =>
+        GetResponseAsync($"equipment/{kind}/info", QueryTimeout, ct);
+
     /// <summary>장비가 연결되어 있는지. 응답이 없으면 false.</summary>
     public async Task<bool> IsConnectedAsync(string kind, CancellationToken ct = default) =>
         await GetResponseAsync($"equipment/{kind}/info", QueryTimeout, ct) is { ValueKind: JsonValueKind.Object } info

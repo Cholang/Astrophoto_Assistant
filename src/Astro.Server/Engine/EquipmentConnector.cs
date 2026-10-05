@@ -247,6 +247,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             //  - AA에서 따로 고른 적이 없어 N.I.N.A. 프로필 그대로인 경우(N.I.N.A.가 연결한 것 = 프로필 장비)만.
             // 그 밖에는(AA에서 다른 장비를 골랐는데 확인된 적 없음) 지금 연결을 끊고 고른 장비로 새로 연결한다 (2026-09-30 리뷰)
             var kind = d.Slot.Kind;
+            using var behind = BackgroundWindows.ForConnect(kind); // PHD2·Wanderer Empire가 켜지며 AA 위로 뜨지 않게
             var connectedNow = await nina.IsConnectedAsync(kind, ct);
             var known = live.Get(kind);
             var trust = connectedNow && (known == d.Id || (known is null && !d.Chosen));
@@ -261,6 +262,10 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             }
             if (connected) live.Set(kind, d.Id);
             else live.Forget(kind);
+
+            // 가이더: N.I.N.A.가 PHD2 프로그램에 붙은 것만으로는 부족 — PHD2 안의 카메라·적도의까지 직접 확인 (2026-10-06)
+            if (connected && kind == "guider" && await CheckPhd2Async(ct) is { } problem)
+                return Make(d, CheckStatus.Fail, problem.Message, new Diagnosis([], problem.Fix));
         }
 
         if (connected)
@@ -275,6 +280,21 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         return d.Slot.Tier == Optional && d.Slot.Kind != Hub
             ? Make(d, CheckStatus.Warn, $"연결되지 않아 {d.Slot.Role} 없이 진행합니다", diagnosis)
             : Make(d, CheckStatus.Fail, "연결되어 있지 않습니다", diagnosis);
+    }
+
+    /// <summary>PHD2 주소는 N.I.N.A. 프로필의 가이더 설정에서(없으면 localhost:4400), 비교할 적도의 이름은 N.I.N.A.가 연결한 적도의</summary>
+    private async Task<Phd2Check.Problem?> CheckPhd2Async(CancellationToken ct)
+    {
+        var host = "localhost";
+        var port = 4400;
+        if (await nina.GetActiveProfileAsync(ct) is { ValueKind: JsonValueKind.Object } profile && profile.TryGetProperty("GuiderSettings", out var g))
+        {
+            if (Text(g, "PHD2ServerUrl") is { } h) host = h;
+            if (g.TryGetProperty("PHD2ServerPort", out var p) && p.TryGetInt32(out var n)) port = n;
+        }
+        var mount = await nina.GetInfoAsync("mount", ct) is { ValueKind: JsonValueKind.Object } m
+            && m.TryGetProperty("Connected", out var c) && c.ValueKind == JsonValueKind.True ? Text(m, "Name") : null;
+        return await Phd2Check.CheckAsync(host, port, mount, ct);
     }
 
     /// <summary>Id가 null이면 등록되지 않은 장비. 필수 장비면 실패, 나머지는 Absent(작은 원)</summary>

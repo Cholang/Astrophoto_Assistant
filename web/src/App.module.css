@@ -37,21 +37,39 @@
   animation: barIn 280ms ease-out both;
 }
 
-/* 하단 단계 레일: 화면 맨 아래. 처음 나타날 때만 페이드인 (상태 줄과 같음) */
-.rail {
-  flex-shrink: 0;
+/* 화면 영역 + 진행 표시: 가로로 나란히 (진행 표시는 오른쪽 세로 열, 시안 v8) */
+.body {
+  flex: 1;
+  min-height: 0;
   display: flex;
+}
+
+/* 하늘 화면(준비 단계): 진행 표시도 하늘 위에. 밝게 테마는 진행 표시 글자가 어두워 제 바탕을 둔다 */
+.body[data-sky='true'] {
+  background: var(--sky);
+}
+
+:root:not([data-theme='light']) .body[data-sky='true'] .rail {
+  --rail-bg: var(--sky); /* 점 속을 하늘색으로 (세로선을 가린다) */
+  background: transparent;
+}
+
+/* 진행 표시: 처음 나타날 때만 페이드인 (상태 줄과 같음) */
+.rail {
+  position: relative;
+  z-index: 2; /* 넘친 작업 이름이 화면 영역 위에 보이게 */
+  flex: none;
+  width: var(--rail-w);
   background: var(--bg);
   animation: barIn 280ms ease-out both;
 }
 
-.rail > * {
-  flex: 1;
-}
-
 /* 화면 전환: 앞 화면 페이드아웃 → 다음 화면 페이드인 (App.tsx FADE_MS와 같은 시간) */
 .screen {
+  /* 화면 안의 cqw·cqh 기준 틀: 진행 표시를 뺀 화면 영역 */
+  container-type: size;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   display: flex;

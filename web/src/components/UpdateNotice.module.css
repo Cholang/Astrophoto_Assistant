@@ -1,0 +1,176 @@
+/* 새 버전 알림: 왼쪽 아래 조용한 글자 버튼. 오른쪽 아래는 주 버튼("다음") 자리라 피한다 */
+.badge {
+  position: absolute;
+  left: 32px;
+  bottom: 28px;
+  z-index: 3;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--size-small);
+  cursor: pointer;
+  overflow: hidden;
+  animation: appear 400ms ease-out both;
+  transition: color 150ms, border-color 150ms;
+}
+
+/* 나타날 때 테두리를 따라 빛이 한 번 천천히 지나가고, 그 뒤엔 가만히 (경고처럼 계속 깜빡이지 않는다) */
+.badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--accent) 35%, transparent) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: sweep 1.6s ease-in-out 600ms 1 both;
+  pointer-events: none;
+}
+
+.badge:hover,
+.badge[aria-expanded='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+@keyframes appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sweep {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+
+/* 서랍 밖을 누르면 닫힌다 (화면을 가리지 않는 투명한 막) */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+}
+
+/* 아래에서 올라오는 서랍 */
+.drawer {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  z-index: 5;
+  width: min(760px, calc(100% - 32px));
+  max-height: 70%;
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
+  background: var(--surface);
+  box-shadow: var(--lift-shadow);
+  transform: translate(-50%, 100%);
+  visibility: hidden;
+  transition: transform 260ms ease-out, visibility 0s linear 260ms;
+  outline: none;
+}
+
+.drawer[data-open='true'] {
+  transform: translate(-50%, 0);
+  visibility: visible;
+  transition: transform 260ms ease-out, visibility 0s;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.lead {
+  flex: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--size-small);
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.close:hover { color: var(--text); background: var(--surface-2); }
+.close svg { width: 18px; height: 18px; }
+
+.list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+/* 한 줄: 이름·버전 | 업데이트 방법 | 내려받기 | 다시 알리지 않기 */
+.row {
+  display: grid;
+  grid-template-columns: 200px 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.what {
+  display: grid;
+}
+
+.what b { font-weight: 600; }
+
+.what span {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.what small { color: var(--muted); }
+
+.how {
+  color: var(--muted);
+  font-size: var(--size-small);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: var(--size-small);
+  white-space: nowrap;
+}
+
+.link svg { width: 14px; height: 14px; }
+
+.dismiss {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dismiss:hover { color: var(--text); background: var(--surface-2); }
+
+@media (max-width: 720px) {
+  .row { grid-template-columns: 1fr auto; }
+  .how { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge::after { display: none; }
+}

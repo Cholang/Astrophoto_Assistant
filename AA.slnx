@@ -5,4 +5,7 @@
     <Project Path="src/Astro.Nina/Astro.Nina.csproj" />
     <Project Path="src/Astro.Server/Astro.Server.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Astro.Server.Tests/Astro.Server.Tests.csproj" />
+  </Folder>
 </Solution>

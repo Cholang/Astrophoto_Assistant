@@ -1,5 +1,8 @@
 /* 프로필 화면은 가운데 배치 (사용자 요청, DESIGN.md의 왼쪽 정렬 예외): 제목·목록·새 프로필을 한 덩어리로 화면 위아래·좌우 가운데에 */
 .stage {
+  position: relative;
+  /* 아래에 숨어 있는 새 버전 서랍이 화면 밖으로 넘쳐 스크롤이 생기지 않게 */
+  overflow: clip;
   flex: 1;
   display: grid;
   justify-items: center;

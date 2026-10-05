@@ -3,7 +3,7 @@ import { useFrame } from './frame'
 import { ScreenReady } from './screenReady'
 import StatusBar, { type DeviceState } from './components/StatusBar'
 import NinaLostCard, { type NinaState } from './components/NinaLostCard'
-import StepRail, { type Stage } from './components/StepRail'
+import StepRail, { RailProvider, type RailExtra, type Stage } from './components/StepRail'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
 import EngineStartScreen from './screens/EngineStartScreen'
@@ -72,6 +72,8 @@ export default function App() {
   /** 지금 화면을 서서히 감추고, 다음 화면을 서서히 보여 준다. */
   // 전환 중에는 화면을 누를 수 없다 (DESIGN.md 9장). 새 화면이 다 나타난 뒤 true
   const [settled, setSettled] = useState(true)
+  // 지금 화면이 진행 표시에 넘긴 작업 목록·버튼 (예: 준비의 7작업, 준비 중단)
+  const [railExtra, setRailExtra] = useState<RailExtra | null>(null)
   const fadeTo = useCallback((next: Phase) => {
     if (fading.current) return
     fading.current = true
@@ -260,7 +262,10 @@ export default function App() {
         </div>
       )}
       {/* 전환 중(settled=false)에는 화면 전체를 누를 수 없고 초점도 받지 않는다 (inert) */}
+      {/* 화면 영역(왼쪽) + 진행 표시(오른쪽 세로 열). 화면 영역이 크기 기준 틀이라 화면 안의 cqw·cqh는 이 영역 기준 */}
+      <div className={styles.body} data-sky={!!railExtra?.sky}>
       <ScreenReady.Provider value={settled}>
+      <RailProvider onChange={setRailExtra}>
       <div className={styles.screen} data-shown={shown} inert={!settled}>
         {phase === 'boot' && <BootScreen error={loadError ? `${PRODUCT.name} 내부 서버에 연결하지 못했습니다. ${PRODUCT.reul} 다시 실행해 주세요.` : null} />}
         {phase === 'profiles' && (
@@ -313,14 +318,16 @@ export default function App() {
           </main>
         )}
       </div>
+      </RailProvider>
       </ScreenReady.Provider>
-      {ninaLost && <NinaLostCard state={nina} onRestart={restartNina} />}
-      {/* 레일은 화면 전환 페이드 밖에 둔다: 화면이 바뀌어도 같은 자리에 그대로 */}
+      {/* 진행 표시는 화면 전환 페이드 밖에 둔다: 화면이 바뀌어도 같은 자리에 그대로 */}
       {STAGE_OF[phase] && (
         <div className={styles.rail}>
-          <StepRail current={STAGE_OF[phase]} />
+          <StepRail current={STAGE_OF[phase]} extra={railExtra} />
         </div>
       )}
+      </div>
+      {ninaLost && <NinaLostCard state={nina} onRestart={restartNina} />}
     </div>
     </div>
   )

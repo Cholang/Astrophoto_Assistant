@@ -27,6 +27,11 @@
   --step-done: #303337;
   --step-done-line: #5e8f6f;
   --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.35);
+  /* 하늘 화면(준비 단계 배경): 사진이라 밝게 테마에서도 어둡다. 그 위 글자·선은 하늘 전용 색 */
+  --sky: #0e0f11;
+  --star: #e8e6e1;
+  --sky-muted: rgb(255 255 255 / 0.55);
+  --sky-line: rgb(255 255 255 / 0.16);
   color-scheme: dark;
 }
 
@@ -52,6 +57,10 @@
   --step-done: #ffffff;
   --step-done-line: #8fb89d;
   --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.14);
+  --sky: #16181b;
+  --star: #ebe8e3;
+  --sky-muted: rgb(255 255 255 / 0.6);
+  --sky-line: rgb(255 255 255 / 0.18);
   color-scheme: light;
 }
 
@@ -79,6 +88,10 @@
   --step-done: #150000;
   --step-done-line: #6a0000;
   --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.6);
+  --sky: #000000;
+  --star: #b80000;
+  --sky-muted: #9a0000;
+  --sky-line: rgb(184 0 0 / 0.3);
   color-scheme: dark;
 }
 
@@ -94,6 +107,7 @@
   --gutter: clamp(20px, 6vw, 96px);
   /* 하단 단계 레일 높이 (모든 화면 같은 높이) */
   --rail-h: 38px;
+  --rail-w: 150px; /* 진행 표시(오른쪽 세로 열) 너비. 긴 작업 이름은 왼쪽 화면 영역으로 넘쳐도 된다 (2026-10-06) */
   /* 공간감(z축): 지금은 "가리키면 살짝 떠오름" 한 단계만 (DESIGN.md 9장). 나중에 앱 전체 높이 단계를 정하면 이 토큰들을 그 체계의 한 단계로 바꾼다.
      그림자 색은 테마마다 위에서 (--lift-shadow) */
   --lift: translateY(-4px) scale(1.04);

@@ -1,116 +1,266 @@
-/* 하단 단계 레일: 높이 고정, 가운데 정렬, 조용하게 */
+/* 진행 표시: 화면 오른쪽 세로 열 (시안 v8). 글자는 왼쪽, 점은 오른쪽 한 줄(같은 세로선) 위 */
 .rail {
   position: relative;
-  flex-shrink: 0;
-  height: var(--rail-h);
   box-sizing: border-box;
+  width: var(--rail-w);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 34px 22px 24px 12px;
+  color: var(--muted);
+  /* 긴 이름(캘리브레이션 등)은 왼쪽으로 넘쳐 보인다 */
+  overflow: visible;
+}
+
+.list {
+  list-style: none;
+  margin: auto 0;
+  padding: 0;
+}
+
+/* 단계 한 줄 + 아래로 다음 단계까지 잇는 선 */
+.stage {
+  position: relative;
+  padding-bottom: 22px;
+}
+
+.stage::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 28px;
+  bottom: 2px;
+  border-left: 1px dashed var(--line);
+}
+
+.stage[data-state='done']::after {
+  border-left: 2px solid color-mix(in srgb, var(--pass) 65%, transparent);
+}
+
+.stage[data-last='true']::after {
+  display: none;
+}
+
+.row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 var(--gutter);
-  border-top: 1px solid var(--line);
-  font-size: var(--size-bar);
-  color: var(--muted);
+  justify-content: flex-end;
+  gap: 14px;
+  min-height: 28px;
+}
+
+.name {
+  font-size: 13px;
   white-space: nowrap;
-  overflow: hidden;
 }
 
-.step {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.mark {
-  width: 16px;
-  height: 16px;
+.dot {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
   display: grid;
   place-items: center;
+  border: 1.5px dashed var(--line);
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px var(--line);
+  background: var(--rail-bg, var(--bg));
+  z-index: 1;
 }
 
-.mark svg {
+.dot svg {
   width: 14px;
   height: 14px;
 }
 
-.step[data-state='done'] {
+.stage[data-state='done'] .name {
   color: var(--text);
+  opacity: 0.75;
 }
 
-.step[data-state='done'] .mark {
-  box-shadow: none;
+.stage[data-state='done'] .dot {
+  border: 1.5px solid var(--pass);
   color: var(--pass);
 }
 
-/* 현재 단계: 굵게 + 강조색 점 */
-.step[data-state='now'] {
-  color: var(--text);
+/* 지금 단계: 크고 굵게 + 강조색 점 */
+.stage[data-state='now'] .name {
+  font-size: 20px;
   font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent);
 }
 
-.step[data-state='now'] .mark {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+.stage[data-state='now'] .dot {
+  border: 2px solid var(--accent);
 }
 
-.step[data-state='now'] .mark::after {
+.stage[data-state='now'] .dot::after {
   content: '';
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--accent);
 }
 
-.sep {
-  width: 28px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--line);
-  transition: background-color 400ms ease;
+/* 지금 단계의 작업: 작은 점이 같은 세로선 위에. 이름(제목만)은 지금·문제 작업만 보이고, 끝난·남은 작업은 올리거나 초점일 때만 (2026-10-06) */
+.items {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
 }
 
-.sep[data-on='true'] {
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-height: 40px;
+  padding-right: 8px;
+  border-radius: 6px;
+  cursor: default;
+  outline: none;
+}
+
+.item:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+.itemName {
+  display: grid;
+  justify-items: end;
+  font-size: 14px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+
+
+
+.item[data-open='true'] .itemName,
+.item[data-state='now'] .itemName,
+.item[data-state='problem'] .itemName {
+  opacity: 1;
+}
+
+.item[data-state='now'] .itemName {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.item[data-state='problem'] .itemName {
+  font-weight: 600;
+  color: var(--fail);
+}
+
+.item[data-state='skipped'] .itemName {
+  text-decoration: line-through;
+}
+
+.itemDot {
+  position: relative;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 1px dashed var(--muted);
+  border-radius: 50%;
+  background: var(--rail-bg, var(--bg));
+  z-index: 1;
+}
+
+.item[data-state='done'] .itemDot {
+  border: 1px solid var(--pass);
+  background: var(--pass);
+}
+
+.item[data-state='now'] .itemDot {
+  border: 1px solid var(--accent);
   background: var(--accent);
 }
 
-/* 좁은 화면: 선을 줄인다 */
-@media (max-width: 560px) {
-  .rail { gap: 6px; }
-  .sep { width: 12px; }
+.item[data-state='now'] .itemDot {
+  /* 지금 작업: 점 뒤에서 빛이 퍼졌다 잦아든다 (글로우, 2026-10-06 — 테두리 선이 커지던 펄스에서 바꿈) */
+  animation: glow 3.2s ease-in-out infinite;
 }
 
-/* 앱 끄기 (문 아이콘): 레일 맨 오른쪽. 단계 표시의 가운데 정렬에 영향 없게 따로 놓는다 */
+.item[data-state='problem'] .itemDot {
+  border: 1px solid var(--fail);
+  border-radius: 2px;
+  background: var(--fail);
+}
+
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow: 0 0 2px 0 color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 14px 5px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item[data-state='now'] .itemDot {
+    animation: none;
+    box-shadow: 0 0 8px 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .itemName {
+    transition: none;
+  }
+}
+
+/* 맨 아래: 화면 버튼(준비 중단)·앱 끄기 */
+.end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+}
+
+.action,
 .exit {
-  position: absolute;
-  top: 50%;
-  right: var(--gutter);
-  transform: translateY(-50%);
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  /* 연한 테두리와 면: 누를 수 있는 버튼임이 보이게 (레일의 조용한 글자와 구분) */
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  color: var(--muted);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
   transition: color 160ms, border-color 160ms, background-color 160ms;
 }
 
-.exit svg {
-  width: 17px;
-  height: 17px;
+.action {
+  font-weight: 600;
 }
 
+.exit {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+.exit svg {
+  width: 16px;
+  height: 16px;
+}
+
+.action:hover,
 .exit:hover {
   color: var(--text);
   border-color: var(--accent);
   background: var(--surface-2);
 }
 
+.action:focus-visible,
 .exit:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--focus);

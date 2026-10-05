@@ -1,0 +1,67 @@
+/* 하늘 화면: 화면 영역 전체 배경. 좌우 끝은 하늘색으로 사라진다 (시안 v8) */
+.view {
+  position: absolute;
+  inset: 0;
+  background: var(--sky);
+  pointer-events: none;
+}
+
+.view > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+
+.star { fill: var(--star); }
+.label { font-family: var(--font); font-size: 17px; fill: var(--sky-muted); }
+.labelStrong { font-family: var(--font); font-size: 17px; fill: var(--star); }
+.labelAcc { font-family: var(--font); font-size: 17px; fill: var(--accent); }
+.small { font-family: var(--font); font-size: 14px; fill: var(--sky-muted); }
+
+.grid { fill: none; stroke: var(--sky-line); stroke-width: 1.2; }
+.acc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.accDash { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 6; }
+.accFill { fill: var(--accent); }
+.mark { fill: none; stroke: var(--accent); stroke-width: 1.6; opacity: 0.65; }
+.target { fill: none; stroke: var(--pass); stroke-width: 3; }
+.targetDot { fill: var(--pass); }
+.dash { stroke: var(--accent); stroke-width: 3; stroke-dasharray: 10 8; }
+.trail { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; opacity: 0.75; }
+.trailDim { fill: none; stroke: var(--sky-muted); stroke-width: 2; stroke-dasharray: 3 8; }
+.box { fill: none; stroke: var(--pass); stroke-width: 2.5; }
+.cross { stroke: var(--sky-muted); stroke-width: 2; }
+.cell { fill: var(--sky); stroke: var(--sky-line); }
+
+/* 가이드 별: 대기 흔들림을 흉내 */
+.jitter { animation: jitter 1.4s steps(4) infinite; }
+
+@keyframes jitter {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(1.5px, -1px); }
+  50% { transform: translate(-1px, 0.8px); }
+  75% { transform: translate(0.8px, 1.2px); }
+}
+
+/* 가이딩 그래프: 가이드 별 아래, 중앙 정보 위 */
+.graph {
+  position: absolute;
+  left: 50%;
+  top: calc(100% - 590px);
+  width: 650px;
+  height: 190px;
+  transform: translateX(-50%);
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.graph svg { width: 100%; height: 100%; }
+.axis { stroke: var(--sky-line); }
+.limit { stroke: var(--sky-line); stroke-dasharray: 3 6; }
+.ra { fill: none; stroke: var(--accent); stroke-width: 2; }
+.dec { fill: none; stroke: var(--sky-muted); stroke-width: 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .jitter { animation: none; }
+}

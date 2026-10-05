@@ -1,0 +1,195 @@
+/* 중앙 정보: 가운데 아래. 측정값(고정 높이) → 상태 줄(한 줄 고정) → 버튼(고정 높이). 줄 자리는 늘 확보 (레이아웃 안정성) */
+.center {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 56px;
+  display: grid;
+  grid-template-rows: 180px 34px 56px;
+  row-gap: 16px;
+  justify-items: center;
+  color: var(--star);
+  text-shadow: 0 2px 12px var(--sky);
+  z-index: 3;
+}
+
+.readout {
+  align-self: end;
+  width: min(1040px, 100%);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+/* 오래된 값은 정상 값처럼 보이지 않게 흐리게 */
+.readout[data-fresh='Stale'] { opacity: 0.5; }
+
+.metric {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.metric strong {
+  font-size: 34px;
+  font-weight: 650;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric span,
+.polar p {
+  max-width: 920px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--sky-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric strong[data-tone='Ok'] { color: var(--pass); }
+.metric strong[data-tone='Warn'] { color: var(--warn); }
+.metric strong[data-tone='Fail'] { color: var(--fail); }
+
+/* ① 극축 정렬 */
+.polar {
+  display: grid;
+  justify-items: center;
+}
+
+.grade {
+  margin-bottom: 8px;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.grade[data-tone='Ok'] { color: var(--pass); }
+.grade[data-tone='Busy'] { color: var(--accent); }
+.grade[data-tone='Warn'] { color: var(--warn); }
+.grade[data-tone='Fail'] { color: var(--fail); }
+
+.dirs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+}
+
+.dirs > div {
+  display: grid;
+  grid-template-columns: 42px 124px;
+  column-gap: 14px;
+  align-items: center;
+  text-align: left;
+}
+
+.dirs b {
+  grid-row: span 2;
+  font-size: 44px;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.dirs span {
+  font-size: 16px;
+  color: var(--sky-muted);
+}
+
+.dirs strong {
+  font-size: 34px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.cross {
+  width: 32px;
+  font-size: 30px;
+  font-style: normal;
+  text-align: center;
+  color: var(--sky-muted);
+  opacity: 0.5;
+}
+
+.polar p { margin: 10px 0 0; }
+
+/* 상태 줄: 측정값과 버튼 사이, 한 줄 */
+.status {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 1040px;
+  font-size: 18px;
+  color: var(--sky-muted);
+  text-align: center;
+}
+
+.status svg { width: 18px; height: 18px; flex: none; }
+.status[data-tone='Ok'] { color: var(--pass); }
+.status[data-tone='Warn'] { color: var(--warn); }
+.status[data-tone='Fail'] { color: var(--fail); font-weight: 600; }
+
+/* 버튼: 주 버튼 가운데 고정, 보조 버튼은 오른쪽에 같은 높이 */
+.actions {
+  position: relative;
+  width: 280px;
+  height: 56px;
+}
+
+.actions[data-empty='true'] { visibility: hidden; }
+
+.primary,
+.quiet {
+  height: 56px;
+  border-radius: var(--radius);
+  font: inherit;
+  cursor: pointer;
+  text-shadow: none;
+  transition: filter 150ms, border-color 150ms, background-color 150ms;
+}
+
+.primary {
+  width: 280px;
+  padding: 8px 16px;
+  border: 1.5px solid var(--primary-border);
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.primary:not(:disabled):hover { filter: brightness(1.06); }
+
+.secondary {
+  position: absolute;
+  left: calc(100% + 16px);
+  top: 0;
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.quiet {
+  padding: 0 18px;
+  border: 1.5px solid var(--sky-line);
+  background: rgb(0 0 0 / 0.35);
+  color: var(--star);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.quiet:not(:disabled):hover { border-color: var(--sky-muted); }
+
+.primary:disabled,
+.quiet:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.primary:focus-visible,
+.quiet:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+}

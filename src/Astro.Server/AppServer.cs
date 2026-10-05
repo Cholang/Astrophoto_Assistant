@@ -36,6 +36,7 @@ public static class AppServer
 
         builder.Services.Configure<NinaOptions>(builder.Configuration.GetSection("Nina"));
         builder.Services.Configure<SetupOptions>(builder.Configuration.GetSection("Setup"));
+        builder.Services.Configure<UpdateOptions>(builder.Configuration.GetSection("Updates"));
         builder.Services.Configure<EquipmentOptions>(builder.Configuration.GetSection("Equipment"));
         builder.Services.AddHttpClient<NinaApiClient>((sp, http) =>
         {
@@ -46,6 +47,9 @@ public static class AppServer
         builder.Services.Configure<NetworkOptions>(builder.Configuration.GetSection("Network"));
         builder.Services.AddHttpClient<InternetCheck>();
         builder.Services.AddTransient<SetupChecker>();
+        // 새 버전 알림 (프로필 화면): 최신 버전은 하루 한 번만 받아 데이터 폴더에 기억
+        builder.Services.AddSingleton(sp => new UpdateChecker(sp.GetRequiredService<IHttpClientFactory>(), sp.GetRequiredService<IOptions<NinaOptions>>(), sp.GetRequiredService<IOptions<UpdateOptions>>(),
+            sp.GetRequiredService<ILogger<UpdateChecker>>(), builder.Configuration["App:DataDir"]));
         builder.Services.AddTransient<EngineStarter>();
         builder.Services.AddSingleton<NinaWatcher>();
         builder.Services.AddTransient<EquipmentConnector>();
@@ -64,10 +68,8 @@ public static class AppServer
         builder.Services.AddSingleton<PlanTools>();
         builder.Services.AddSingleton<ChatModelFactory>();
         builder.Services.AddSingleton<PlanAssistant>();
-        // 촬영 준비: 지금은 모의 장비만 (실제 N.I.N.A.·PHD2·SharpCap 동작은 W4~W6에서 IPrepareDevices로 채운다)
-        builder.Services.AddSingleton<Prepare.SimulatedPrepareDevices>();
-        builder.Services.AddSingleton<Prepare.IPrepareDevices>(sp => sp.GetRequiredService<Prepare.SimulatedPrepareDevices>());
-        builder.Services.AddSingleton<Prepare.PrepareRunner>();
+        // 촬영 준비: 작업별로 나눈 구조, 지금은 모의 장비만 (docs/PREPARE_IMPLEMENTATION.md — 실제 장비는 P3)
+        Prepare.PrepareSetup.AddPrepare(builder.Services);
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
         builder.Services.AddTransient<SiteService>();
@@ -75,7 +77,15 @@ public static class AppServer
 
         var app = builder.Build();
         app.UseDefaultFiles();
-        app.UseStaticFiles();
+        // index.html은 캐시하지 않는다: 웹을 다시 빌드해도 WebView2가 옛 index.html(옛 화면)을 띄우던 문제. assets는 이름에 해시가 있어 그대로 캐시
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            OnPrepareResponse = c =>
+            {
+                if (c.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+                    c.Context.Response.Headers.CacheControl = "no-cache";
+            },
+        });
 
         var api = app.MapGroup("/api");
 
@@ -97,6 +107,14 @@ public static class AppServer
 
         // 전체를 한 번에 (프로필을 고른 직후: 모두 설치돼 있으면 0단계 화면을 건너뛴다)
         api.MapGet("/setup/status", (SetupChecker checker) => checker.CheckAll());
+
+        // 새 버전 알림: 알릴 것만 (확인 실패면 빈 목록), 이 버전은 다시 알리지 않기
+        api.MapGet("/updates", (UpdateChecker updates, CancellationToken ct) => updates.CheckAsync(ct));
+        api.MapPost("/updates/dismiss", (UpdateDismiss body, UpdateChecker updates) =>
+        {
+            updates.Dismiss(body.Id, body.Version);
+            return Results.NoContent();
+        });
 
         // 한 항목만 다시 확인 (쉐브론 안의 새로고침)
         api.MapGet("/setup/check/{id}", (string id, SetupChecker checker) =>
@@ -160,23 +178,37 @@ public static class AppServer
 
     private static void MapPrepare(RouteGroupBuilder prepare)
     {
-        // 확정 계획으로 준비 시작 (같은 계획이면 하던 곳에서 그대로)
-        prepare.MapPost("/start", (Prepare.PrepareRunner runner) =>
-            runner.Start() is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(runner.View()));
-        prepare.MapGet("/state", (Prepare.PrepareRunner runner) => runner.View());
+        // 확정 계획으로 준비 시작 (같은 계획이면 하던 곳에서 그대로). 준비 시작 = ① 바로 시작
+        prepare.MapPost("/start", (Prepare.PrepareStarter starter, Prepare.Flow.PrepareRunner runner) =>
+            starter.Start() is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(runner.View()));
+        prepare.MapGet("/state", (Prepare.Flow.PrepareRunner runner) => runner.View());
         // 상태가 바뀔 때마다 (Server-Sent Events)
-        prepare.MapGet("/watch", (Prepare.PrepareRunner runner, CancellationToken ct) =>
+        prepare.MapGet("/watch", (Prepare.Flow.PrepareRunner runner, CancellationToken ct) =>
             TypedResults.ServerSentEvents(runner.WatchAsync(ct), eventType: "state"));
-        // 칸의 버튼
-        prepare.MapPost("/act", (PrepAct input, Prepare.PrepareRunner runner) =>
-            runner.Act(input.Step, input.Action) is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+        // 버튼 (중앙 정보의 버튼·끝 버튼·다시 하기)
+        prepare.MapPost("/act", (PrepAct input, Prepare.Flow.PrepareRunner runner) =>
+            runner.Act(input.Action) is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+        // 준비 중단 (진행 표시 아래) — 하던 작업을 멈추고 정지를 확인
+        prepare.MapPost("/abort", async (Prepare.Flow.PrepareRunner runner) =>
+            await runner.AbortAsync() ? Results.NoContent() : Results.Conflict(new { error = "장비가 멈췄는지 확인하지 못했습니다. 장비 상태를 확인해 주세요." }));
 
-        // [임시] 화면 확인용: 다음 동작 하나를 실패시키기, 대상이 보인다고 가정하기
-        prepare.MapPost("/sim/fail-next/{step}", (string step, Prepare.SimulatedPrepareDevices sim) => { sim.FailNext(step); return Results.NoContent(); });
-        prepare.MapPost("/sim/ignore-altitude", (Prepare.PrepareRunner runner) => { runner.IgnoreAltitude(); return Results.NoContent(); });
+        // [모의] 화면·시험용: 다음 동작 하나 실패시키기(키는 SimFaults.Known), 대상이 보인다고 가정, 모의 속도
+        prepare.MapPost("/sim/fail-next/{key}", (string key, Prepare.Sim.SimFaults faults) =>
+        {
+            if (!Prepare.Sim.SimFaults.Known.Contains(key)) return Results.BadRequest(new { error = $"모르는 키: {key}", known = Prepare.Sim.SimFaults.Known });
+            faults.Arm(key);
+            return Results.NoContent();
+        });
+        prepare.MapPost("/sim/ignore-altitude", (Prepare.Flow.PrepareRunner runner) =>
+        {
+            if (runner.Context is { } c) c.IgnoreAltitude = true;
+            return Results.NoContent();
+        });
+        prepare.MapPost("/sim/speed/{speed:double}", (double speed, Prepare.Sim.SimOptions sim) => { sim.Speed = Math.Clamp(speed, 0, 5); return Results.NoContent(); });
     }
 
-    private sealed record PrepAct(string Step, string Action);
+    /// <summary>버튼. Step은 예전 화면 호환용(쓰지 않음)</summary>
+    private sealed record PrepAct(string? Step, string Action);
 
     private static void MapPlan(RouteGroupBuilder plan)
     {
@@ -231,6 +263,8 @@ public static class AppServer
     private sealed record ChatInput(string Text);
 
     private sealed record RigSelect(string Kind, string? DeviceId, string? Name);
+
+    private sealed record UpdateDismiss(string Id, string Version);
 
     private static void MapProfiles(RouteGroupBuilder profiles)
     {

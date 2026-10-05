@@ -145,6 +145,7 @@ public sealed class RigSetup(NinaApiClient nina, RigOverrides overrides, LiveDev
     private async Task<string?> SwitchAsync(EquipmentConnector.Slot slot, RigChoice choice, CancellationToken ct)
     {
         var kind = slot.Kind;
+        using var behind = BackgroundWindows.ForConnect(kind); // PHD2·Wanderer Empire가 켜지며 AA 위로 뜨지 않게
         var previous = await connector.CurrentIdAsync(kind, ct);
         var wasConnected = await nina.IsConnectedAsync(kind, ct);
         // "연결됨"만으로는 어떤 장비인지 알 수 없으므로, 지금 연결된 것은 먼저 끊는다
