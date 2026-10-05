@@ -2,7 +2,7 @@ using Astro.Server.Prepare.Sim;
 
 namespace Astro.Server.Prepare.Tasks.TestShot;
 
-/// <summary>⑦ 모의 장비. "test.download" = 두 번 다 못 받음, "test.bright" = 달빛으로 배경이 밝음(노출을 줄이면 괜찮아짐)</summary>
+/// <summary>⑦ 모의 장비. "test.expose" = 노출 실패, "test.download" = 두 번 다 못 받음, "test.bright" = 달빛으로 배경이 밝음(노출을 줄이면 괜찮아짐)</summary>
 public sealed class SimulatedTestShotDevices(SimOptions sim, SimFaults faults) : ITestShotDevices
 {
     private bool _exposing, _saved, _failDownload, _bright;
@@ -13,6 +13,7 @@ public sealed class SimulatedTestShotDevices(SimOptions sim, SimFaults faults) :
         _exposing = true;
         _saved = false;
         _lastExposure = exposureSeconds;
+        if (faults.Take("test.expose")) { _exposing = false; return false; }
         if (faults.Take("test.download")) _failDownload = true;
         if (faults.Take("test.bright")) _bright = true;
         try
@@ -25,7 +26,7 @@ public sealed class SimulatedTestShotDevices(SimOptions sim, SimFaults faults) :
 
     private int _downloadTries;
 
-    public async Task<ShotStats?> DownloadAndAnalyzeAsync(CancellationToken ct)
+    public async Task<ShotStats?> DownloadAndAnalyzeAsync(DateTimeOffset since, CancellationToken ct)
     {
         await sim.Delay(900, ct);
         if (_failDownload)

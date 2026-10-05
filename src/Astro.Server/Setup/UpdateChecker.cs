@@ -97,10 +97,14 @@ public sealed class UpdateChecker(IHttpClientFactory http, IOptions<NinaOptions>
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"{Product.Name}-update-check"); // GitHub API는 User-Agent가 있어야 한다
             var latest = new Dictionary<string, string>();
             var ninaVersion = InstallLocator.NinaExe(nina.Value.ExePath) is { } exe ? FileVersion(exe) : null;
-            await Try(latest, "nina", () => NinaLatestAsync(client, ct));
-            await Try(latest, "advanced-api", () => AdvancedApiLatestAsync(client, ninaVersion, ct));
-            await Try(latest, "ascom", () => GitHubLatestAsync(client, "ASCOMInitiative/ASCOMPlatform", ct));
-            await Try(latest, "phd2", () => GitHubLatestAsync(client, "OpenPHDGuiding/phd2", ct));
+            // 네 곳은 서로 상관없으니 한꺼번에 묻는다 — 가장 느린 한 곳만큼만 기다린다 (Codex 최적화 제안)
+            var found = await Task.WhenAll(
+                Try("nina", () => NinaLatestAsync(client, ct)),
+                Try("advanced-api", () => AdvancedApiLatestAsync(client, ninaVersion, ct)),
+                Try("ascom", () => GitHubLatestAsync(client, "ASCOMInitiative/ASCOMPlatform", ct)),
+                Try("phd2", () => GitHubLatestAsync(client, "OpenPHDGuiding/phd2", ct)));
+            foreach (var (id, version) in found)
+                if (version is not null) latest[id] = version;
             // 하나도 받지 못했으면(인터넷 없음) 기억하지 않는다 — 다음 실행 때 다시
             if (latest.Count > 0) Save(CacheFile, new Cache(today, latest));
             return latest;
@@ -111,15 +115,16 @@ public sealed class UpdateChecker(IHttpClientFactory http, IOptions<NinaOptions>
         }
     }
 
-    private async Task Try(Dictionary<string, string> into, string id, Func<Task<string?>> get)
+    private async Task<(string Id, string? Version)> Try(string id, Func<Task<string?>> get)
     {
         try
         {
-            if (await get() is { } v) into[id] = v;
+            return (id, await get());
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
         {
             log.LogInformation("새 버전 확인: {Id} 실패 ({Message})", id, e.Message);
+            return (id, null);
         }
     }
 

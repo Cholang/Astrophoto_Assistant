@@ -45,7 +45,9 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
     {
         var ctx = run.Context;
         var evening = TonightService.EveningOf(ctx.Now());
-        if (ctx.Memory.LastCalibration is { } last && last.Evening == evening && await devices.HasCalibrationAsync(ct))
+        // 같은 밤 + 마지막 극축 정렬 뒤에 만든 보정값만 재사용 (극축 정렬을 다시 했으면 새로, CX-PREP-CODE-06)
+        if (ctx.Memory.LastCalibration is { } last && last.Evening == evening && last.At > (ctx.Memory.LastPolarAlignedAt ?? DateTimeOffset.MinValue)
+            && await devices.HasCalibrationAsync(ct))
         {
             run.Guide("이번 밤 보정값", "오늘 극축 정렬 뒤에 만든 보정값이 있습니다. 같은 밤 대상만 바꿀 때는 다시 하지 않습니다.");
             run.Status(null);
@@ -121,7 +123,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
         CalibrationData data;
         await using (await run.Context.Mount.AcquireAsync(ct))
             data = await devices.CalibrateAsync((dir, n) => run.Readout("steps", $"{(dir == "west" ? "서쪽" : "북쪽")} {n} / 12", "적도의를 조금씩 밀며 재는 중", Tone.Busy,
-                new Dictionary<string, double> { ["step"] = n }, live: true), ct);
+                new Dictionary<string, double> { ["step"] = n, ["north"] = dir == "west" ? 0 : 1 }, live: true), ct); // 그림 방향은 문장이 아니라 값으로
         if (!data.Ok)
         {
             run.Status($"{data.Problem} — 다음 위치로 옮깁니다", Tone.Warn);

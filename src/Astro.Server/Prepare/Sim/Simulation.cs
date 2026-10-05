@@ -27,7 +27,7 @@ public sealed class SimFaults
         "focus.stars", "focus.stall",
         "center.solve",
         "guiding.star",
-        "test.download", "test.bright",
+        "test.expose", "test.download", "test.bright",
         "stop.fail",
     ];
 

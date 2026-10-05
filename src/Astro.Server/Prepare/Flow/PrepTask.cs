@@ -27,6 +27,12 @@ public interface IPrepTask
 
     /// <summary>움직이던 장비를 멈추고 멈춘 것을 확인한다 (CX-PREP-IMPL-01). 확인하지 못하면 false</summary>
     Task<bool> StopAsync(CancellationToken ct);
+
+    /// <summary>
+    /// 끝난 뒤에도 장비가 계속 동작하는 작업 (⑥ 가이딩 — 끝 상태 약속이 "가이딩 중"). 러너가 앞 작업을 다시 하거나 준비를 중단할 때
+    /// 이 작업의 StopAsync로 먼저 멈추고 확인한다 (CX-PREP-CODE-01·03).
+    /// </summary>
+    bool KeepsRunning => false;
 }
 
 public sealed record SubStep(string Id, string Label);
@@ -57,8 +63,8 @@ public interface ITaskRun
     int RunId { get; }
     void SubStep(int index);
     void Guide(string title, string text);
-    /// <summary>측정값 칸. live = 계속 들어오는 값(끊기면 Stale로 표시), unverified = 단위·환산 미검증 값</summary>
-    void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false);
+    /// <summary>측정값 칸. live = 계속 들어오는 값(끊기면 Stale로 표시), unverified = 단위·환산 미검증 값, observedAt = 장비가 잰 시각(없으면 지금)</summary>
+    void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false, DateTimeOffset? observedAt = null);
     void ClearReadout();
     void Status(string? text, Tone tone = Tone.Busy);
     void Live(string kind, string? url = null, object? data = null);
@@ -134,6 +140,8 @@ public interface IPrepMemory
     (int Position, double? TemperatureC)? LastFocus { get; set; }
     /// <summary>그날 밤 마지막 캘리브레이션 (같은 밤 대상만 바꾸면 재사용)</summary>
     CalibrationResult? LastCalibration { get; set; }
+    /// <summary>마지막으로 극축 정렬을 마친 시각 — 그 전에 만든 캘리브레이션은 재사용하지 않는다 (CX-PREP-CODE-06)</summary>
+    DateTimeOffset? LastPolarAlignedAt { get; set; }
     double? CameraAngle(string targetId);
     void SetCameraAngle(string targetId, double degrees);
 }
@@ -143,6 +151,7 @@ public sealed class InMemoryPrepMemory : IPrepMemory
     private readonly Dictionary<string, double> _angles = [];
     public (int Position, double? TemperatureC)? LastFocus { get; set; }
     public CalibrationResult? LastCalibration { get; set; }
+    public DateTimeOffset? LastPolarAlignedAt { get; set; }
     public double? CameraAngle(string targetId) => _angles.TryGetValue(targetId, out var a) ? a : null;
     public void SetCameraAngle(string targetId, double degrees) => _angles[targetId] = degrees;
 }

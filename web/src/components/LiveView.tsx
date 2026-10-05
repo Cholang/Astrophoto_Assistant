@@ -113,7 +113,7 @@ function GuideImage({ field, readout, data, subStep }: { field: React.ReactNode;
   let path: string | null = null
   if (readout?.kind === 'steps') {
     const n = readout.values.step ?? 0
-    const north = readout.big.startsWith('북')
+    const north = readout.values.north === 1 // 방향은 값으로 받는다 (표시 문장과 그림을 묶지 않음)
     const pts: string[] = []
     const west = north ? 12 : n
     for (let i = 0; i <= west; i++) pts.push(`${FX + i * 18},${FY - i * 1.2}`)

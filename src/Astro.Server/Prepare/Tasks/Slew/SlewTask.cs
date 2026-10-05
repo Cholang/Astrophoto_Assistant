@@ -128,6 +128,8 @@ public sealed class SlewTask(ISlewDevices devices) : IPrepTask
             using var asking = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var stop = run.AskAsync([new("stop", "멈춤", true)], asking.Token);
             Task<SlewMove> slew;
+            var stopPressed = false;
+            var stopped = false;
             await using (await ctx.Mount.AcquireAsync(ct))
             {
                 slew = devices.SlewToTargetAsync(ctx.Plan.RaDegrees, ctx.Plan.DecDegrees,
@@ -135,14 +137,27 @@ public sealed class SlewTask(ISlewDevices devices) : IPrepTask
                 await Task.WhenAny(slew, stop);
                 if (stop.IsCompletedSuccessfully)
                 {
+                    stopPressed = true;
                     moving.Cancel();
-                    try { await slew; } catch (OperationCanceledException) { }
-                    var stopped = await devices.StopAsync(CancellationToken.None);
-                    run.Guide("이동을 멈췄습니다", "케이블 등을 확인한 뒤 다시 이동하세요.");
-                    run.Status(stopped ? "적도의가 멈춰 있습니다" : "적도의가 멈췄는지 확인하지 못했습니다. 장비 상태를 확인해 주세요", stopped ? Tone.Warn : Tone.Fail);
-                    await run.AskAsync([new("move", "다시 이동", true)], ct);
-                    return null;
+                    // 정지 명령은 이동 명령이 끝나기를 기다리지 않고 바로 (어댑터가 취소에 늦게 응답해도 멈추게, CX-PREP-CODE-02)
+                    stopped = await TryStopAsync();
+                    try { await slew.WaitAsync(StopWait); } catch (Exception e) when (e is OperationCanceledException or TimeoutException) { }
                 }
+            }
+            if (stopPressed)
+            {
+                run.Guide("이동을 멈췄습니다", "케이블 등을 확인한 뒤 다시 이동하세요.");
+                // 멈춘 것을 확인하기 전에는 다시 이동할 수 없다 (CX-PREP-CODE-02)
+                while (!stopped)
+                {
+                    run.Status("적도의가 멈췄는지 확인하지 못했습니다. 적도의를 직접 확인한 뒤 장비 상태 다시 확인을 눌러 주세요", Tone.Fail);
+                    await run.AskAsync([new("recheck-stop", "장비 상태 다시 확인", true)], ct);
+                    await using (await ctx.Mount.AcquireAsync(ct))
+                        stopped = await TryStopAsync();
+                }
+                run.Status("적도의가 멈춰 있습니다", Tone.Warn);
+                await run.AskAsync([new("move", "다시 이동", true)], ct);
+                return null;
             }
             asking.Cancel();
             try { await stop; } catch (OperationCanceledException) { }
@@ -164,4 +179,14 @@ public sealed class SlewTask(ISlewDevices devices) : IPrepTask
     }
 
     public Task<bool> StopAsync(CancellationToken ct) => devices.StopAsync(ct);
+
+    private static readonly TimeSpan StopWait = TimeSpan.FromSeconds(15);
+
+    /// <summary>정지 명령 + 확인. 예외·시간 초과는 확인 못 함(false)</summary>
+    private async Task<bool> TryStopAsync()
+    {
+        using var cts = new CancellationTokenSource(StopWait);
+        try { return await devices.StopAsync(cts.Token); }
+        catch (Exception e) when (e is not OutOfMemoryException) { return false; }
+    }
 }

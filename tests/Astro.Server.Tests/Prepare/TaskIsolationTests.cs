@@ -22,7 +22,7 @@ public class TaskIsolationTests
         public List<string> Asked { get; } = [];
         public void SubStep(int index) { }
         public void Guide(string title, string text) { }
-        public void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false) { }
+        public void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false, DateTimeOffset? observedAt = null) { }
         public void ClearReadout() { }
         public void Status(string? text, Tone tone = Tone.Busy) { if (text is not null) Statuses.Add(text); }
         public void Live(string kind, string? url = null, object? data = null) { }

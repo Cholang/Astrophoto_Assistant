@@ -31,7 +31,7 @@ const FAULTS: Record<string, [string, string][]> = {
   focus: [['focus.stars', '별 없음'], ['focus.stall', '포커서 멈춤']],
   center: [['center.solve', '솔빙']],
   guiding: [['guiding.star', '가이드 별']],
-  test: [['test.download', '내려받기'], ['test.bright', '배경 밝음']],
+  test: [['test.expose', '노출'], ['test.download', '내려받기'], ['test.bright', '배경 밝음']],
 }
 
 export default function PrepareScreen({ onContinue }: { onContinue: () => void }) {

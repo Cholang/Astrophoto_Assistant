@@ -16,6 +16,8 @@ public sealed class FakeTask(string id, List<string> log) : IPrepTask
     public bool IgnoreCancel { get; set; }
     public bool EndStateOk { get; set; } = true;
     public bool StopConfirms { get; set; } = true;
+    /// <summary>끝난 뒤에도 장비가 도는 작업 흉내 (가이딩)</summary>
+    public bool KeepsRunning { get; set; }
     public ITaskRun? LastRun { get; private set; }
 
     public bool AppliesTo(PrepContext ctx) => true;

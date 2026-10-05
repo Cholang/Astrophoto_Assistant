@@ -34,6 +34,8 @@ public sealed record PolarEndState(bool SharpCapClosed, bool GuideCameraOnPhd2, 
 public sealed class PolarTask(IPolarDevices devices) : IPrepTask
 {
     private const int HandOverTries = 3;
+    /// <summary>이보다 오래 갱신되지 않은 조절량으로는 완료하지 않는다</summary>
+    private static readonly TimeSpan OffsetStaleAfter = TimeSpan.FromSeconds(5);
 
     public string Id => "polar";
     public string Title => "극축 정렬";
@@ -52,6 +54,7 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
         var scale = await devices.GuidePixelScaleAsync(ct);
         var (arcmin, grade) = Evaluate(offset, scale, run.Context);
         var result = new PolarResult(arcmin, offset.XPx, offset.YPx, grade, run.Context.Now());
+        run.Context.Memory.LastPolarAlignedAt = run.Context.Now(); // 이 뒤로는 새 캘리브레이션 (CX-PREP-CODE-06)
         var line = arcmin is { } a ? $"{grade} · {a:F1}′" : $"{Math.Abs(offset.XPx):F0}·{Math.Abs(offset.YPx):F0}px";
         return new Completed(result, line, grade ?? "정렬 완료",
             "가이드 카메라가 PHD2에 다시 연결되었습니다. 다음은 가이딩 보정값을 만드는 캘리브레이션입니다.");
@@ -105,14 +108,18 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
         }
     }
 
-    /// <summary>사용자가 "정렬 완료"를 누를 때까지 조절량을 보여 준다. 마지막 값을 돌려준다</summary>
+    /// <summary>
+    /// 사용자가 "정렬 완료"를 누를 때까지 조절량을 보여 준다. 마지막 값을 돌려준다.
+    /// 조절량을 아직 못 받았거나 한동안 갱신되지 않았으면 완료하지 않고 기다리게 한다 — 없는 값을 0·좋은 등급으로 저장하지 않는다 (CX-PREP-CODE-04)
+    /// </summary>
     private async Task<PolarOffset> AlignAsync(ITaskRun run, CancellationToken ct)
     {
         run.SubStep(2);
         run.Guide("정렬", "화살표 방향으로 나사를 조절해 오차를 줄이고, 원하는 만큼 맞추면 정렬 완료를 누르세요.");
         run.Status(null);
         var scale = await devices.GuidePixelScaleAsync(ct);
-        var last = new PolarOffset(0, 0, run.Context.Now());
+        PolarOffset? last = null;
+        var arrived = new SemaphoreSlim(0);
         using var watch = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var reader = Task.Run(async () =>
         {
@@ -120,18 +127,33 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
             {
                 last = o;
                 ShowOffset(run, o, scale);
+                arrived.Release();
             }
         }, CancellationToken.None);
         try
         {
-            await run.AskAsync([new("align-done", "정렬 완료", true)], ct);
+            while (true)
+            {
+                await run.AskAsync([new("align-done", "정렬 완료", true)], ct);
+                var got = last;
+                if (got is null)
+                    run.Status("아직 조절량을 받지 못했습니다. SharpCap 화면에 조절 화살표가 나오면 다시 눌러 주세요", Tone.Warn);
+                else if (run.Context.Now() - got.At > OffsetStaleAfter)
+                    run.Status($"조절량이 {(run.Context.Now() - got.At).TotalSeconds:F0}초째 갱신되지 않습니다. SharpCap 화면을 확인한 뒤 다시 눌러 주세요", Tone.Warn);
+                else
+                {
+                    run.Status(null);
+                    return got;
+                }
+                // 새 값이 오거나 잠시 지나면 다시 묻는다
+                await arrived.WaitAsync(TimeSpan.FromSeconds(1), ct);
+            }
         }
         finally
         {
             watch.Cancel();
             try { await reader; } catch (OperationCanceledException) { }
         }
-        return last;
     }
 
     private void ShowOffset(ITaskRun run, PolarOffset o, double? scale)
@@ -144,10 +166,10 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
             values["errorArcmin"] = a;
             values["xArcmin"] = Math.Abs(o.XPx) * scale!.Value / 60;
             values["yArcmin"] = Math.Abs(o.YPx) * scale.Value / 60;
-            run.Readout("polar-offset", grade, $"극축 오차 {a:F1}′", PolarRules.Tone(a, PolarRules.ToleranceArcmin(run.Context)), values, live: true);
+            run.Readout("polar-offset", grade, $"극축 오차 {a:F1}′", PolarRules.Tone(a, PolarRules.ToleranceArcmin(run.Context)), values, live: true, observedAt: o.At);
         }
         else
-            run.Readout("polar-offset", $"{dir} {Math.Abs(o.XPx):F0}·{Math.Abs(o.YPx):F0}px", "줄어들고 있는지 보세요 (환산 확인 전 — 방향과 픽셀만)", Tone.Busy, values, live: true, unverified: true);
+            run.Readout("polar-offset", $"{dir} {Math.Abs(o.XPx):F0}·{Math.Abs(o.YPx):F0}px", "줄어들고 있는지 보세요 (환산 확인 전 — 방향과 픽셀만)", Tone.Busy, values, live: true, unverified: true, observedAt: o.At);
     }
 
     /// <summary>환산을 확인했으면 각도 오차와 등급, 아니면 (null, null) — CX-PREP-IMPL-03</summary>

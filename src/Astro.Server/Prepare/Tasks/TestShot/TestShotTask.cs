@@ -7,8 +7,11 @@ public interface ITestShotDevices
 {
     /// <summary>계획 노출로 한 장. 남은 초를 알린다</summary>
     Task<bool> ExposeAsync(int exposureSeconds, int iso, Action<int> remaining, CancellationToken ct);
-    /// <summary>방금 찍은 사진을 내려받고 검사한다. 못 받으면 null</summary>
-    Task<ShotStats?> DownloadAndAnalyzeAsync(CancellationToken ct);
+    /// <summary>
+    /// since(이번 노출을 시작한 시각) 뒤에 저장된 사진만 내려받고 검사한다. 못 받거나 그보다 오래된 사진뿐이면 null
+    /// — 노출이 실패했는데 이전 사진을 이번 시험 사진으로 받아들이지 않게 (CX-PREP-CODE-05)
+    /// </summary>
+    Task<ShotStats?> DownloadAndAnalyzeAsync(DateTimeOffset since, CancellationToken ct);
     Task<bool> StopAsync(CancellationToken ct);
     Task<TestShotEndState> ReadEndStateAsync(CancellationToken ct);
 }
@@ -39,17 +42,27 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
             run.Guide("시험 노출", "계획한 노출 그대로 한 장 찍어 초점·추적·구도를 확인합니다. 이 사진은 촬영 사진에 넣지 않습니다.");
             run.Live("none");
             run.Status($"노출 중입니다 · {ctx.ExposureSeconds}초 · ISO {ctx.Plan.Iso}");
-            await devices.ExposeAsync(ctx.ExposureSeconds, ctx.Plan.Iso, s =>
+            var since = ctx.Now();
+            var exposed = await devices.ExposeAsync(ctx.ExposureSeconds, ctx.Plan.Iso, s =>
                 run.Readout("countdown", $"{s}초", "남은 노출", Tone.Busy, new Dictionary<string, double> { ["remaining"] = s }, live: true), ct);
+            if (!exposed)
+            {
+                // 노출이 실패하면 내려받기·검사로 가지 않는다 (CX-PREP-CODE-05)
+                run.ClearReadout();
+                run.Guide("시험 사진을 찍지 못했습니다", "카메라가 노출하지 못했습니다. 카메라 전원·USB 연결과 카메라의 PC 연결 방식(테더링)을 확인한 뒤 다시 찍어 주세요.");
+                run.Status("카메라가 노출하지 못했습니다", Tone.Fail);
+                await run.AskAsync([new("retry", "다시 찍기", true)], ct);
+                continue;
+            }
 
             run.SubStep(1);
             run.Guide("사진 받기", "카메라에서 사진을 내려받습니다.");
             run.Status("사진을 내려받는 중입니다");
-            var stats = await devices.DownloadAndAnalyzeAsync(ct);
+            var stats = await devices.DownloadAndAnalyzeAsync(since, ct);
             if (stats is null)
             {
                 run.Status("사진을 내려받지 못해 한 번 더 받아 오는 중입니다", Tone.Warn);
-                stats = await devices.DownloadAndAnalyzeAsync(ct);
+                stats = await devices.DownloadAndAnalyzeAsync(since, ct);
             }
             if (stats is null)
             {

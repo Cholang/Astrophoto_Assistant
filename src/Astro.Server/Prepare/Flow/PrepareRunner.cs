@@ -280,7 +280,8 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 lock (_gate) { _ready = true; Changed(); }
                 log.LogInformation("준비 완료: 촬영 시작");
                 break;
-            case "retry": RunTask(cur.Task); break;
+            case "retry": _ = RetryAsync(cur.Task); break;
+            case "restart": RunNext(); break;
             case "endcheck":
                 if (_pendingFinish is { } done) _ = FinishAsync(cur, done);
                 break;
@@ -302,10 +303,13 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         var task = _tasks.FirstOrDefault(t => t.Id == taskId);
         if (task is null) return;
         if (fromRunning && !await StopCurrentAsync(() => RedoAsync(taskId, fromRunning: false))) return;
+        var affected = new[] { taskId }.Concat(Dependents.GetValueOrDefault(taskId, [])).ToList();
+        // 무효가 되는 작업 중 끝난 뒤에도 장비가 계속 도는 것(가이딩)은 결과만 지우지 않고 실제로 멈춘다 (CX-PREP-CODE-01)
+        if (!await StopLingeringAsync(affected, () => RedoAsync(taskId, fromRunning: false))) return;
         lock (_gate)
         {
             if (_ctx is null) return;
-            foreach (var id in new[] { taskId }.Concat(Dependents.GetValueOrDefault(taskId, [])))
+            foreach (var id in affected)
             {
                 if (!_rows.TryGetValue(id, out var row) || row.Status == PrepTaskStatus.Skipped) continue;
                 _rows[id] = (id == taskId ? PrepTaskStatus.Running : PrepTaskStatus.NeedsRecheck, null);
@@ -317,10 +321,16 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         RunTask(task);
     }
 
-    /// <summary>준비 중단: 하던 작업을 멈추고 정지를 확인한다</summary>
+    /// <summary>
+    /// 준비 중단: 하던 작업을 멈추고, 끝난 뒤에도 도는 작업(가이딩)도 멈춘 뒤 정지를 확인한다.
+    /// 작업이 끝나 다음 버튼을 기다리는 중이어도 중단 상태가 된다 — 다음·촬영 시작 버튼을 지운다 (CX-PREP-CODE-03).
+    /// "다시 시작"은 아직 안 끝난(또는 멈춰서 다시 확인이 필요한) 첫 작업부터.
+    /// </summary>
     public async Task<bool> AbortAsync()
     {
-        if (!await StopCurrentAsync(() => { MarkAborted(); return Task.CompletedTask; })) return false;
+        Func<Task> again = async () => await AbortAsync();
+        if (!await StopCurrentAsync(again)) return false;
+        if (!await StopLingeringAsync(_tasks.Select(t => t.Id).ToList(), again)) return false;
         MarkAborted();
         return true;
     }
@@ -329,14 +339,56 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
     {
         lock (_gate)
         {
-            if (_cur is { } c && !c.Finished)
+            if (_ctx is null || _cur is not { } c) return;
+            if (!c.Finished) _rows[c.Task.Id] = (PrepTaskStatus.Pending, null);
+            c.Ask = null;
+            c.Status = new StatusLine("준비를 멈췄습니다", Tone.Warn);
+            c.Actions = [new("restart", "다시 시작", true)];
+            _ready = false;
+            Changed();
+        }
+    }
+
+    /// <summary>
+    /// 끝난 뒤에도 장비가 계속 도는 작업(KeepsRunning)을 멈추고 확인한다. 멈춘 작업과 그 뒤 작업은 "다시 확인 필요"로, 결과는 지운다.
+    /// 확인하지 못하면 "장비 상태 다시 확인"에서 멈추고(then을 기억) false.
+    /// </summary>
+    private async Task<bool> StopLingeringAsync(IReadOnlyList<string> ids, Func<Task> then)
+    {
+        List<IPrepTask> lingering;
+        lock (_gate)
+        {
+            if (_ctx is null) return true;
+            lingering = _tasks.Where(t => t.KeepsRunning && ids.Contains(t.Id)
+                && _rows.TryGetValue(t.Id, out var r) && r.Status is PrepTaskStatus.Done or PrepTaskStatus.Failed).ToList();
+        }
+        foreach (var task in lingering)
+        {
+            if (!await TryStopAsync(task))
             {
-                _rows[c.Task.Id] = (PrepTaskStatus.Pending, null);
-                c.Status = new StatusLine("준비를 멈췄습니다", Tone.Warn);
-                c.Actions = [new("retry", "다시 시작", true)];
+                ShowStopUnconfirmed(task, then);
+                return false;
+            }
+            lock (_gate)
+            {
+                foreach (var id in new[] { task.Id }.Concat(Dependents.GetValueOrDefault(task.Id, [])))
+                {
+                    if (!_rows.TryGetValue(id, out var row) || row.Status is PrepTaskStatus.Skipped or PrepTaskStatus.Pending) continue;
+                    _rows[id] = (PrepTaskStatus.NeedsRecheck, null);
+                    if (ResultType(id) is { } type) _ctx!.Results.Remove(type);
+                }
+                _ready = false;
                 Changed();
             }
         }
+        return true;
+    }
+
+    /// <summary>예외로 멈춘 작업 "다시 시도": 장비가 멈췄는지 먼저 확인한 뒤 (CX-PREP-CODE-02)</summary>
+    private async Task RetryAsync(IPrepTask task)
+    {
+        if (!await StopCurrentAsync(() => RetryAsync(task))) return;
+        RunTask(task);
     }
 
     /// <summary>
@@ -358,19 +410,24 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         try { await _runTask.WaitAsync(StopTimeout); } catch { /* 취소·시간 초과 — 아래에서 정지 확인 */ }
         if (!wasRunning && cur.Finished) return true; // 끝난 작업은 움직이는 장비가 없다
         if (await TryStopAsync(cur.Task)) return true;
+        ShowStopUnconfirmed(cur.Task, then);
+        return false;
+    }
+
+    /// <summary>정지를 확인하지 못함: 다음 동작을 막고 "장비 상태 다시 확인"만 (확인되면 then)</summary>
+    private void ShowStopUnconfirmed(IPrepTask task, Func<Task> then)
+    {
         lock (_gate)
         {
-            _stopUnconfirmed = (cur.Task, then);
-            if (_cur == cur)
-            {
-                cur.Ask = null;
-                cur.Status = new StatusLine($"{cur.Task.Title}을 멈췄지만 장비가 멈췄는지 확인하지 못했습니다. 장비 상태를 확인해 주세요.", Tone.Fail);
-                cur.Actions = [new("device-check", "장비 상태 다시 확인", true)];
-                _rows[cur.Task.Id] = (PrepTaskStatus.Failed, null);
-                Changed();
-            }
+            _stopUnconfirmed = (task, then);
+            if (_cur is not { } c) return;
+            c.Ask = null;
+            c.Status = new StatusLine($"{task.Title}을 멈췄지만 장비가 멈췄는지 확인하지 못했습니다. 장비 상태를 확인해 주세요.", Tone.Fail);
+            c.Actions = [new("device-check", "장비 상태 다시 확인", true)];
+            _rows[task.Id] = (PrepTaskStatus.Failed, null);
+            _ready = false;
+            Changed();
         }
-        return false;
     }
 
     private async Task<bool> TryStopAsync(IPrepTask task)
@@ -393,7 +450,7 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         lock (_gate)
         {
             _stopUnconfirmed = null;
-            if (_cur is { } c && c.Task == p.Task)
+            if (_cur is { } c)
             {
                 c.Status = new StatusLine("장비가 멈춘 것을 확인했습니다", Tone.Ok);
                 c.Actions = [];
@@ -461,10 +518,10 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         public void SubStep(int index) => r.Update(runId, c => c.SubIndex = index);
         public void Guide(string title, string text) => r.Update(runId, c => c.Guide = new GuideView(title, text));
 
-        public void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false) =>
+        public void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false, DateTimeOffset? observedAt = null) =>
             r.Update(runId, c =>
             {
-                c.Readout = new ReadoutView(kind, big, caption, tone, values ?? new Dictionary<string, double>(), DateTimeOffset.Now,
+                c.Readout = new ReadoutView(kind, big, caption, tone, values ?? new Dictionary<string, double>(), observedAt ?? DateTimeOffset.Now,
                     unverified ? Freshness.Unverified : Freshness.Fresh);
                 c.ReadoutLive = live;
             });

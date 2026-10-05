@@ -108,6 +108,9 @@ public sealed class GuidingTask(IGuidingDevices devices) : IPrepTask
     }
 
     public Task<bool> StopAsync(CancellationToken ct) => devices.StopAsync(ct);
+
+    /// <summary>끝난 뒤에도 가이딩은 계속 돈다 — 앞 작업을 다시 하거나 중단하면 러너가 먼저 멈춘다 (CX-PREP-CODE-01)</summary>
+    public bool KeepsRunning => true;
 }
 
 /// <summary>가이딩 판정 (순수 함수, DESIGN.md ⑥)</summary>

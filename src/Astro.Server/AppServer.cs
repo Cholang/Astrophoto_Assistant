@@ -76,6 +76,8 @@ public static class AppServer
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
         var app = builder.Build();
+        // 새 버전 확인은 앱이 켜지자마자 시작한다 — 프로필 화면이 열릴 때 결과가 준비돼 있게 (오늘 이미 받았으면 기억한 값)
+        _ = Task.Run(() => app.Services.GetRequiredService<UpdateChecker>().CheckAsync(CancellationToken.None));
         app.UseDefaultFiles();
         // index.html은 캐시하지 않는다: 웹을 다시 빌드해도 WebView2가 옛 index.html(옛 화면)을 띄우던 문제. assets는 이름에 해시가 있어 그대로 캐시
         app.UseStaticFiles(new StaticFileOptions
