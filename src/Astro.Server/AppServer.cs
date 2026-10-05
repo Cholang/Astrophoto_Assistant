@@ -69,7 +69,8 @@ public static class AppServer
         builder.Services.AddSingleton<ChatModelFactory>();
         builder.Services.AddSingleton<PlanAssistant>();
         // 촬영 준비: 작업별로 나눈 구조, 지금은 모의 장비만 (docs/PREPARE_IMPLEMENTATION.md — 실제 장비는 P3)
-        Prepare.PrepareSetup.AddPrepare(builder.Services);
+        // 장비 연결이 실제(Equipment:Simulate=false)면 준비 단계도 실제 장비 (P3, 2026-10-06)
+        Prepare.PrepareSetup.AddPrepare(builder.Services, simulate: builder.Configuration.GetValue("Equipment:Simulate", true));
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
         builder.Services.AddTransient<SiteService>();
@@ -206,6 +207,11 @@ public static class AppServer
             if (runner.Context is { } c) c.IgnoreAltitude = true;
             return Results.NoContent();
         });
+        // 실장비: 하늘 화면 이미지 (sharpcap 창 캡처 · guide PHD2 사진 · photo 솔빙 사진 · test 시험 사진)
+        prepare.MapGet("/live/{kind}", async (string kind, Prepare.Real.LiveImages images, CancellationToken ct) =>
+            await images.GetAsync(kind, ct) is { } img ? Results.File(img.Bytes, img.Type) : Results.NotFound());
+        // SharpCap 스크립트가 극축 정렬 상태를 보내고, 답으로 AA의 명령(advance · exposure:ms · quit)을 받는다
+        prepare.MapPost("/sharpcap/report", (System.Text.Json.JsonElement body, Prepare.Real.SharpCapBridge bridge) => Results.Text(bridge.Receive(body)));
         prepare.MapPost("/sim/speed/{speed:double}", (double speed, Prepare.Sim.SimOptions sim) => { sim.Speed = Math.Clamp(speed, 0, 5); return Results.NoContent(); });
     }
 

@@ -36,6 +36,8 @@ export interface PrepView {
   current: CurrentView | null
   ready: boolean
   version: number
+  /** 모의 장비면 하늘 화면을 그림으로 흉내, 아니면 live.url의 실제 이미지 */
+  simulated: boolean
 }
 
 /** 준비를 시작하고(같은 계획이면 이어서) 상태가 바뀔 때마다 onState. 끝내려면 돌려준 함수를 부른다 */

@@ -99,7 +99,8 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
                 run.Status(p.Stage switch
                 {
                     "rotate" => $"적경축을 돌리는 중입니다 ({p.RotationDeg:F0}°)",
-                    _ => $"별을 찾는 중입니다 · 별 {p.Stars}개 · 노출 {p.ExposureSeconds:0.#}초 (AA가 정함)",
+                    // 별 개수는 모의만 (SharpCap은 알려 주지 않음)
+                    _ => p.Stars > 0 ? $"별을 찾는 중입니다 · 별 {p.Stars}개 · 노출 {p.ExposureSeconds:0.#}초 (AA가 정함)" : $"별을 찾는 중입니다 · 노출 {p.ExposureSeconds:0.#}초 (AA가 정함)",
                 });
             }, ct);
             if (found.Ok) return;

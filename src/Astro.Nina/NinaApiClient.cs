@@ -58,6 +58,32 @@ public sealed class NinaApiClient(HttpClient http)
         await GetResponseAsync($"equipment/{kind}/info", QueryTimeout, ct) is { ValueKind: JsonValueKind.Object } info
         && info.TryGetProperty("Connected", out var c) && c.ValueKind == JsonValueKind.True;
 
+    /// <summary>
+    /// 임의 경로 요청 (준비 단계 실제 장비가 씀). 성공이면 Response, 실패면 N.I.N.A.가 준 Error 문장.
+    /// 응답이 없거나(꺼짐·시간 초과) 형식이 다르면 Ok=false, Error=null
+    /// </summary>
+    public async Task<NinaReply> RequestAsync(string path, TimeSpan timeout, CancellationToken ct = default)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+        try
+        {
+            using var res = await http.GetAsync(path, cts.Token);
+            var body = await res.Content.ReadFromJsonAsync<JsonElement>(cts.Token);
+            var ok = res.IsSuccessStatusCode && !(body.TryGetProperty("Success", out var s) && s.ValueKind == JsonValueKind.False);
+            var error = body.TryGetProperty("Error", out var e) && e.ValueKind == JsonValueKind.String && e.GetString() is { Length: > 0 } msg ? msg : null;
+            return new NinaReply(ok, body.TryGetProperty("Response", out var r) ? r.Clone() : null, error);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new NinaReply(false, null, null);
+        }
+        catch (Exception e) when (e is HttpRequestException or JsonException or NotSupportedException)
+        {
+            return new NinaReply(false, null, null);
+        }
+    }
+
     private async Task<JsonElement?> GetResponseAsync(string path, TimeSpan timeout, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -80,4 +106,11 @@ public sealed class NinaApiClient(HttpClient http)
             return null;
         }
     }
+}
+
+/// <summary>N.I.N.A. 응답 하나. Ok=false이면 Error에 N.I.N.A.가 준 이유(있으면)</summary>
+public sealed record NinaReply(bool Ok, JsonElement? Response, string? Error)
+{
+    /// <summary>Response가 문자열이면 그 값 (예: "Capture started")</summary>
+    public string? Text => Response is { ValueKind: JsonValueKind.String } r ? r.GetString() : null;
 }

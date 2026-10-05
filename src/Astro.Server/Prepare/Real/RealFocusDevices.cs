@@ -1,0 +1,94 @@
+using System.Text.Json;
+using Astro.Server.Prepare.Tasks.Focus;
+
+namespace Astro.Server.Prepare.Real;
+
+/// <summary>
+/// ④ 초점 실장비: 포커서 이동·위치·기온은 N.I.N.A. 포커서, 자동초점은 N.I.N.A. 자동초점(auto-focus → last-af 기록, 이벤트 AUTOFOCUS-FINISHED/ERROR-AF).
+/// 2026-10-05 실기: Oasis 이동 정상, 범위 0~56000(제조사 설정 — 사용자가 0·최대를 설정 창에서 정함), 프로브 기온은 연결할 때만 잡힘.
+/// 자동초점은 별이 필요해 맑은 날 확인. 지점별 곡선은 N.I.N.A.가 끝난 뒤 기록으로만 줘서, 끝난 다음 한꺼번에 그린다.
+/// </summary>
+public sealed class RealFocusDevices(NinaRig rig, IConfiguration config) : IFocusDevices
+{
+    /// <summary>포커서 최대 위치 (N.I.N.A.가 알려 주지 않아 설정 Prepare:FocuserMax, 기본은 Oasis 기본값)</summary>
+    private int Max => config.GetValue("Prepare:FocuserMax", 56000);
+
+    public Task<(int Min, int Max)> LimitsAsync(CancellationToken ct) => Task.FromResult((0, Max));
+
+    public async Task<int> PositionAsync(CancellationToken ct) => (await rig.FocuserAsync(ct))?.Position ?? 0;
+
+    public async Task<double?> TemperatureAsync(CancellationToken ct) => (await rig.FocuserAsync(ct))?.Temperature;
+
+    public async Task<FocuserMove> MoveAsync(int position, CancellationToken ct)
+    {
+        var problem = await rig.MoveFocuserAsync(Math.Clamp(position, 0, Max), ct);
+        return problem is null ? new FocuserMove(true) : new FocuserMove(false, Stalled: problem.Contains("멈췄"), problem);
+    }
+
+    public async Task<AutofocusRun> AutofocusAsync(Action<int, double> point, CancellationToken ct)
+    {
+        var since = DateTimeOffset.Now;
+        if (!await rig.StartAutofocusAsync(ct)) return new AutofocusRun(false, true, 0, 0, false, Problem: "자동초점을 시작하지 못했습니다");
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(2000, ct);
+            var events = await rig.EventsSinceAsync(since, ct);
+            if (events.Contains("ERROR-AF"))
+                // N.I.N.A. 자동초점 실패는 대부분 별을 못 찾은 경우 (초점이 크게 나갔거나 구름·덮개)
+                return new AutofocusRun(false, false, 0, 0, false, Problem: "자동초점에서 별을 찾지 못했습니다");
+            if (!events.Contains("AUTOFOCUS-FINISHED")) continue;
+            if (await rig.LastAutofocusAsync(ct) is not { } af) break;
+            var points = new List<(int, double)>();
+            if (af.TryGetProperty("MeasurePoints", out var mp) && mp.ValueKind == JsonValueKind.Array)
+                foreach (var p in mp.EnumerateArray())
+                    if (NinaRig.Num(p, "Value") is var v && double.IsFinite(v)) points.Add(((int)NinaRig.Num(p, "Position"), v));
+            foreach (var (pos, hfr) in points) point(pos, hfr);
+            var best = af.GetProperty("CalculatedFocusPoint");
+            var r2 = af.TryGetProperty("RSquares", out var rs) ? Best(rs) : double.NaN;
+            return new AutofocusRun(true, points.Count > 0, (int)NinaRig.Num(best, "Position"), NinaRig.Num(best, "Value"),
+                CurveGood: !double.IsFinite(r2) || r2 >= 0.7, Problem: double.IsFinite(r2) && r2 < 0.7 ? $"곡선이 고르지 않습니다 (R² {r2:F2})" : null);
+        }
+        await rig.CancelAutofocusAsync(ct);
+        return new AutofocusRun(false, true, 0, 0, false, Problem: "자동초점이 끝나지 않았습니다");
+    }
+
+    /// <summary>범위 안에서 넓은 간격으로 사진을 찍어 별이 보이는 위치를 찾는다 (2초 노출, 별 5개 이상)</summary>
+    public async Task<int?> CoarseSearchAsync(int min, int max, int from, Action<int> visiting, CancellationToken ct)
+    {
+        var step = Math.Max(1, (max - min) / 8);
+        var spots = Enumerable.Range(0, 9).Select(i => min + i * step).OrderBy(p => Math.Abs(p - from)).ToList();
+        foreach (var p in spots)
+        {
+            visiting(p);
+            if ((await MoveAsync(p, ct)).Ok is false) return null;
+            var shot = await rig.CaptureAsync(2, solve: false, save: false, null, ct);
+            if (shot.Ok && await rig.LastStatsAsync(ct) is { Stars: >= 5 }) return p;
+        }
+        return null;
+    }
+
+    public async Task<bool> StopAsync(CancellationToken ct)
+    {
+        await rig.CancelAutofocusAsync(ct);
+        await rig.StopFocuserAsync(ct);
+        for (var i = 0; i < 6; i++)
+        {
+            if (await rig.FocuserAsync(ct) is { Moving: false }) return true;
+            await Task.Delay(500, ct);
+        }
+        return false;
+    }
+
+    public async Task<FocusEndState> ReadEndStateAsync(CancellationToken ct) =>
+        await rig.FocuserAsync(ct) is { } f ? new FocusEndState(f.Moving, f.Position, false) : new FocusEndState(false, -1, true);
+
+    private static double Best(JsonElement rs)
+    {
+        var best = double.NaN;
+        if (rs.ValueKind != JsonValueKind.Object) return best;
+        foreach (var p in rs.EnumerateObject())
+            if (p.Value.ValueKind == JsonValueKind.Number && (double.IsNaN(best) || p.Value.GetDouble() > best)) best = p.Value.GetDouble();
+        return best;
+    }
+}

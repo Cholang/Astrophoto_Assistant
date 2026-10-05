@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CurrentView, ReadoutView } from '../prepare'
 import styles from './LiveView.module.css'
 
@@ -20,7 +20,7 @@ export interface LiveExtras {
   grid?: boolean
 }
 
-export default function LiveView({ current, extras }: { current: CurrentView | null; extras?: LiveExtras }) {
+export default function LiveView({ current, extras, simulated = true }: { current: CurrentView | null; extras?: LiveExtras; simulated?: boolean }) {
   const live = current?.live ?? null
   const kind = live?.kind ?? 'none'
   const readout = current?.center.readout ?? null
@@ -54,6 +54,15 @@ export default function LiveView({ current, extras }: { current: CurrentView | n
       body = <g>{dim}</g>
   }
 
+  // 실제 장비: 서버가 주는 실제 이미지 (SharpCap 창 · 가이드 카메라 · 솔빙 사진 · 시험 사진)
+  if (!simulated && live?.url && !extras?.grid)
+    return (
+      <div className={styles.view} aria-hidden="true">
+        <RealImage url={live.url} refresh={kind === 'sharpcap' || kind === 'guide-image'} stamp={live.observedAt} />
+        {kind === 'guide-image' && <GuidingGraph data={live.data} />}
+      </div>
+    )
+
   return (
     <div className={styles.view} aria-hidden="true">
       <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice">
@@ -62,6 +71,25 @@ export default function LiveView({ current, extras }: { current: CurrentView | n
       {kind === 'guide-image' && <GuidingGraph data={live?.data} />}
     </div>
   )
+}
+
+/** 실제 이미지. refresh면 1초마다 새로 받는다(창 캡처·가이드 사진). 받기 전·실패면 하늘색 바탕만 */
+function RealImage({ url, refresh, stamp }: { url: string; refresh: boolean; stamp: string }) {
+  const [tick, setTick] = useState(0)
+  const [shown, setShown] = useState<string | null>(null)
+  useEffect(() => {
+    if (!refresh) return
+    const id = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [refresh])
+  const src = `${url}${url.includes('?') ? '&' : '?'}t=${refresh ? tick : encodeURIComponent(stamp)}`
+  // 다음 이미지를 다 받은 뒤에 바꾼다 (깜빡이지 않게)
+  useEffect(() => {
+    const img = new Image()
+    img.onload = () => setShown(src)
+    img.src = src
+  }, [src])
+  return shown ? <img className={styles.photo} src={shown} alt="" /> : null
 }
 
 function activeSub(current: CurrentView | null) {

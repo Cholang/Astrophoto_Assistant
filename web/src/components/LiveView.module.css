@@ -14,6 +14,18 @@
   mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
 }
 
+/* 실제 이미지: 화면을 채우되 잘리지 않게, 좌우 끝은 하늘색으로 사라짐 */
+.photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+:root[data-theme='night'] .photo { filter: url(#red-only); }
+
 .star { fill: var(--star); }
 .label { font-family: var(--font); font-size: 17px; fill: var(--sky-muted); }
 .labelStrong { font-family: var(--font); font-size: 17px; fill: var(--star); }

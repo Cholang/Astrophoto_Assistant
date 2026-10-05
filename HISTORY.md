@@ -8,7 +8,26 @@
 
 ---
 
-## 2026-10-06 · [Claude] Codex 코드 리뷰 반영(CX-PREP-CODE-01~06), 새 버전 확인 앞당김·동시 요청
+## 2026-10-06 · [Claude] 준비 단계 실장비 구현(P3) — 7작업, 실내 실기 확인
+
+**요청**: 어제 실기로 확인한 장비 동작이 앱에 들어가 있지 않았음 — 실내에서 더 확인할 것을 먼저 시험하고, 그 결과로 준비 단계 1~7작업을 실제 장비로 구현
+
+**실내 실기 시험(구현 전)**: SharpCap 스크립트 → AA 통로(1초마다 단계·조절량, 위치를 못 찾으면 0,0 → 단계로 구분), X-T5 촬영(카메라가 JPEG로 설정돼 전부 0 → 사용자가 RAW로 바꿔 정상, 실패해도 이전 사진이 옴), 추적 켜고 끄기, N.I.N.A. 가이딩 시작·중지(별 없이도 "started"), 이동 중 멈춤(slew/stop). 결과는 docs/api-coverage.md
+
+**변경**
+- `Prepare/Real/`: `NinaRig`(이동·멈춤 확인·추적·촬영(이벤트로 새 사진 확인)·통계·동기화·포커서·자동초점·가이딩), `Phd2Client`(상시 JSON-RPC + 이벤트), `SharpCapBridge`(실행·스크립트 보고/명령·닫기), `AscomAxis`(RA MoveAxis), `LiveImages`·`WindowCapture`(PrintWindow, DPI 맞춤)·`Fits`·`Png`, 작업별 `Real{Polar,Calibration,Slew,Focus,Center,Guiding,TestShot}Devices`
+- `PrepareSetup.AddPrepare(simulate)` — `Equipment:Simulate`에 따라 모의/실제, `PrepView.Simulated`. 서버 `GET /api/prepare/live/{kind}`, `POST /api/prepare/sharpcap/report`. `NinaApiClient.RequestAsync`(오류 문장 포함)
+- `BackgroundWindows.KeepBehind` — SharpCap은 최소화하지 않고 AA 뒤로. 극축 정렬 중간 멈춤이면 SharpCap 닫고 카메라를 PHD2에 돌려줌
+- 화면: 실장비면 하늘 화면에 실제 이미지(1초마다 새로, 다 받은 뒤 교체), [임시] 모의 실패는 모의일 때만. 극축 상태 줄에서 별 개수 뺌(SharpCap은 안 줌), 캘리브레이션 SNR 없으면 "별을 골랐습니다", 시험 사진 실패 안내에 RAW 확인
+- 테스트 `Real/RealDeviceTests`(AA_REAL=1일 때만 장비를 움직임)
+
+**확인**: 빌드 경고·오류 0, 테스트 66 통과·1 건너뜀(평소엔 실장비 시험이 아무것도 안 함). 사용자 허락 받고 실장비 시험 7개 — ⑦ 촬영·통계·저장, ④ 포커서(처음엔 백래시 중간 멈춤을 실패로 봐서 고침), ③ 이동 0.29°·멈춤 확인, ② 위치 A 0.37°·별 없음(PHD2 멈춤 확인을 기다리게 고침), ⑥ 별 없음 판정, ⑤ 솔빙 실패 판정, ① 앱 화면으로 넘겨주기 → SharpCap → 실패 → 중단하면 원래대로(창 캡처가 왼쪽 위만 확대되던 DPI 문제 고침). 적도의는 홈·추적 끔, 시험 서버 종료
+
+**남은 것**: 맑은 날 별로 확인(docs/PREPARE_IMPLEMENTATION.md P3 목록 — SharpCap 조절 단계·단위, RA 회전 방향, 캘리브레이션·가이딩·자동초점·솔빙 결과), SharpCap "Allow smaller rotation angles" 켜기, 하늘 화면에 SharpCap 영상 부분만, 시험 사진의 별 모양·포화 분석
+
+---
+
+## 2026-10-06 · bd817f9 [Claude] Codex 코드 리뷰 반영(CX-PREP-CODE-01~06), 새 버전 확인 앞당김·동시 요청
 
 **요청**: Codex 리뷰(REVIEW_CODEX.md 12절) 검토 — 6개 모두 동의, 최적화 제안 중 업데이트 동시 요청·방향 값도 Claude가 반영. 확인 중 프로필을 눌러 새 버전 소식을 놓치지 않게
 

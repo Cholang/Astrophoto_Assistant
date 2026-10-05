@@ -25,8 +25,13 @@ public static class BackgroundWindows
         _ => null,
     };
 
+    /// <summary>
+    /// 최소화하지 않고 AA 뒤로만 보낸다 (SharpCap — 최소화하면 창 캡처가 빈다). 지켜보는 동안 새 창을 맨 아래로 보내고 AA 창을 앞으로.
+    /// </summary>
+    public static IDisposable KeepBehind(TimeSpan grace, params string[] processNames) => new Watcher(processNames, grace, minimize: false);
+
     /// <summary>지금부터 이 프로그램들의 새 창을 최소화한다. Dispose 뒤에도 grace 동안 더 지켜본다(조금 늦게 뜨는 창)</summary>
-    public static IDisposable Watch(TimeSpan grace, params string[] processNames) => new Watcher(processNames, grace);
+    public static IDisposable Watch(TimeSpan grace, params string[] processNames) => new Watcher(processNames, grace, minimize: true);
 
     private sealed class Watcher : IDisposable
     {
@@ -34,7 +39,7 @@ public static class BackgroundWindows
         private readonly CancellationTokenSource _stop = new();
         private readonly TimeSpan _grace;
 
-        public Watcher(string[] names, TimeSpan grace)
+        public Watcher(string[] names, TimeSpan grace, bool minimize)
         {
             _grace = grace;
             if (!OperatingSystem.IsWindows()) return;
@@ -49,8 +54,18 @@ public static class BackgroundWindows
                     {
                         // 지켜보는 동안 다시 펼쳐지는 창(프로그램이 로딩 끝에 창을 다시 띄움)도 다시 내린다
                         foreach (var h in Windows(names))
-                            if (!before.Contains(h) && !IsIconic(h))
-                                ShowWindowAsync(h, SwShowMinNoActive);
+                        {
+                            if (before.Contains(h)) continue;
+                            if (minimize)
+                            {
+                                if (!IsIconic(h)) ShowWindowAsync(h, SwShowMinNoActive);
+                            }
+                            else if (GetForegroundWindow() == h)
+                            {
+                                SetWindowPos(h, HwndBottom, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+                                if (Process.GetCurrentProcess().MainWindowHandle is var own and not 0) SetForegroundWindow(own);
+                            }
+                        }
                         await Task.Delay(150, _stop.Token);
                     }
                 }
@@ -81,6 +96,8 @@ public static class BackgroundWindows
     }
 
     private const int SwShowMinNoActive = 7;
+    private static readonly nint HwndBottom = 1;
+    private const uint SwpNoSize = 0x1, SwpNoMove = 0x2, SwpNoActivate = 0x10;
     private const uint GwOwner = 4;
 
     private delegate bool EnumWindowsProc(nint hWnd, nint lParam);
@@ -91,4 +108,7 @@ public static class BackgroundWindows
     [DllImport("user32.dll")] private static extern bool IsIconic(nint hWnd);
     [DllImport("user32.dll")] private static extern nint GetWindow(nint hWnd, uint cmd);
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint hWnd, int cmdShow);
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hWnd);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hWnd, nint after, int x, int y, int cx, int cy, uint flags);
 }

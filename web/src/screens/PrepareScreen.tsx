@@ -100,7 +100,7 @@ export default function PrepareScreen({ onContinue }: { onContinue: () => void }
 
   return (
     <main className={styles.stage} data-peek={peek}>
-      <LiveView current={cur} extras={{ grid }} />
+      <LiveView current={cur} extras={{ grid }} simulated={view?.simulated ?? true} />
       <div className={styles.scrim} />
 
       {cur && (
@@ -124,7 +124,8 @@ export default function PrepareScreen({ onContinue }: { onContinue: () => void }
             )}
           </div>
 
-          {/* [임시] 모의 실패 걸기: 다음 동작 하나를 실패시킨다 */}
+          {/* [임시] 모의 실패 걸기: 다음 동작 하나를 실패시킨다 (모의 장비일 때만) */}
+          {view?.simulated && (
           <div className={styles.temp}>
             <button type="button" className={styles.tempToggle} onClick={() => setFaultsOpen((o) => !o)} aria-expanded={faultsOpen}>
               [임시] 모의 실패
@@ -144,6 +145,7 @@ export default function PrepareScreen({ onContinue }: { onContinue: () => void }
               </div>
             )}
           </div>
+          )}
         </>
       )}
     </main>

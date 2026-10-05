@@ -48,5 +48,5 @@ public sealed record CurrentView(
     string TaskId, int RunId, IReadOnlyList<SubStepView> SubSteps,
     GuideView Guide, CenterView Center, LiveView? Live);
 
-/// <summary>준비 화면 전체. Ready = 사용자가 "촬영 시작"을 눌렀다</summary>
-public sealed record PrepView(bool Started, IReadOnlyList<TaskRowView> Tasks, CurrentView? Current, bool Ready, int Version);
+/// <summary>준비 화면 전체. Ready = 사용자가 "촬영 시작"을 눌렀다, Simulated = 모의 장비(화면은 그림으로 흉내, 아니면 Live.Url의 실제 이미지)</summary>
+public sealed record PrepView(bool Started, IReadOnlyList<TaskRowView> Tasks, CurrentView? Current, bool Ready, int Version, bool Simulated = true);

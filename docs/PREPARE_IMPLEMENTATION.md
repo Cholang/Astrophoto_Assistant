@@ -166,7 +166,10 @@ Prepare/
 
 1. **P1 서버 모델 + 모의**: 새 7단계·세부 과정·Readout·Live를 모의 장비로 끝까지. 화면 없이 테스트(상태 전이, 실패 순서, 다시 하기). Codex 리뷰의 네 경우도 모의로 검증: **도중 취소, 다시 시도 뒤 이전 실행 결과 도착, 측정 갱신 끊김, 정지 확인 실패**. — **2026-10-05 끝남**: `src/Astro.Server/Prepare/Flow/`(러너·계약·결과 기록·화면 모델), `Prepare/Tasks/<작업>/`(작업·장비 인터페이스·판정 규칙·모의 장비), `Prepare/Sim/`, `tests/Astro.Server.Tests`(41개: 작업 단독 13 · 러너 8 · 흐름 5 · 규칙·결과 모양 15). 
 2. **P2 화면**: v8 시안을 앱으로 이식, 모의로 처음부터 촬영 시작까지. — **2026-10-05 끝남**: `web/src/components/` `PrepGuide`(안내)·`PrepCenter`(중앙 정보)·`LiveView`(하늘 화면, 모의 장비라 측정값·live.data로 그림을 흉내 — 실장비의 사진·창 캡처(live.url)는 P3에서 엔드포인트와 함께), `screens/PrepareScreen.tsx`. 진행 표시는 오른쪽 세로 열(`StepRail`)에 7작업 + 지금 세부 과정. 사진만 보기·9칸 확대 보기는 화면에서만 바꾸는 보기. [임시] 모의 실패 버튼은 왼쪽 아래(P3에서 뺀다)
-3. **P3 실장비 어댑터** (실내에서 되는 것부터): ① 넘겨받기·SharpCap·돌려주기 → `AscomDirect`(스위치·RA 회전) → ② ⑥ PHD2 → ③ ⑤ N.I.N.A. → ④ → ⑦.
+3. **P3 실장비 어댑터** (실내에서 되는 것부터): ① 넘겨받기·SharpCap·돌려주기 → `AscomDirect`(스위치·RA 회전) → ② ⑥ PHD2 → ③ ⑤ N.I.N.A. → ④ → ⑦. — **2026-10-06 7작업 모두 구현, 실내 실기 확인**: `src/Astro.Server/Prepare/Real/` (공통: `NinaRig`·`Phd2Client`·`SharpCapBridge`·`AscomAxis`·`LiveImages`·`Fits`·`Png`, 작업별 `Real*Devices`). `Equipment:Simulate=false`면 준비 단계도 실제 장비(`PrepareSetup`). 실기 시험은 `tests/Astro.Server.Tests/Real/RealDeviceTests.cs`(AA_REAL=1일 때만)
+   - 실내에서 확인함: ⑦ X-T5 촬영·통계·저장(52초), ④ 포커서 이동·복귀(백래시로 지나쳤다 돌아옴), ③ 이동(도착 0.29°)·멈춤 확인, ② 위치 A(0.37°)·별 없음, ⑥ 가이딩 시작 → 별 없음 판정·PHD2 멈춤, ⑤ 사진+ASTAP 솔빙 실패 판정, ① 앱에서 PHD2 넘겨주기 → SharpCap 실행·창 캡처 → 노출 1→2→4초 → 실패 → 중단하면 SharpCap 닫고 카메라 돌려줌
+   - **맑은 날 확인할 것**: ① SharpCap 위치 찾기·조절 단계 이름·조절량 단위(그 전엔 등급 대신 방향·픽셀), RA 회전 방향(부호)과 60° 한계, SharpCap "Allow smaller rotation angles" 켜기(지금 꺼져 있음 — SharpCap에서 한 번 켜 두면 기억), 하늘 화면에 SharpCap 창 전체가 아니라 영상 부분만 잘라 보이기 ② PHD2 캘리브레이션 이벤트·결과(직교 오차) ④ N.I.N.A. 자동초점 이벤트(AUTOFOCUS-FINISHED/ERROR-AF)·곡선 ⑤ 솔빙 성공·동기화·재이동 ⑥ 가이딩 별·GuideStep 측정 ⑦ 별 HFR·가이딩 RMS
+   - 아직 없음: 시험 사진의 별 길쭉함·포화 비율(N.I.N.A.가 주지 않음 — 사진 직접 분석), 시험 사진을 "시험" 폴더에(N.I.N.A. 저장 폴더 그대로), 포커서 최대 위치는 설정 `Prepare:FocuserMax`(기본 56000)
 4. **P4 맑은 날 실기**: 대화 기록 7절 목록. 메인 경통 없이 가이드 카메라만 올려도 ① ② ⑥은 시험 가능.
 
 각 단계 끝에 HISTORY.md 기록, 화면은 헤드리스 스크린샷으로 확인.

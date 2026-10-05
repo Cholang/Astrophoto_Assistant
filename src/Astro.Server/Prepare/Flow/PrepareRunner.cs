@@ -57,6 +57,9 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
 
     public PrepContext? Context { get { lock (_gate) return _ctx; } }
 
+    /// <summary>모의 장비로 도는가 (화면에 알림)</summary>
+    public bool Simulated { get; init; } = true;
+
     // ── 상태 읽기 ─────────
 
     public PrepView View()
@@ -75,7 +78,7 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 c.Finished || i < c.SubIndex ? PrepTaskStatus.Done : i == c.SubIndex ? PrepTaskStatus.Running : PrepTaskStatus.Pending)).ToList();
             cur = new CurrentView(c.Task.Id, c.RunId, subs, c.Guide, new CenterView(c.Readout, c.Status, c.Actions), c.Live);
         }
-        return new PrepView(_ctx is not null, rows, cur, _ready, _version);
+        return new PrepView(_ctx is not null, rows, cur, _ready, _version, Simulated);
     }
 
     /// <summary>상태가 바뀔 때마다 하나씩 (Server-Sent Events)</summary>

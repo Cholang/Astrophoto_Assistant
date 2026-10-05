@@ -114,7 +114,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
             run.Status($"위치 {pos.Name}에서 별을 찾지 못했습니다 (가려졌을 수 있음) — 다음 위치로 옮깁니다", Tone.Warn);
             return null;
         }
-        run.Readout("star", $"SNR {star.Snr:F0}", $"가이드 노출 {star.ExposureSeconds:0.#}초 (별 신호를 보고 AA가 정함)", Tone.Ok,
+        run.Readout("star", double.IsFinite(star.Snr) ? $"SNR {star.Snr:F0}" : "별을 골랐습니다", $"가이드 노출 {star.ExposureSeconds:0.#}초 (별 신호를 보고 AA가 정함)", Tone.Ok,
             new Dictionary<string, double> { ["snr"] = star.Snr, ["exposure"] = star.ExposureSeconds });
 
         run.SubStep(2);

@@ -66,7 +66,7 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
             }
             if (stats is null)
             {
-                run.Guide("사진을 받지 못했습니다", "두 번 시도했지만 카메라에서 사진을 내려받지 못했습니다. 카메라 USB 연결과 전원을 확인한 뒤 다시 찍어 주세요.");
+                run.Guide("사진을 받지 못했습니다", "두 번 시도했지만 카메라에서 사진을 내려받지 못했습니다. 카메라 USB 연결과 전원, 카메라 화질 설정이 RAW인지 확인한 뒤 다시 찍어 주세요 (JPEG면 사진을 쓸 수 없습니다).");
                 run.Status("시험 사진을 찍지 못했습니다", Tone.Fail);
                 await run.AskAsync([new("retry", "다시 찍기", true)], ct);
                 continue;
