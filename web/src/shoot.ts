@@ -93,7 +93,7 @@ export async function recheckShootStop(): Promise<string | null> {
 
 /** 오늘 밤 요약 (마무리 끝) */
 export interface NightSummary {
-  targets: { targetId: string; name: string; good: number; excluded: number; exposureSeconds: number; iso: number; folder: string | null; pausedMinutes: Record<string, number> | null }[]
+  targets: { targetId: string; name: string; good: number; excluded: number; exposureSeconds: number; iso: number; folder: string | null; pausedMinutes: Record<string, number> | null; notMoved: string[] | null }[]
   tally: Record<string, number>
   folder: string | null
   flat: { skipped: boolean; count: number; exposureSeconds: number } | null

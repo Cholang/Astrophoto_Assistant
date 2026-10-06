@@ -36,7 +36,11 @@ public static class Harness
     public static PrepContext TargetContext(PrepResults results, IPrepMemory memory, PreparationPlan? plan = null, bool hasGuider = true, bool hasFocuser = true) =>
         new(plan ?? Plan(), new Site(37.82, 127.14), 2.41, hasGuider, hasFocuser, results, new MountLock(), memory, () => DateTimeOffset.Now);
 
-    public sealed record Sim(SimOptions Options, SimFaults Faults);
+    public sealed record Sim(SimOptions Options, SimFaults Faults)
+    {
+        /// <summary>마무리 모의 장비 (홈 명령 횟수 등을 시험이 본다)</summary>
+        public SimulatedWrapDevices? Wrap { get; set; }
+    }
 
     /// <summary>실제 작업 8개 + 모의 장비로 두 묶음 (장비 준비 · 대상). 묻지 않고 넘어가는 작업은 기다리지 않는다</summary>
     public static (PrepareFlow Flow, Sim Sim) Flow()
@@ -56,6 +60,7 @@ public static class Harness
             new TestShotTask(new SimulatedTestShotDevices(sim.Options, sim.Faults)),
             new FlatTask(wrap), new DarkTask(wrap), new PackTask(wrap),
         ];
+        sim.Wrap = wrap;
         return (new PrepareFlow(tasks, NullLogger<PrepareRunner>.Instance, simulated: true, autoNextDelay: TimeSpan.Zero), sim);
     }
 

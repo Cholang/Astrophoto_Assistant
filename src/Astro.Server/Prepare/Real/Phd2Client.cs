@@ -109,7 +109,7 @@ public sealed class Phd2Client(ILogger<Phd2Client> log) : IAsyncDisposable
             {
                 if (line.Length == 0) continue;
                 JsonElement msg;
-                try { msg = JsonDocument.Parse(line).RootElement.Clone(); }
+                try { using var doc = JsonDocument.Parse(line); msg = doc.RootElement.Clone(); }
                 catch (JsonException) { continue; }
                 if (msg.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number)
                 {

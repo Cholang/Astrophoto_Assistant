@@ -40,8 +40,12 @@ export default function SummaryScreen() {
   for (const t of rows) for (const [k, m] of Object.entries(t.pausedMinutes ?? {})) pausedAll[k] = (pausedAll[k] ?? 0) + m
   const paused = Object.entries(pausedAll).filter(([, m]) => m >= 1).map(([k, m]) => `${LABEL[k] ?? k} ${Math.round(m)}분`).join(' · ')
   const pack = s?.pack
+  // 제외할 사진인데 제외 폴더로 옮기지 못한 것 (CX-APP-R2) — 직접 옮기도록 알린다
+  const notMoved = rows.reduce((n, t) => n + (t.notMoved?.length ?? 0), 0)
   const status = note
     ? { text: note, tone: 'Warn' as const }
+    : notMoved
+      ? { text: `제외 폴더로 옮기지 못한 사진이 ${notMoved}장 있어요 · 폴더에서 직접 "제외" 폴더로 옮겨 주세요`, tone: 'Warn' as const }
     : pack
       ? {
           text: `${pack.homed ? '적도의는 홈' : pack.userConfirmed ? '적도의는 직접 확인함' : '적도의 홈 확인 못 함'}${pack.trackingOff || pack.userConfirmed ? '' : ' · 추적 끄기 확인 못 함'}, ${pack.disconnected ? '장비 연결은 끊었어요' : '장비 연결이 일부 남아 있어요'}`,

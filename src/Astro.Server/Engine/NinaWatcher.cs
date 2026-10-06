@@ -13,6 +13,8 @@ public enum NinaState
     Exited,
     /// <summary>켜져 있지만 응답하지 않는다 (멈춤)</summary>
     NotResponding,
+    /// <summary>AA가 마무리에서 일부러 닫음 (경고 아님)</summary>
+    Closed,
 }
 
 /// <summary>
@@ -43,6 +45,7 @@ public sealed class NinaWatcher(NinaApiClient nina, ILogger<NinaWatcher> log) : 
     public void Track()
     {
         Stop();
+        Volatile.Write(ref _expectExit, false);
         var p = Process.GetProcessesByName("NINA").FirstOrDefault();
         if (p is null)
         {
@@ -54,6 +57,7 @@ public sealed class NinaWatcher(NinaApiClient nina, ILogger<NinaWatcher> log) : 
             p.EnableRaisingEvents = true;
             p.Exited += (_, _) =>
             {
+                if (Volatile.Read(ref _expectExit)) { log.LogInformation("N.I.N.A.를 닫았습니다 (마무리)"); Set(NinaState.Closed); return; }
                 log.LogWarning("N.I.N.A.가 종료되었습니다");
                 Set(NinaState.Exited);
             };
@@ -69,6 +73,11 @@ public sealed class NinaWatcher(NinaApiClient nina, ILogger<NinaWatcher> log) : 
         lock (_gate) _poll = cts;
         _ = PollAsync(cts.Token);
     }
+
+    private bool _expectExit;
+
+    /// <summary>마무리에서 AA가 N.I.N.A.를 닫기 직전: 이번 종료는 정상 (CX-APP-R4)</summary>
+    public void ExpectExit() => Volatile.Write(ref _expectExit, true);
 
     /// <summary>[임시] 화면 설계용: N.I.N.A.가 꺼진 것처럼 (Equipment:Simulate일 때만 엔드포인트가 부른다)</summary>
     public void SimulateExit()
@@ -86,23 +95,31 @@ public sealed class NinaWatcher(NinaApiClient nina, ILogger<NinaWatcher> log) : 
         while (!ct.IsCancellationRequested)
         {
             Task changed;
+            TaskCompletionSource? mine = null;
             lock (_gate)
             {
                 if (_version != seen) changed = Task.CompletedTask; // 보내는 사이에 바뀌었다
                 else
                 {
-                    var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                    _waiters.Add(tcs);
-                    changed = tcs.Task;
+                    mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _waiters.Add(mine);
+                    changed = mine.Task;
                 }
             }
+            var cancelled = false;
             try
             {
                 // SSE 연결이 오래 조용하면 중간에서 끊길 수 있어 30초마다 한 번은 지금 상태를 다시 보낸다
                 await changed.WaitAsync(TimeSpan.FromSeconds(30), ct);
             }
             catch (TimeoutException) { }
-            catch (OperationCanceledException) { yield break; }
+            catch (OperationCanceledException) { cancelled = true; }
+            finally
+            {
+                // 깨지 않은 채 끝난 대기자는 목록에서 치운다 (같은 상태가 오래가도 쌓이지 않게 — Codex 16절 최적화 2)
+                if (mine is not null) lock (_gate) _waiters.Remove(mine);
+            }
+            if (cancelled) yield break;
             lock (_gate) seen = _version;
             yield return State;
         }
@@ -127,7 +144,7 @@ public sealed class NinaWatcher(NinaApiClient nina, ILogger<NinaWatcher> log) : 
                 lock (_gate) alive = _process is { HasExited: false };
                 if (!alive)
                 {
-                    Set(NinaState.Exited);
+                    Set(Volatile.Read(ref _expectExit) ? NinaState.Closed : NinaState.Exited);
                     return;
                 }
                 if (++misses >= MissesForHang)

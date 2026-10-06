@@ -14,6 +14,10 @@ public interface IShootDevices
     Task<double?> GuideRmsAsync(CancellationToken ct);
     /// <summary>가이딩 신호: 연결·가이딩 중·적도의 추적·최근 SNR·HFD·튐·이슬 여유 (GuideWatch가 원인을 가린다)</summary>
     Task<GuideRaw> GuideRawAsync(CancellationToken ct);
+    /// <summary>적도의 추적 중인가 (가이더 없는 구성의 감시 — PHD2를 부르지 않는다, CX-APP-R3)</summary>
+    Task<bool> MountTrackingAsync(CancellationToken ct);
+    /// <summary>촬영이 끝났을 때: 가이딩 이벤트 수신 등 촬영 동안만 쓰던 것을 정리 (다시 필요하면 다시 시작)</summary>
+    void EndSession();
     /// <summary>지금 가이드 노출(ms)</summary>
     int GuideExposureMs { get; }
     /// <summary>가이드 노출 바꾸기 (PHD2 목록 값만 — 2026-10-07 실기: 1.2초는 거절, 1·1.5·2초…는 됨, 루프 중에도 됨)</summary>
@@ -33,7 +37,8 @@ public interface IShootDevices
     Task<bool> StopGuidingAsync(CancellationToken ct);
     /// <summary>디더링하고 가이딩이 안정될 때까지</summary>
     Task<bool> DitherAsync(CancellationToken ct);
-    /// <summary>자오선 반전: 0 반전 → 1 다시 센터링 → 2 가이딩 재시작. 단계가 바뀔 때마다 알린다. 단계별 결과를 따로 (CX-SHOOT-02)</summary>
+    /// <summary>자오선 반전: 0 반전 → 1 다시 센터링 → 2 가이딩 재시작. 단계가 바뀔 때마다 알린다. 단계별 결과를 따로 (CX-SHOOT-02).
+    /// 가이더 없는 구성(ctx.HasGuider=false)이면 PHD2 명령 없이 반전·센터링만 (CX-APP-R3)</summary>
     Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct);
     /// <summary>자동초점 (지점마다 위치·별 크기를 알린다)</summary>
     Task<RefocusOutcome> RefocusAsync(Action<int, double> point, CancellationToken ct);

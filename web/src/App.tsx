@@ -224,8 +224,13 @@ export default function App() {
     // 끊기면 상태 줄의 장비 점도 모두 꺼진다
     if (ninaLost) setDevices((d) => d?.map((x) => ({ ...x, connected: false })) ?? d)
   }, [ninaLost])
-  const restartNina = useCallback(() => {
-    if (phase === 'site' || phase === 'preflight' || phase === 'rig' || phase === 'plan' || phase === 'target') resumeTo.current = phase
+  const restartNina = useCallback(async () => {
+    if (phase === 'site' || phase === 'preflight' || phase === 'rig' || phase === 'plan' || phase === 'target' || phase === 'wrap') resumeTo.current = phase
+    // 촬영 중이었으면: 촬영을 멈추고(가이딩 정지 확인) 다시 켠 뒤 대상 단계를 이동부터 (적도의 위치·가이딩을 알 수 없으므로 — CX-APP-R4)
+    if (phase === 'shoot') {
+      resumeTo.current = 'target'
+      await fetch('/api/shoot/abort-for-restart', { method: 'POST' }).catch(() => null)
+    }
     setNina('Unknown')
     fadeTo('engine')
   }, [phase, fadeTo])
@@ -357,7 +362,7 @@ export default function App() {
         </div>
       )}
       </div>
-      {ninaLost && <NinaLostCard state={nina} onRestart={restartNina} />}
+      {ninaLost && <NinaLostCard state={nina} onRestart={() => void restartNina()} />}
     </div>
     </div>
   )

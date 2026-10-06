@@ -213,13 +213,17 @@ public class ShootAndWrapTests
         var sim = new SimOptions { Speed = 0 };
         var faults = new SimFaults();
         faults.Arm("shoot.guider"); // 가이더가 없으니 영향 없어야 함
-        var session = new ShootSession(new SimulatedShootDevices(sim, faults), new PrepareMode(true), NullLogger<ShootSession>.Instance);
+        var dev = new SimulatedShootDevices(sim, faults);
+        var session = new ShootSession(dev, new PrepareMode(true), NullLogger<ShootSession>.Instance);
         var results = new PrepResults();
         results.Set(new FocusResult(false, 12340, 2.1, 12.4, DateTimeOffset.Now));
         var ctx = Harness.TargetContext(results, new InMemoryPrepMemory(), Harness.Plan() with { EstimatedFrames = 4 }, hasGuider: false);
+        faults.Arm("shoot.flip"); // 반전도 가이더 없이 (CX-APP-R3)
         session.Start(ctx);
         var v = await UntilEnded(session);
         Assert.Equal("done", v.Ended);
+        Assert.Equal(0, dev.GuideRawCalls); // PHD2를 부르지 않는다
+        Assert.Contains(ShootMode.Flip, session.ModeHistory);
         Assert.DoesNotContain(ShootMode.Dither, session.ModeHistory);
         Assert.DoesNotContain(ShootMode.Paused, session.ModeHistory);
         Assert.True(v.GuideStopped);
@@ -282,6 +286,61 @@ public class ShootAndWrapTests
         await flow.Wrap.Press("retry");
         await flow.Wrap.RunToReady();
         Assert.Equal(20, results.Get<DarkResult>()!.Sets.Single().Count);
+    }
+
+    // ── Codex 리뷰 16절 (CX-APP-R1~R5) ─────────
+
+    [Fact]
+    public async Task R1_홈도_정지도_확인하지_못하면_다시_시도는_정지부터_확인하고_홈을_다시_명령하지_않는다()
+    {
+        var (flow, sim, results) = WrapNight();
+        sim.Faults.Arm("wrap.home");
+        sim.Faults.Arm("stop.fail");
+        await flow.Wrap.Press("skip"); // 보정 프레임 건너뛰기 → 장비 정리
+        await flow.Wrap.Until(x => x.Has("confirmed"), "적도의 확인 질문");
+        Assert.Equal(1, sim.Wrap!.HomeCalls);
+        await flow.Wrap.Press("retry"); // 정지 확인부터 (홈은 다시 명령하지 않음)
+        await flow.Wrap.Until(x => x.Has("confirmed") && x.Current!.Center.Readout!.Caption.Contains("멈춤 확인"), "정지 확인 뒤 다시 질문");
+        Assert.Equal(1, sim.Wrap.HomeCalls);
+        await flow.Wrap.Press("retry"); // 멈춘 것이 확인됐으니 이제 홈
+        await flow.Wrap.Until(x => x.Ready, "요약");
+        Assert.Equal(2, sim.Wrap.HomeCalls);
+        Assert.True(results.Get<PackResult>()!.SafeToPowerOff);
+    }
+
+    [Fact]
+    public async Task R2_제외_폴더로_옮기지_못한_사진은_F로_세고_따로_기록한다()
+    {
+        var r = NewShoot(3);
+        r.Faults.Arm("shoot.trail");
+        r.Faults.Arm("shoot.movefail");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal(1, v.Tally["F"]);
+        Assert.Single(r.Ctx.Results.Get<NightShootResult>()!.Targets.Single().NotMoved!);
+    }
+
+    [Fact]
+    public async Task R4_촬영_중_NINA가_꺼지면_촬영을_멈추고_대상을_이동부터_다시_한다()
+    {
+        var (flow, _) = Harness.Flow();
+        var results = flow.ResultsFor(new DateOnly(2026, 10, 7));
+        var memory = new InMemoryPrepMemory();
+        flow.StartRig(Harness.RigContext(results, memory), new DateOnly(2026, 10, 7));
+        await flow.Rig.RunToReady();
+        var ctx = Harness.TargetContext(results, memory, Harness.Plan() with { EstimatedFrames = 500 });
+        Assert.Null(flow.StartTarget(ctx));
+        await flow.Target.RunToReady();
+
+        var shoot = new ShootSession(new SimulatedShootDevices(new SimOptions { Speed = 1 }, new SimFaults()), new PrepareMode(true), NullLogger<ShootSession>.Instance);
+        shoot.Start(ctx);
+        await Task.Delay(300);
+        await shoot.AbortForRestartAsync();
+        Assert.Equal("nina", shoot.View().Ended);
+        Assert.True(await flow.RecheckTargetAsync());
+        Assert.All(flow.Target.View().Tasks, t => Assert.Equal(PrepTaskStatus.NeedsRecheck, t.Status));
+        Assert.Null(flow.StartTarget(ctx)); // 같은 계획 → 이동부터 이어서
+        await flow.Target.Until(v => v.Current?.TaskId == "slew" && v.Handoff is null, "이동부터");
     }
 
     // ── 마무리 ─────────

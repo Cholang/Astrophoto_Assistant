@@ -73,22 +73,35 @@ export default function LiveView({ current, extras, simulated = true }: { curren
   )
 }
 
-/** 실제 이미지. refresh면 1초마다 새로 받는다(창 캡처·가이드 사진). 받기 전·실패면 하늘색 바탕만 */
+/**
+ * 실제 이미지. refresh면 받기가 끝난 뒤 1초 쉬고 다음 것을 받는다(창 캡처·가이드 사진 — 요청이 겹치지 않게).
+ * 다음 이미지를 다 받은 뒤에 바꾸고(깜빡이지 않게), 바뀐 뒤에 늦게 온 응답은 버린다. 받기 전·실패면 하늘색 바탕만
+ */
 function RealImage({ url, refresh, stamp }: { url: string; refresh: boolean; stamp: string }) {
-  const [tick, setTick] = useState(0)
   const [shown, setShown] = useState<string | null>(null)
   useEffect(() => {
-    if (!refresh) return
-    const id = setInterval(() => setTick((n) => n + 1), 1000)
-    return () => clearInterval(id)
-  }, [refresh])
-  const src = `${url}${url.includes('?') ? '&' : '?'}t=${refresh ? tick : encodeURIComponent(stamp)}`
-  // 다음 이미지를 다 받은 뒤에 바꾼다 (깜빡이지 않게)
-  useEffect(() => {
-    const img = new Image()
-    img.onload = () => setShown(src)
-    img.src = src
-  }, [src])
+    let alive = true
+    let timer = 0
+    let n = 0
+    const load = () => {
+      const src = `${url}${url.includes('?') ? '&' : '?'}t=${refresh ? n++ : encodeURIComponent(stamp)}`
+      const img = new Image()
+      const next = () => {
+        if (alive && refresh) timer = window.setTimeout(load, 1000)
+      }
+      img.onload = () => {
+        if (alive) setShown(src)
+        next()
+      }
+      img.onerror = next
+      img.src = src
+    }
+    load()
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [url, refresh, stamp])
   return shown ? <img className={styles.photo} src={shown} alt="" /> : null
 }
 

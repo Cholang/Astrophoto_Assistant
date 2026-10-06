@@ -51,14 +51,36 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
 
     public int GuideExposureMs => _guideMs;
 
+    private CancellationTokenSource? _listenCts;
+
     private void EnsureListening(CancellationToken ct)
     {
-        lock (_gate) _listen ??= Task.Run(() => ListenAsync(CancellationToken.None), CancellationToken.None);
+        lock (_gate)
+        {
+            if (_listen is { IsCompleted: false }) return;
+            _listenCts = new CancellationTokenSource();
+            var token = _listenCts.Token;
+            _listen = Task.Run(() => ListenAsync(token), CancellationToken.None);
+        }
     }
+
+    /// <summary>촬영이 끝나면 이벤트 수신을 멈춘다 (PHD2 연결 자체는 다른 곳도 쓰므로 끊지 않음)</summary>
+    public void EndSession()
+    {
+        lock (_gate)
+        {
+            _listenCts?.Cancel();
+            _listenCts?.Dispose();
+            _listenCts = null;
+            _listen = null;
+        }
+    }
+
+    public async Task<bool> MountTrackingAsync(CancellationToken ct) => (await rig.MountAsync(ct))?.Tracking ?? false;
 
     private async Task ListenAsync(CancellationToken ct)
     {
-        while (true)
+        while (!ct.IsCancellationRequested)
         {
             try
             {
@@ -80,11 +102,12 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
                         }
                     }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (Exception e) when (e is Phd2Exception or IOException or InvalidOperationException)
             {
                 log.LogDebug("PHD2 이벤트 다시 연결: {Message}", e.Message);
             }
-            await Task.Delay(5000, ct);
+            try { await Task.Delay(5000, ct); } catch (OperationCanceledException) { return; }
         }
     }
 
@@ -171,12 +194,16 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
     public async Task<bool> StopGuidingAsync(CancellationToken ct)
     {
         await rig.StopGuidingAsync(ct); // 답은 참고만 — 확인은 PHD2 상태로
+        var direct = false;
         for (var i = 0; i < 15; i++)
         {
             try
             {
                 // N.I.N.A. 가이딩 정지 뒤 PHD2는 Looping으로 남는다 (2026-10-06 실기). LostLock·Calibrating·조회 실패는 멈춤이 아님
-                if (await phd2.AppStateAsync(ct) is "Stopped" or "Looping") return true;
+                var st = await phd2.AppStateAsync(ct);
+                if (st is "Stopped" or "Looping") return true;
+                // N.I.N.A.가 꺼졌거나 명령이 안 먹으면 PHD2에 직접 (한 번)
+                if (!direct && st is "Guiding" or "LostLock" or "Calibrating") { direct = true; await phd2.CallAsync("stop_capture", ct: ct); }
             }
             catch (Phd2Exception) { /* 조회 실패 — 다시 */ }
             await Task.Delay(1000, ct);
@@ -203,7 +230,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
     public async Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)
     {
         step(0);
-        if (!await StopGuidingAsync(ct)) return new FlipOutcome(false, false, false); // 가이딩을 멈추지 못하면 반전하지 않는다
+        if (ctx.HasGuider && !await StopGuidingAsync(ct)) return new FlipOutcome(false, false, false); // 가이딩을 멈추지 못하면 반전하지 않는다
         if (!await rig.FlipAsync(ct)) return new FlipOutcome(false, false, false);
         step(1);
         var centered = false;
@@ -213,7 +240,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
             centered = a.Solved && a.ErrorArcmin <= CenterTask.TargetArcmin;
         }
         step(2);
-        var guiding = await ResumeGuidingAsync(ct);
+        var guiding = !ctx.HasGuider || await ResumeGuidingAsync(ct);
         return new FlipOutcome(true, centered, guiding);
     }
 

@@ -8,7 +8,39 @@
 
 ---
 
-## 2026-10-07 · [Claude] Codex 리뷰 14절 반영 (CX-SHOOT-01~09 + 동시성·표본 중복)
+## 2026-10-07 · [Claude] Codex 리뷰 16절 반영 (CX-APP-R1~R5, 최적화 1~5)
+
+**요청**: Codex 16절(재리뷰·앱 전체 검토) 검토 — R1~R5 모두 동의, 최적화 1~5 반영, 6(AI 입력량)·7(구조 분리)은 측정·실장비 확인 뒤. R4의 예기치 않은 N.I.N.A. 종료는 "촬영 중이면 대상 단계를 이동부터 다시, 마무리 중이면 마무리로" (사용자 동의)
+
+**변경**
+- R1: `PackTask` — 홈 실패 뒤 정지(`StopAsync`) 결과를 보고, 정지를 확인하기 전에는 다시 시도가 홈이 아니라 정지 확인부터. 안내 문구도 정지 미확인을 구분
+- R2: `ShootSession.MoveExcluded` — 제외 폴더 이동 실패(null·예외)를 기록(`TargetShots.NotMoved`), 알림은 "옮기지 못했어요 (직접 옮겨 주세요)", 등급 F는 유지. 요약에 못 옮긴 장수
+- R3: 가이더 없으면 `IShootDevices.MountTrackingAsync`만(PHD2 조회 없음), 실제 `FlipAsync`도 `ctx.HasGuider`일 때만 PHD2 정지·재개
+- R4: `NinaWatcher.ExpectExit`·`NinaState.Closed` — 마무리에서 AA가 닫으면 경고 없음. 촬영 중 꺼지면 화면이 `POST /api/shoot/abort-for-restart`(`ShootSession.AbortForRestartAsync` + `PrepareFlow.RecheckTargetAsync`) → 다시 켠 뒤 대상 단계(이동부터), 마무리 중이면 마무리로 돌아감. 실제 가이딩 정지는 N.I.N.A.가 안 되면 PHD2 `stop_capture` 직접
+- R5: 실장비 모드에서 "9칸 확대 보기" 숨김 (모의 그림만 있음)
+- 최적화: PHD2 메시지 `JsonDocument` 닫기, `NinaWatcher` 대기자 정리, `LiveView.RealImage` 한 번에 하나·늦은 응답 버림, `RealShootDevices` 이벤트 수신을 촬영 끝에 정리(`EndSession`), 안 쓰는 `Term` 컴포넌트 삭제, SiteScreen 함수 이름(`use` → `applyChosen`)으로 lint 오류 해소
+- 버전 `product.json` 0.0 → 0.1 (촬영·마무리까지 한 밤 흐름이 갖춰져서. 셋째 자리는 계속 커밋 수)
+- 모의 실패 `shoot.movefail`, 시험용 `SimulatedWrapDevices.HomeCalls`·`SimulatedShootDevices.GuideRawCalls`
+
+**확인**: 서버 테스트 102 통과·1 건너뜀(새로 R1·R2·R4, CX07에 무가이드 반전·PHD2 조회 0회, 세 번 연속 통과). lint 오류 0(경고만), 웹·데스크톱 빌드. R4 화면 전환·실제 N.I.N.A. 종료, 실제 PHD2 직접 정지는 실기 미확인
+
+**남은 것**: 최적화 6(AI 입력량 측정)·7(App·촬영 세션 구조) 보류, 실제 사진 9칸 자르기(저장 형식 확인 뒤), 실장비 확인 목록, WandererBox 이슬점·열선, 틸트 점검·정비(냉각 카메라 대비, Hocus Focus 확인)
+
+---
+
+## 2026-10-06 · [Codex] ed4d353 재리뷰·앱 전체 사이클 최적화 검토
+
+**요청**: CX-SHOOT-01~09 수정 재검토와 기본 사용 사이클을 완성한 앱 전체의 최적화·불필요한 요소 확인. 구현 수정 없이 리뷰.
+
+**변경**: `docs/codex/REVIEW_CODEX.md` 15절 재검토 결과 갱신, 16절 추가. 기존 수정 대부분 확인. CX-APP-R1~R5(P1 1건·P2 4건): 홈 정지 실패 후 재이동, 제외 파일 이동 실패 누락, 무가이드 반전의 가이더 의존, NINA 종료/복구 흐름, 실제 9칸 확대의 모의 그림 표시. JSON·SSE 자원, 이미지 요청, 리스너 수명, 미사용 Term, lint, AI 대화 입력량, 상태 구조의 개선 순서 기록.
+
+**확인**: HEAD `ed4d353`, 시작 시 작업 트리 깨끗함. `AA_REAL=0` 테스트 99 통과·1 건너뜀, 웹 빌드 통과. lint는 SiteScreen 로컬 `use` 함수의 Hook 이름 오인 오류로 실패(별도 React 경고 있음). 저장소 밖 임시 프로그램에서 가짜 장비 6개·가짜 HTTP 2개 사례 확인. 앱 실행·실장비 조회/명령·실제 파일 이동·AI 요청 없음. 실제 장시간 성능 측정은 하지 않음.
+
+**남은 것**: R1~R5 처리와 단계별 회귀 검증. 최적화는 작은 자원/미사용 코드 정리부터, 성능 변경은 측정 후 진행. 구현 코드 수정·커밋·푸시 없음. 아래 기존 작성일은 유지.
+
+---
+
+## 2026-10-07 · ed4d353 [Claude] Codex 리뷰 14절 반영 (CX-SHOOT-01~09 + 동시성·표본 중복)
 
 **요청**: Codex 리뷰(REVIEW_CODEX.md 14절) 검토 — 9건 모두 동의, 추가 의견(이전 실행 기다리기·가이딩 조회 하나씩·기준 표본 중복)도 반영
 

@@ -263,23 +263,29 @@ public sealed class PackTask(IWrapDevices devices) : IPrepTask
         run.SubStep(0);
         run.Readout("pack", "1 / 3", "적도의 홈 · 추적 끔", Tone.Busy);
         run.Status("적도의를 정리하는 중입니다");
-        bool homed, trackingOff, confirmed = false, first = true;
+        bool homed = false, trackingOff = false, stopped = true, confirmed = false, first = true;
         while (true)
         {
             await using (await ctx.Mount.AcquireAsync(ct))
             {
-                homed = first && ctx.Results.Get<DarkResult>() is { Homed: true } || await devices.HomeAsync(ct);
-                // 홈을 확인하지 못했으면 움직임부터 멈춘다 (홈 시간 초과가 정지를 뜻하지 않음)
-                if (!homed) await devices.StopAsync(ct);
-                trackingOff = await devices.TrackingOffAsync(ct);
+                if (stopped)
+                {
+                    homed = first && ctx.Results.Get<DarkResult>() is { Homed: true } || await devices.HomeAsync(ct);
+                    // 홈을 확인하지 못했으면 움직임부터 멈추고 멈춘 것을 확인한다 (홈 시간 초과가 정지를 뜻하지 않음)
+                    if (!homed) stopped = await devices.StopAsync(ct);
+                }
+                else stopped = await devices.StopAsync(ct); // 정지를 확인하기 전에는 홈을 다시 명령하지 않는다 (CX-APP-R1)
+                if (stopped) trackingOff = await devices.TrackingOffAsync(ct);
             }
             first = false;
             if (homed && trackingOff) break;
             // 확인 전에는 연결 끊기·프로그램 닫기·전원 안내를 하지 않는다 (CX-SHOOT-03)
-            run.Guide("적도의를 정리하지 못했습니다", homed
-                ? "추적을 끄지 못했어요. N.I.N.A.에서 추적이 꺼졌는지 확인해 주세요."
-                : "홈 위치에 도착한 것을 확인하지 못해 적도의를 멈췄어요. 적도의가 멈춰 있는지, 케이블이 걸리지 않았는지 확인해 주세요.");
-            run.Readout("pack", "1 / 3", $"{(homed ? "홈" : "홈 확인 못 함")} · {(trackingOff ? "추적 끔" : "추적 끄기 확인 못 함")}", Tone.Fail);
+            run.Guide("적도의를 정리하지 못했습니다", !stopped
+                ? "홈 위치에 도착한 것도, 적도의가 멈춘 것도 확인하지 못했어요. 적도의를 직접 보고 멈춰 있는지, 케이블이 걸리지 않았는지 확인해 주세요."
+                : homed
+                    ? "추적을 끄지 못했어요. N.I.N.A.에서 추적이 꺼졌는지 확인해 주세요."
+                    : "홈 위치에 도착한 것을 확인하지 못해 적도의를 멈췄어요. 적도의가 멈춰 있는지, 케이블이 걸리지 않았는지 확인해 주세요.");
+            run.Readout("pack", "1 / 3", $"{(homed ? "홈" : stopped ? "홈 확인 못 함 · 멈춤 확인" : "홈·멈춤 확인 못 함")} · {(trackingOff ? "추적 끔" : "추적 끄기 확인 못 함")}", Tone.Fail);
             run.Status("장비 연결을 끊기 전에 적도의를 확인해야 해요", Tone.Fail);
             if (await run.AskAsync([new("retry", "다시 시도", true), new("confirmed", "직접 확인했어요")], ct) == "confirmed") { confirmed = true; break; }
             run.Guide("장비를 정리하고 있어요", "적도의를 홈에 두고 추적을 끈 뒤, 장비 연결을 끊고 프로그램을 닫아요. 전원은 이 다음에 끄시면 돼요.");

@@ -5,8 +5,10 @@ using Astro.Server.Prepare.Flow;
 namespace Astro.Server.Shoot;
 
 /// <summary>그날 밤 대상 하나의 촬영 기록 (마무리의 다크·요약이 읽는다)</summary>
-/// <summary>PausedMinutes = 원인별 멈춘 시간(분): cloud · light · jump · guider …</summary>
-public sealed record TargetShots(string TargetId, string Name, int Good, int Excluded, int ExposureSeconds, int Iso, IReadOnlyDictionary<string, int> Tally, string? Folder, IReadOnlyDictionary<string, double>? PausedMinutes = null);
+/// <summary>PausedMinutes = 원인별 멈춘 시간(분): cloud · light · jump · guider …,
+/// NotMoved = 제외할 사진인데 제외 폴더로 옮기지 못한 파일 (사용자가 직접 옮김, CX-APP-R2)</summary>
+public sealed record TargetShots(string TargetId, string Name, int Good, int Excluded, int ExposureSeconds, int Iso, IReadOnlyDictionary<string, int> Tally, string? Folder,
+    IReadOnlyDictionary<string, double>? PausedMinutes = null, IReadOnlyList<string>? NotMoved = null);
 
 /// <summary>그날 밤 찍은 대상들 (결과 기록 — 촬영이 갱신)</summary>
 public sealed record NightShootResult(IReadOnlyList<TargetShots> Targets);
@@ -72,6 +74,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private bool _guideStopped = true, _hasGuider = true;
     private long _seenSteps;
     private int _polling;
+    private readonly List<string> _notMoved = [];
 
     public static readonly int[] GuideExposuresMs = [1000, 1500, 2000, 2500, 3000, 3500, 4000];
     public static readonly TimeSpan LightWait = TimeSpan.FromMinutes(2), CloudWait = TimeSpan.FromMinutes(30), RecenterAfter = TimeSpan.FromMinutes(10);
@@ -174,7 +177,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _flipped = false; _stopRequested = false; _recordIndex = -1; _hfrRecent.Clear();
             _pause = null; _pausedMinutes.Clear(); _snrSamples.Clear(); _hfdSamples.Clear(); _snrBaseline = _hfdBaseline = 0;
             _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _lastDegrade.Clear(); _windWarned = false;
-            _guideStopped = true; _hasGuider = ctx.HasGuider; _seenSteps = 0;
+            _guideStopped = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
             _mode = ShootMode.Shoot;
             Changed();
@@ -188,6 +191,26 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             try { await previous; } catch (Exception) { /* 이전 실행의 오류는 그쪽에서 기록 */ }
             await RunAsync(ctx, ct);
         }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// N.I.N.A.가 예기치 않게 꺼짐 (CX-APP-R4): 지금 사진을 기다리지 않고 촬영을 멈추고 가이딩 정지를 확인한다(PHD2 직접).
+    /// 화면은 N.I.N.A.를 다시 켠 뒤 대상 단계(이동부터)로 돌아간다
+    /// </summary>
+    public async Task AbortForRestartAsync()
+    {
+        CancellationTokenSource? cts;
+        Task run;
+        lock (_gate)
+        {
+            if (_ctx is null || _mode is ShootMode.Ended or ShootMode.Idle) return;
+            cts = _cts;
+            run = _run;
+        }
+        cts?.Cancel();
+        try { await run.WaitAsync(TimeSpan.FromSeconds(20)); } catch (Exception) { /* 취소·시간 초과 */ }
+        Note("N.I.N.A.가 꺼져 촬영을 멈췄어요", Tone.Fail, 600);
+        await EndAsync("nina", CancellationToken.None);
     }
 
     /// <summary>"촬영 중단": 지금 사진은 끝까지 찍고 멈춘다. 찍고 있지 않으면 이유</summary>
@@ -288,8 +311,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 var rms = st.GuideRmsArcsec ?? await devices.GuideRmsAsync(ct);
                 var stats = st with { GuideRmsArcsec = rms };
                 var grade = ShotGrader.Judge(stats, new GradeBaseline(_focusHfr, baseStars, baseMean, ctx.MainPixelScaleArcsec));
-                var file = shot.File;
-                if (grade.Excluded && file is not null) file = devices.MoveToExcluded(file) ?? file;
+                var moveFailed = grade.Excluded && shot.File is { } badFile && !MoveExcluded(badFile);
                 if (!grade.Excluded)
                 {
                     // 그날 밤 기준: 처음 좋은 사진 세 장의 별 수·배경
@@ -309,7 +331,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                     if (shot.File is { } f) _folder ??= Path.GetDirectoryName(f);
                     _photoAt = DateTimeOffset.Now;
                 });
-                if (grade.Excluded) Note($"{_good + _excluded}번 사진: {grade.Reason} · 제외 폴더로 옮겼어요", Tone.Warn, 8);
+                if (grade.Excluded) Note($"{_good + _excluded}번 사진: {grade.Reason} · {(moveFailed ? "제외 폴더로 옮기지 못했어요 (직접 옮겨 주세요)" : "제외 폴더로 옮겼어요")}", Tone.Warn, 8);
                 Record(ctx);
 
                 // 디더링 (좋은 사진 3장마다)
@@ -339,11 +361,15 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     /// <summary>장비 신호를 읽어 원인을 가린다. 가이딩이 안정된 동안의 SNR·HFD로 기준을 잡고, 약해지면(이슬·가이드 초점·옅은 구름) 가이드 노출을 올리고 알린다</summary>
     private async Task<GuideLoss> CheckGuideAsync(CancellationToken ct)
     {
+        // 가이더 없는 구성: PHD2를 부르지 않고 적도의 추적만 (CX-SHOOT-07, CX-APP-R3)
+        if (!_hasGuider)
+        {
+            try { return await devices.MountTrackingAsync(ct) ? GuideLoss.None : GuideLoss.MountStopped; }
+            catch (Exception e) when (e is not OperationCanceledException) { log.LogWarning(e, "적도의 상태를 읽지 못함"); return GuideLoss.None; }
+        }
         GuideRaw raw;
         try { raw = await devices.GuideRawAsync(ct); }
         catch (Exception e) when (e is not OperationCanceledException) { log.LogWarning(e, "가이딩 신호를 읽지 못함"); return GuideLoss.None; }
-        // 가이더 없는 구성: 가이드 감시는 건너뛰고 적도의 추적만 본다 (CX-SHOOT-07)
-        if (!_hasGuider) return raw.MountTracking ? GuideLoss.None : GuideLoss.MountStopped;
         // 새로 받은 걸음만 기준 표본에 (같은 값을 매번 다시 넣지 않게)
         var fresh = (int)Math.Clamp(raw.Steps - _seenSteps, 0, raw.Snr.Count);
         _seenSteps = Math.Max(_seenSteps, raw.Steps);
@@ -529,10 +555,21 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     /// <summary>제외할 사진: 제외 폴더로 옮기고 F로 센다</summary>
     private void ExcludeFrame(string file, string why)
     {
-        devices.MoveToExcluded(file);
+        var moved = MoveExcluded(file);
         Set(() => { _excluded++; _tally["F"]++; _lastGrade = "F"; _folder ??= Path.GetDirectoryName(file); });
-        Note($"{_good + _excluded}번 사진: {why} · 제외 폴더로 옮겼어요", Tone.Warn, 8);
+        Note($"{_good + _excluded}번 사진: {why} · {(moved ? "제외 폴더로 옮겼어요" : "제외 폴더로 옮기지 못했어요 (직접 옮겨 주세요)")}", Tone.Warn, 8);
         if (_ctx is { } c) Record(c);
+    }
+
+    /// <summary>제외 폴더로 옮긴다. 못 옮기면(잠김·권한·같은 이름) 기록해 두고 false — 등급 F는 그대로 (CX-APP-R2)</summary>
+    private bool MoveExcluded(string file)
+    {
+        string? moved;
+        try { moved = devices.MoveToExcluded(file); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { moved = null; }
+        if (moved is not null) return true;
+        lock (_gate) _notMoved.Add(file);
+        return false;
     }
 
     private void Pause(string key, string text, bool keepSince = false) => Set(() =>
@@ -586,6 +623,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _noteUntil = DateTimeOffset.MaxValue;
         });
         if (_ctx is { } c) Record(c);
+        devices.EndSession();
         log.LogInformation("촬영 끝: {Reason} · 쓸 사진 {Good} · 제외 {Excluded}", reason, _good, _excluded);
     }
 
@@ -622,7 +660,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
         lock (_gate)
         {
             var mine = new TargetShots(ctx.Plan.TargetId, ctx.TargetName, _good, _excluded, ctx.ExposureSeconds, ctx.Plan.Iso, new Dictionary<string, int>(_tally), _folder,
-                new Dictionary<string, double>(_pausedMinutes));
+                new Dictionary<string, double>(_pausedMinutes), [.. _notMoved]);
             var list = ctx.Results.Get<NightShootResult>()?.Targets.ToList() ?? [];
             // 이 촬영(계획 하나)의 줄: 처음이면 더하고, 이후엔 바꾼다
             if (_recordIndex >= 0 && _recordIndex < list.Count) list[_recordIndex] = mine;

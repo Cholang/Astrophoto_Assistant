@@ -55,8 +55,12 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
 
     public Task<double?> GuideRmsAsync(CancellationToken ct) => Task.FromResult<double?>(_trail ? 6.5 : Math.Round(.48 + _r.NextDouble() * .24, 2));
 
+    /// <summary>[테스트] 가이딩 신호(PHD2) 조회 횟수</summary>
+    public int GuideRawCalls { get; private set; }
+
     public Task<GuideRaw> GuideRawAsync(CancellationToken ct)
     {
+        GuideRawCalls++;
         if (faults.Take("shoot.mount") || _abortScenario) _mountStopped = true;
         if (faults.Take("shoot.guider")) _disconnected = true;
         foreach (var k in new[] { "cloud", "light", "wind" })
@@ -102,6 +106,8 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     public Task<bool> DewHeaterBoostAsync(CancellationToken ct) => Task.FromResult(false);
     public async Task<bool> ResumeGuidingAsync(CancellationToken ct) { await sim.Delay(600, ct); Calls.Add("resume"); return !_mountStopped && !_disconnected; }
     public async Task<bool> StopGuidingAsync(CancellationToken ct) { await sim.Delay(200, ct); Calls.Add("stop"); return !faults.Take("stop.fail") && !faults.Take("shoot.stopfail"); }
+    public Task<bool> MountTrackingAsync(CancellationToken ct) => Task.FromResult(!_mountStopped && !faults.Take("shoot.mount"));
+    public void EndSession() { }
     public async Task<bool> DitherAsync(CancellationToken ct) { await sim.Delay(1200, ct); return true; }
 
     public async Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)
@@ -132,7 +138,7 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
         return Task.FromResult<double?>(_temp);
     }
 
-    public string? MoveToExcluded(string file) => Path.Combine(Path.GetDirectoryName(file) ?? "", "제외", Path.GetFileName(file));
+    public string? MoveToExcluded(string file) => faults.Take("shoot.movefail") ? null : Path.Combine(Path.GetDirectoryName(file) ?? "", "제외", Path.GetFileName(file));
 
     public double HourAngleDeg(PrepContext ctx)
     {

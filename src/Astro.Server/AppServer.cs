@@ -192,6 +192,13 @@ public static class AppServer
         // "촬영 중단": 지금 사진까지 찍고 멈춘다 (그 뒤 마무리 / 다른 대상은 화면이 고름)
         shoot.MapPost("/stop", (Shoot.ShootSession session) =>
             session.Stop() is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+        // N.I.N.A.가 예기치 않게 꺼짐: 촬영을 멈추고(가이딩 정지 확인) 대상 작업을 이동부터 다시 확인하게 (CX-APP-R4)
+        shoot.MapPost("/abort-for-restart", async (Shoot.ShootSession session, Prepare.Flow.PrepareFlow flow) =>
+        {
+            await session.AbortForRestartAsync();
+            await flow.RecheckTargetAsync();
+            return Results.NoContent();
+        });
         // 끝났는데 가이딩 정지를 확인하지 못했을 때 "장비 상태 다시 확인"
         shoot.MapPost("/recheck-stop", async (Shoot.ShootSession session) =>
             await session.RecheckStopAsync() is { } problem ? Results.Conflict(new { error = problem }) : Results.NoContent());

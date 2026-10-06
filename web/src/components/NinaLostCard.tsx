@@ -2,7 +2,8 @@ import { TriangleAlert } from 'lucide-react'
 import Button from './Button'
 import styles from './NinaLostCard.module.css'
 
-export type NinaState = 'Unknown' | 'Running' | 'Exited' | 'NotResponding'
+/** Closed = 마무리에서 AA가 일부러 닫음 (경고하지 않음) */
+export type NinaState = 'Unknown' | 'Running' | 'Exited' | 'NotResponding' | 'Closed'
 
 /**
  * N.I.N.A.가 꺼지거나 멈췄을 때 화면 위쪽에 붙는 진단 카드 (DESIGN.md 4장: 무슨 일 / 왜 / 이렇게).

@@ -135,7 +135,8 @@ export default function PrepareScreen({
 
           {/* 오른쪽 위: 사진을 볼 때만 */}
           <div className={styles.viewTools}>
-            {liveKind === 'test-photo' && !peek && (
+            {/* 9칸 확대 보기는 아직 모의 그림만 — 실장비에서는 숨긴다 (실제 사진 9칸 자르기는 저장 형식 확인 뒤, CX-APP-R5) */}
+            {liveKind === 'test-photo' && !peek && view?.simulated && (
               <button type="button" className={styles.tool} onClick={() => setGrid((g) => !g)}>
                 {grid ? '사진 전체 보기' : '9칸 확대 보기'}
               </button>

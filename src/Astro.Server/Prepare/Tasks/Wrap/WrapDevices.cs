@@ -36,7 +36,10 @@ public sealed class SimulatedWrapDevices(SimOptions sim, SimFaults faults) : IWr
         return true;
     }
 
-    public async Task<bool> HomeAsync(CancellationToken ct) { await sim.Delay(2000, ct); return !faults.Take("wrap.home"); }
+    /// <summary>[테스트] 홈 명령 횟수</summary>
+    public int HomeCalls { get; private set; }
+
+    public async Task<bool> HomeAsync(CancellationToken ct) { HomeCalls++; await sim.Delay(2000, ct); return !faults.Take("wrap.home"); }
     public async Task<bool> TrackingOffAsync(CancellationToken ct) { await sim.Delay(300, ct); return !faults.Take("wrap.tracking"); }
     public async Task<bool> DisconnectAllAsync(CancellationToken ct) { await sim.Delay(800, ct); return true; }
     public async Task<bool> CloseProgramsAsync(CancellationToken ct) { await sim.Delay(800, ct); return true; }
@@ -48,7 +51,7 @@ public sealed class SimulatedWrapDevices(SimOptions sim, SimFaults faults) : IWr
 /// 플랫 노출은 AA가 찾는다: 저장하지 않는 사진으로 평균 밝기를 재며 50% 근처까지 (카메라 비트 수 기준, 없으면 14비트 — X-T5).
 /// 1/250초보다 짧으면 셔터 그림자 위험으로 보고 패널을 어둡게 하자고 한다. 프로그램 닫기는 창 닫기(강제 종료 없음).
 /// </summary>
-public sealed class RealWrapDevices(NinaRig rig, ILogger<RealWrapDevices> log) : IWrapDevices
+public sealed class RealWrapDevices(NinaRig rig, Engine.NinaWatcher watcher, ILogger<RealWrapDevices> log) : IWrapDevices
 {
     public const double MinFlatSeconds = 1.0 / 250, MaxFlatSeconds = 10;
 
@@ -103,6 +106,7 @@ public sealed class RealWrapDevices(NinaRig rig, ILogger<RealWrapDevices> log) :
     public async Task<bool> CloseProgramsAsync(CancellationToken ct)
     {
         var all = true;
+        watcher.ExpectExit(); // 정상 종료 — 화면에 "N.I.N.A.가 꺼졌어요"를 띄우지 않는다 (CX-APP-R4)
         foreach (var name in new[] { "phd2", "NINA" })
             foreach (var p in Process.GetProcessesByName(name))
             {

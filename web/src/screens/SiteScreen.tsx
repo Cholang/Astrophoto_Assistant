@@ -72,7 +72,7 @@ export default function SiteScreen({
   }
   const expireUndo = useCallback(() => setUndo(null), [])
 
-  const use = async (site: ObservingSite) => {
+  const applyChosen = async (site: ObservingSite) => {
     // 이미 지금 관측지면 다시 보낼 것 없이 계속
     if (current && sameSpot(site, current)) return onDone()
     setApply({ state: 'working', text: '관측지를 저장하는 중입니다' })
@@ -85,7 +85,7 @@ export default function SiteScreen({
 
   // 카드: 처음 누르면 고르고(뒤집혀 안내), 고른 카드를 한 번 더 누르면 그 관측지로
   const press = (site: ObservingSite) => {
-    if (!adding && selected === site.id) return void use(site)
+    if (!adding && selected === site.id) return void applyChosen(site)
     setAdding(false)
     setSelected(site.id)
   }
@@ -98,7 +98,7 @@ export default function SiteScreen({
         </JarvisRing>
         <div className={styles.applyActions} data-shown={apply.state === 'failed'}>
           <Button onClick={() => setApply(null)}>돌아가기</Button>
-          <Button variant="primary" onClick={() => chosen && use(chosen)}>
+          <Button variant="primary" onClick={() => chosen && applyChosen(chosen)}>
             다시 시도
           </Button>
         </div>
