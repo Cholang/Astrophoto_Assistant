@@ -29,11 +29,12 @@ public interface IShootDevices
     /// <summary>이슬 열선 올리기. 열선을 다룰 수 없으면 false (알림만)</summary>
     Task<bool> DewHeaterBoostAsync(CancellationToken ct);
     Task<bool> ResumeGuidingAsync(CancellationToken ct);
+    /// <summary>가이딩을 멈추고 멈춘 것을 확인한다 — PHD2가 Stopped·Looping일 때만 true (LostLock·조회 실패는 멈춤이 아님, CX-SHOOT-01)</summary>
     Task<bool> StopGuidingAsync(CancellationToken ct);
     /// <summary>디더링하고 가이딩이 안정될 때까지</summary>
     Task<bool> DitherAsync(CancellationToken ct);
-    /// <summary>자오선 반전: 0 반전 → 1 다시 센터링 → 2 가이딩 재시작. 단계가 바뀔 때마다 알린다</summary>
-    Task<bool> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct);
+    /// <summary>자오선 반전: 0 반전 → 1 다시 센터링 → 2 가이딩 재시작. 단계가 바뀔 때마다 알린다. 단계별 결과를 따로 (CX-SHOOT-02)</summary>
+    Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct);
     /// <summary>자동초점 (지점마다 위치·별 크기를 알린다)</summary>
     Task<RefocusOutcome> RefocusAsync(Action<int, double> point, CancellationToken ct);
     Task<double?> TemperatureAsync(CancellationToken ct);
@@ -47,4 +48,6 @@ public interface IShootDevices
 }
 
 public sealed record FrameShot(bool Ok, string? Problem, string? File, FrameStats? Stats);
+/// <summary>자오선 반전 결과: 반전(필수) · 다시 가운데 · 가이딩 재개</summary>
+public sealed record FlipOutcome(bool Flipped, bool Centered, bool Guiding);
 public sealed record RefocusOutcome(bool Ok, int Position, double Hfr, string? Problem = null);

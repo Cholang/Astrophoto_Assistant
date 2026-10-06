@@ -4,7 +4,8 @@ using Astro.Server.Prepare.Sim;
 
 namespace Astro.Server.Prepare.Tasks.Wrap;
 
-/// <summary>마무리 모의 장비. "wrap.bright" = 패널이 너무 밝음(노출이 셔터 한계보다 짧음, 한 번)</summary>
+/// <summary>마무리 모의 장비. "wrap.bright" = 패널이 너무 밝음(노출이 셔터 한계보다 짧음, 한 번), "wrap.home" = 홈 확인 실패(한 번),
+/// "wrap.tracking" = 추적 끄기 실패(한 번), "wrap.dark" = 다크 3장 연속 실패</summary>
 public sealed class SimulatedWrapDevices(SimOptions sim, SimFaults faults) : IWrapDevices
 {
     public async Task<bool> PointUpAsync(CancellationToken ct) { await sim.Delay(1600, ct); return true; }
@@ -25,14 +26,18 @@ public sealed class SimulatedWrapDevices(SimOptions sim, SimFaults faults) : IWr
         return new FlatExposure(true, 0.8, 51);
     }
 
+    private int _darkFails;
+
     public async Task<bool> CaptureAsync(string imageType, double seconds, int iso, CancellationToken ct)
     {
         await sim.Delay(imageType == "DARK" ? 250 : 70, ct);
+        if (imageType == "DARK" && faults.Take("wrap.dark")) _darkFails = 3;
+        if (imageType == "DARK" && _darkFails > 0) { _darkFails--; return false; }
         return true;
     }
 
-    public async Task<bool> HomeAsync(CancellationToken ct) { await sim.Delay(2000, ct); return true; }
-    public async Task<bool> TrackingOffAsync(CancellationToken ct) { await sim.Delay(300, ct); return true; }
+    public async Task<bool> HomeAsync(CancellationToken ct) { await sim.Delay(2000, ct); return !faults.Take("wrap.home"); }
+    public async Task<bool> TrackingOffAsync(CancellationToken ct) { await sim.Delay(300, ct); return !faults.Take("wrap.tracking"); }
     public async Task<bool> DisconnectAllAsync(CancellationToken ct) { await sim.Delay(800, ct); return true; }
     public async Task<bool> CloseProgramsAsync(CancellationToken ct) { await sim.Delay(800, ct); return true; }
     public async Task<bool> StopAsync(CancellationToken ct) { await sim.Delay(50, ct); return !faults.Take("stop.fail"); }

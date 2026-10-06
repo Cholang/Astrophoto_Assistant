@@ -18,7 +18,7 @@ public sealed record ShootView(
     int FlipStep, DateTimeOffset? FlipAt, int? FlipInMinutes, IReadOnlyList<double> Guide, IReadOnlyList<double> Hfr, double FocusHfr,
     double PixelScale, string? LastGrade, IReadOnlyDictionary<string, int> Tally, IReadOnlyDictionary<string, string> Criteria,
     StatusLine? Note, IReadOnlyList<object>? FocusPoints, string? Ended, DateTimeOffset? EndAt, string? PhotoUrl, DateTimeOffset? PhotoAt,
-    int Version, bool Simulated, string? Pause = null, int PausedSeconds = 0, int GuideExposureMs = 0);
+    int Version, bool Simulated, string? Pause = null, int PausedSeconds = 0, int GuideExposureMs = 0, bool GuideStopped = true);
 
 /// <summary>Paused = 가이드 별을 잃어 멈춤 (원인은 ShootView.Pause: light · cloud · jump · guider)</summary>
 public enum ShootMode { Idle, Shoot, Dither, Flip, Focus, Paused, Finishing, Ended }
@@ -68,6 +68,10 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private readonly List<DateTimeOffset> _jumps = [];
     private readonly Dictionary<GuideLoss, DateTimeOffset> _lastDegrade = [];
     private bool _windWarned;
+    // CX-SHOOT-01: 끝날 때 가이딩 정지를 확인했는가 (확인 전에는 마무리·다른 대상으로 못 감). 가이더 없는 구성은 감시·정지를 건너뜀(07)
+    private bool _guideStopped = true, _hasGuider = true;
+    private long _seenSteps;
+    private int _polling;
 
     public static readonly int[] GuideExposuresMs = [1000, 1500, 2000, 2500, 3000, 3500, 4000];
     public static readonly TimeSpan LightWait = TimeSpan.FromMinutes(2), CloudWait = TimeSpan.FromMinutes(30), RecenterAfter = TimeSpan.FromMinutes(10);
@@ -97,7 +101,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             flipAt is { } fa && c is not null ? Math.Max(1, (int)Math.Ceiling((fa - c.Now()).TotalMinutes)) : null, _guide.ToArray(), _hfr.ToArray(), _focusHfr,
             c?.MainPixelScaleArcsec ?? 0, _lastGrade, new Dictionary<string, int>(_tally), ShotGrader.Criteria, _note, _focusPoints?.ToArray(),
             _ended, endAt, devices.PhotoUrl, _photoAt, _version, mode.Simulate,
-            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs);
+            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs, _guideStopped);
     }
 
     public async IAsyncEnumerable<ShootView> WatchAsync([EnumeratorCancellation] CancellationToken ct)
@@ -170,13 +174,20 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _flipped = false; _stopRequested = false; _recordIndex = -1; _hfrRecent.Clear();
             _pause = null; _pausedMinutes.Clear(); _snrSamples.Clear(); _hfdSamples.Clear(); _snrBaseline = _hfdBaseline = 0;
             _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _lastDegrade.Clear(); _windWarned = false;
+            _guideStopped = true; _hasGuider = ctx.HasGuider; _seenSteps = 0;
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
             _mode = ShootMode.Shoot;
             Changed();
         }
         var ct = _cts.Token;
         log.LogInformation("촬영 시작: {Target}", ctx.TargetName);
-        _run = Task.Run(() => RunAsync(ctx, ct), CancellationToken.None);
+        // 이전 촬영(다른 계획)이 완전히 끝난 뒤에 시작 — 장비 명령이 겹치지 않게
+        var previous = _run;
+        _run = Task.Run(async () =>
+        {
+            try { await previous; } catch (Exception) { /* 이전 실행의 오류는 그쪽에서 기록 */ }
+            await RunAsync(ctx, ct);
+        }, CancellationToken.None);
     }
 
     /// <summary>"촬영 중단": 지금 사진은 끝까지 찍고 멈춘다. 찍고 있지 않으면 이유</summary>
@@ -217,10 +228,19 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 if (!_flipped && devices.HourAngleDeg(ctx) > FlipAfterDeg)
                 {
                     Set(() => { _mode = ShootMode.Flip; _flipStep = 0; });
-                    var ok = await devices.FlipAsync(ctx, s => Set(() => _flipStep = s), ct);
+                    FlipOutcome flip;
+                    await using (await ctx.Mount.AcquireAsync(ct)) flip = await devices.FlipAsync(ctx, s => Set(() => _flipStep = s), ct);
+                    if (!flip.Flipped)
+                    {
+                        // 반전 자체가 안 됨: 자오선 너머로 계속 찍지 않는다 (CX-SHOOT-02)
+                        Note("자오선 반전이 되지 않았어요 · 적도의를 확인해 주세요. 촬영을 멈췄어요", Tone.Fail, 600);
+                        await EndAsync("flip", ct);
+                        return;
+                    }
                     _flipped = true;
                     Set(() => _mode = ShootMode.Shoot);
-                    Note(ok ? "자오선 반전을 마쳤어요 · 다시 찍어요" : "자오선 반전 뒤 가운데 맞추기가 안 됐어요 · 그대로 이어서 찍어요", ok ? Tone.Ok : Tone.Warn);
+                    Note(flip.Centered ? "자오선 반전을 마쳤어요 · 다시 찍어요" : "반전은 했지만 가운데 맞추기가 안 됐어요 · 그대로 이어서 찍어요", flip.Centered ? Tone.Ok : Tone.Warn);
+                    // 가이딩 재개 실패는 아래 가이드 별 확인이 원인별로 처리
                 }
 
                 // 초점 다시 맞추기: 기온 2°C 이상, 또는 최근 좋은 사진의 별 크기가 초점 때보다 30% 넘게 큼
@@ -252,6 +272,8 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 var (shot, lost) = await ExposeWatchedAsync(ctx, ct);
                 if (lost != GuideLoss.None)
                 {
+                    // 노출을 멈추지 못해 사진이 저장됐으면 제외 폴더로 옮기고 F로 센다 (CX-SHOOT-09)
+                    if (shot.Ok && shot.File is { } bad) ExcludeFrame(bad, "가이드 별을 잃은 동안 찍혔어요");
                     if (!await HandleLossAsync(ctx, lost, ct)) return;
                     continue;
                 }
@@ -291,7 +313,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 Record(ctx);
 
                 // 디더링 (좋은 사진 3장마다)
-                if (!grade.Excluded && _good % DitherEvery == 0 && !_stopRequested)
+                if (_hasGuider && !grade.Excluded && _good % DitherEvery == 0 && !_stopRequested)
                 {
                     Set(() => _mode = ShootMode.Dither);
                     await devices.DitherAsync(ct);
@@ -320,16 +342,23 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
         GuideRaw raw;
         try { raw = await devices.GuideRawAsync(ct); }
         catch (Exception e) when (e is not OperationCanceledException) { log.LogWarning(e, "가이딩 신호를 읽지 못함"); return GuideLoss.None; }
-        if (raw.Guiding && raw.Snr.Count > 0)
+        // 가이더 없는 구성: 가이드 감시는 건너뛰고 적도의 추적만 본다 (CX-SHOOT-07)
+        if (!_hasGuider) return raw.MountTracking ? GuideLoss.None : GuideLoss.MountStopped;
+        // 새로 받은 걸음만 기준 표본에 (같은 값을 매번 다시 넣지 않게)
+        var fresh = (int)Math.Clamp(raw.Steps - _seenSteps, 0, raw.Snr.Count);
+        _seenSteps = Math.Max(_seenSteps, raw.Steps);
+        if (raw.Guiding && fresh > 0)
         {
             // 처음 안정된 가이딩 20걸음의 중앙값이 그날 기준
-            if (_snrBaseline <= 0) { _snrSamples.AddRange(raw.Snr.TakeLast(5)); if (_snrSamples.Count >= 20) _snrBaseline = _snrSamples.Order().ElementAt(_snrSamples.Count / 2); }
-            if (_hfdBaseline <= 0 && raw.Hfd.Count > 0) { _hfdSamples.AddRange(raw.Hfd.TakeLast(5)); if (_hfdSamples.Count >= 20) _hfdBaseline = _hfdSamples.Order().ElementAt(_hfdSamples.Count / 2); }
+            if (_snrBaseline <= 0) { _snrSamples.AddRange(raw.Snr.TakeLast(fresh)); if (_snrSamples.Count >= 20) _snrBaseline = _snrSamples.Order().ElementAt(_snrSamples.Count / 2); }
+            if (_hfdBaseline <= 0 && raw.Hfd.Count > 0) { _hfdSamples.AddRange(raw.Hfd.TakeLast(Math.Min(fresh, raw.Hfd.Count))); if (_hfdSamples.Count >= 20) _hfdBaseline = _hfdSamples.Order().ElementAt(_hfdSamples.Count / 2); }
         }
         var loss = GuideWatch.Classify(new GuideSignals(raw, _mainStarsRatio, _mainMeanRatio, _snrBaseline, _hfdBaseline));
         if (loss is GuideLoss.Dew or GuideLoss.GuideFocus or GuideLoss.Faint or GuideLoss.Cloud && raw.Guiding) await DegradeAsync(loss, ct);
         else if (raw.Guiding && _snrBaseline > 0 && raw.Snr.Count >= GuideWatch.Recent && raw.Snr.TakeLast(GuideWatch.Recent).Average() > _snrBaseline * 1.5)
             await StepGuideExposureAsync(-1, ct); // 다시 밝아지면 짧게 (하모닉 적도의는 짧은 노출이 좋음)
+        // 적도의 멈춤·장비 끊김은 PHD2가 아직 Guiding이어도 먼저 (CX-SHOOT-06)
+        if (loss is GuideLoss.MountStopped or GuideLoss.Disconnected) return loss;
         return raw.Guiding ? GuideLoss.None : loss;
     }
 
@@ -423,8 +452,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 _jumps.Add(DateTimeOffset.Now);
                 _jumps.RemoveAll(t => DateTimeOffset.Now - t > TimeSpan.FromMinutes(10));
                 Pause("jump", "별이 갑자기 움직였어요 · 별을 다시 고르는 중이에요");
-                var ok = await devices.ReselectStarAsync(ct) && await devices.ResumeGuidingAsync(ct);
-                if (!ok && !await devices.RecenterAsync(ctx, ct)) return await WaitForStarAsync(ctx, GuideLoss.Cloud, ct);
+                if (!await devices.ReselectStarAsync(ct) && !await RecenterSafelyAsync(ctx, ct)) return false;
                 Resume(_jumps.Count >= 3 && !_windWarned ? "별이 자주 튀어요 · 바람이나 케이블을 확인해 주세요" : "가이드 별을 다시 잡았어요 · 이어서 찍어요");
                 if (_jumps.Count >= 3) _windWarned = true;
                 return true;
@@ -470,9 +498,41 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             Set(() => { _note = new StatusLine($"멈춤 · {(cause == GuideLoss.Light ? "강한 빛이 지나가기를" : "별이 돌아오기를")} 기다리는 중 · {(int)waited.TotalMinutes}분째", Tone.Warn); _noteUntil = DateTimeOffset.MaxValue; });
             await Task.Delay(PollMs, ct);
         }
-        if (DateTimeOffset.Now - since > RecenterAfter) await devices.RecenterAsync(ctx, ct);
+        if (DateTimeOffset.Now - since > RecenterAfter && !await RecenterSafelyAsync(ctx, ct)) return false;
         Resume("별이 돌아왔어요 · 이어서 찍어요");
         return true;
+    }
+
+    /// <summary>
+    /// 다시 가운데 (CX-SHOOT-05): 가이딩 멈춤 확인 → 적도의 잠금 → 센터링 → 가이딩 재개·확인. 어느 단계든 실패하면 촬영을 멈추고 알린다(false).
+    /// 가이딩 중에 적도의를 옮기지 않는다
+    /// </summary>
+    private async Task<bool> RecenterSafelyAsync(PrepContext ctx, CancellationToken ct)
+    {
+        Pause(_pause ?? "cloud", "다시 가운데로 맞추는 중이에요", keepSince: true);
+        string? fail = null;
+        if (_hasGuider && !await devices.StopGuidingAsync(ct)) fail = "가이딩을 멈추지 못해 다시 가운데로 맞추지 못했어요";
+        else
+        {
+            bool centered;
+            await using (await ctx.Mount.AcquireAsync(ct)) centered = await devices.RecenterAsync(ctx, ct);
+            if (!centered) fail = "다시 가운데로 맞추지 못했어요 (별·구름 확인)";
+            else if (_hasGuider && !await devices.ResumeGuidingAsync(ct)) fail = "다시 가운데로 맞췄지만 가이딩을 다시 켜지 못했어요";
+        }
+        if (fail is null) return true;
+        Resume(null);
+        Note(fail + " · 촬영을 멈췄어요", Tone.Fail, 600);
+        await EndAsync("recenter", ct);
+        return false;
+    }
+
+    /// <summary>제외할 사진: 제외 폴더로 옮기고 F로 센다</summary>
+    private void ExcludeFrame(string file, string why)
+    {
+        devices.MoveToExcluded(file);
+        Set(() => { _excluded++; _tally["F"]++; _lastGrade = "F"; _folder ??= Path.GetDirectoryName(file); });
+        Note($"{_good + _excluded}번 사진: {why} · 제외 폴더로 옮겼어요", Tone.Warn, 8);
+        if (_ctx is { } c) Record(c);
     }
 
     private void Pause(string key, string text, bool keepSince = false) => Set(() =>
@@ -498,12 +558,14 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
 
     private async Task PollGuideAsync(CancellationToken ct)
     {
+        if (Interlocked.Exchange(ref _polling, 1) == 1) return; // 앞 조회가 아직이면 건너뜀 (느린 API에서 겹치지 않게)
         try
         {
             if (await devices.GuideRmsAsync(ct) is { } g)
                 Set(() => { _guide.Add(g); if (_guide.Count > Spark) _guide.RemoveAt(0); });
         }
         catch (Exception) { /* 가이딩 값은 다음에 */ }
+        finally { Volatile.Write(ref _polling, 0); }
     }
 
     private static int Median(List<int> xs) => xs.Order().ElementAt(xs.Count / 2);
@@ -512,17 +574,46 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private async Task EndAsync(string reason, CancellationToken ct)
     {
         Set(() => { _mode = ShootMode.Finishing; _note = new StatusLine("가이딩을 멈추고 확인하는 중입니다", Tone.Busy); _noteUntil = DateTimeOffset.MaxValue; });
-        var stopped = false;
-        try { stopped = await devices.StopGuidingAsync(ct); } catch (Exception e) { log.LogWarning(e, "가이딩 정지 실패"); }
+        var stopped = !_hasGuider || await TryStopGuidingAsync(ct);
         Set(() =>
         {
             _mode = ShootMode.Ended;
             _ended = reason;
-            _note = stopped ? new StatusLine("가이딩을 멈췄어요", Tone.Ok) : new StatusLine("가이딩이 멈췄는지 확인하지 못했어요. PHD2를 확인해 주세요", Tone.Warn);
+            _guideStopped = stopped;
+            // 끝 이유 알림(실패)이 있으면 그대로, 없으면 가이딩 정지 결과
+            if (!stopped) _note = new StatusLine("가이딩이 멈췄는지 확인하지 못했어요. PHD2를 확인한 뒤 \"장비 상태 다시 확인\"을 눌러 주세요", Tone.Fail);
+            else if (_note is not { Tone: Tone.Fail }) _note = new StatusLine(_hasGuider ? "가이딩을 멈췄어요" : "촬영을 마쳤어요", Tone.Ok);
             _noteUntil = DateTimeOffset.MaxValue;
         });
         if (_ctx is { } c) Record(c);
         log.LogInformation("촬영 끝: {Reason} · 쓸 사진 {Good} · 제외 {Excluded}", reason, _good, _excluded);
+    }
+
+    private async Task<bool> TryStopGuidingAsync(CancellationToken ct)
+    {
+        try { return await devices.StopGuidingAsync(ct); }
+        catch (Exception e) when (e is not OperationCanceledException) { log.LogWarning(e, "가이딩 정지 확인 실패"); return false; }
+    }
+
+    /// <summary>"장비 상태 다시 확인": 끝났는데 가이딩 정지를 확인하지 못했을 때 다시 멈추고 확인한다 (CX-SHOOT-01). 확인되면 null</summary>
+    public async Task<string?> RecheckStopAsync()
+    {
+        lock (_gate) if (_mode != ShootMode.Ended || _guideStopped) return null;
+        if (!await TryStopGuidingAsync(CancellationToken.None)) return "아직 가이딩이 멈췄는지 확인하지 못했습니다. PHD2를 확인해 주세요.";
+        Set(() => { _guideStopped = true; _note = new StatusLine("가이딩이 멈춘 것을 확인했어요", Tone.Ok); _noteUntil = DateTimeOffset.MaxValue; });
+        return null;
+    }
+
+    /// <summary>마무리·다른 대상으로 가도 되는가 (찍는 중이거나 가이딩 정지를 확인하지 못했으면 이유)</summary>
+    public string? BlocksNext()
+    {
+        lock (_gate)
+        {
+            if (_ctx is null || _mode == ShootMode.Idle) return null;
+            if (_mode != ShootMode.Ended) return "아직 촬영 중입니다. \"촬영 중단\"으로 멈춘 뒤 진행해 주세요.";
+            if (!_guideStopped) return "가이딩이 멈췄는지 확인되지 않았습니다. 촬영 화면에서 \"장비 상태 다시 확인\"을 눌러 주세요.";
+            return null;
+        }
     }
 
     /// <summary>그날 밤 결과 기록에 이 촬영(대상 하나)을 남긴다</summary>

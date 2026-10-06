@@ -43,7 +43,10 @@ export default function SummaryScreen() {
   const status = note
     ? { text: note, tone: 'Warn' as const }
     : pack
-      ? { text: `${pack.homed ? '적도의는 홈' : '적도의 홈 확인 못 함'}, ${pack.disconnected ? '장비 연결은 끊었어요' : '장비 연결이 일부 남아 있어요'}`, tone: pack.homed && pack.disconnected ? ('Ok' as const) : ('Warn' as const) }
+      ? {
+          text: `${pack.homed ? '적도의는 홈' : pack.userConfirmed ? '적도의는 직접 확인함' : '적도의 홈 확인 못 함'}${pack.trackingOff || pack.userConfirmed ? '' : ' · 추적 끄기 확인 못 함'}, ${pack.disconnected ? '장비 연결은 끊었어요' : '장비 연결이 일부 남아 있어요'}`,
+          tone: pack.safeToPowerOff ? ('Ok' as const) : ('Warn' as const),
+        }
       : null
 
   return (
@@ -54,7 +57,9 @@ export default function SummaryScreen() {
         <PrepGuide
           task="마무리"
           title="오늘 밤 촬영을 마쳤어요"
-          text="찍은 사진과 보정 프레임은 오늘 밤 폴더에 대상별로 정리했어요. 제외 폴더의 사진은 스태킹에 넣지 않으면 돼요. 장비 전원을 끄셔도 돼요."
+          text={`찍은 사진과 보정 프레임은 오늘 밤 폴더에 대상별로 정리했어요. 제외 폴더의 사진은 스태킹에 넣지 않으면 돼요. ${
+            pack?.safeToPowerOff ? '장비 전원을 끄셔도 돼요.' : '전원을 끄기 전에 적도의가 멈춰 있고 장비 연결이 끊겼는지 확인해 주세요.'
+          }`}
         />
         <PrepCenter
           readout={null}

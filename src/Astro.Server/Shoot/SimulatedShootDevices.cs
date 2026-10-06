@@ -7,7 +7,9 @@ namespace Astro.Server.Shoot;
 /// 촬영 모의 장비. 한 장 ≈ 4초(속도 1). 대상은 자오선 12분 전에서 시작해 사진마다 노출만큼 서쪽으로 간다(곧 반전).
 /// 모의 실패: "shoot.trail"(다음 사진 별 흐름), "shoot.temp"(기온이 2.5°C 내려감 → 초점 다시), "shoot.flip"(곧바로 반전 시각), "shoot.low"(대상이 30° 아래 → 끝).
 /// 가이드 별: "shoot.cloud"(서서히 약해져 잃음, 몇 번 뒤 돌아옴) · "shoot.light"(갑자기 잃음, 곧 돌아옴) · "shoot.wind"(크게 튀어 잃음) ·
-/// "shoot.dew"(가이딩은 되지만 SNR이 줄고 이슬점 가까이) · "shoot.mount"(적도의 추적 멈춤) · "shoot.guider"(가이드 카메라 끊김, 다시 연결하면 됨)
+/// "shoot.dew"(가이딩은 되지만 SNR이 줄고 이슬점 가까이) · "shoot.mount"(적도의 추적 멈춤) · "shoot.guider"(가이드 카메라 끊김, 다시 연결하면 됨).
+/// 리뷰 14절 확인용: "shoot.stopfail"(끝날 때 가이딩 정지 확인 실패 한 번), "shoot.flipfail"(반전 자체 실패),
+/// "shoot.abortfail"(노출 중 적도의가 멈추고 노출 멈춤도 실패 — 사진은 저장됨)
 /// </summary>
 public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IShootDevices
 {
@@ -19,6 +21,10 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     private string? _lostKind;
     private bool _mountStopped, _disconnected;
     // 가이딩이 이미 돌고 있던 것처럼 최근 신호를 채워 둔다
+    private long _steps;
+    /// <summary>[테스트] 받은 명령 순서 (멈춤·다시 가운데·가이딩 재개)</summary>
+    public List<string> Calls { get; } = [];
+    private bool _abortScenario;
     private readonly List<double> _snr = [.. Enumerable.Range(0, 10).Select(i => 30.0 + i % 3)], _hfd = [.. Enumerable.Repeat(2.2, 10)];
 
     public string? PhotoUrl => null;
@@ -27,6 +33,13 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     public async Task<FrameShot> ExposeAsync(int seconds, int iso, Action<int> elapsed, CancellationToken ct)
     {
         _trail = faults.Take("shoot.trail");
+        if (faults.Take("shoot.abortfail"))
+        {
+            // 찍는 동안 적도의가 멈추고, 노출 멈춤은 듣지 않아 사진이 그대로 저장된다 (속도와 관계없이 1.5초 — 지켜보기가 잡을 시간)
+            _abortScenario = true;
+            await Task.Delay(1500, ct);
+            return new FrameShot(true, null, $"D:/Astro/sim/LIGHT_{DateTime.Now:HHmmssfff}.fits", new FrameStats(2.2, 40, 1100, .3, .6));
+        }
         for (var i = 1; i <= 4; i++)
         {
             await sim.Delay(1000, ct);
@@ -44,7 +57,7 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
 
     public Task<GuideRaw> GuideRawAsync(CancellationToken ct)
     {
-        if (faults.Take("shoot.mount")) _mountStopped = true;
+        if (faults.Take("shoot.mount") || _abortScenario) _mountStopped = true;
         if (faults.Take("shoot.guider")) _disconnected = true;
         foreach (var k in new[] { "cloud", "light", "wind" })
             if (faults.Take("shoot." + k)) { _lostKind = k; _lostChecks = k == "cloud" ? 4 : 2; }
@@ -64,7 +77,8 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
         else if (_dewChecks > 0) { _dewChecks--; snr = 9 + _r.NextDouble() * 2; }
         Push(_snr, snr);
         Push(_hfd, 2.2 + _r.NextDouble() * .2);
-        return Task.FromResult(new GuideRaw(!_disconnected, guiding, !_mountStopped, _snr.ToArray(), _hfd.ToArray(), jump, _dewChecks > 0 ? 1.2 : 6));
+        _steps++;
+        return Task.FromResult(new GuideRaw(!_disconnected, guiding, !_mountStopped, _snr.ToArray(), _hfd.ToArray(), jump, _dewChecks > 0 ? 1.2 : 6, _steps));
     }
 
     private static void Push(List<double> xs, double v)
@@ -74,20 +88,30 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     }
 
     public Task<bool> SetGuideExposureAsync(int ms, CancellationToken ct) { _guideMs = ms; return Task.FromResult(true); }
-    public async Task<bool> ReselectStarAsync(CancellationToken ct) { await sim.Delay(500, ct); _lostChecks = 0; return true; }
+    public async Task<bool> ReselectStarAsync(CancellationToken ct)
+    {
+        await sim.Delay(500, ct);
+        Calls.Add("reselect");
+        if (faults.Take("shoot.reselectfail")) return false;
+        _lostChecks = 0;
+        return true;
+    }
     public async Task<bool> ReconnectGuiderAsync(CancellationToken ct) { await sim.Delay(800, ct); _disconnected = false; return true; }
-    public async Task<bool> RecenterAsync(PrepContext ctx, CancellationToken ct) { await sim.Delay(1500, ct); return true; }
-    public async Task<bool> AbortExposureAsync(CancellationToken ct) { await sim.Delay(100, ct); return true; }
+    public async Task<bool> RecenterAsync(PrepContext ctx, CancellationToken ct) { await sim.Delay(1500, ct); Calls.Add("recenter"); _lostChecks = 0; return true; }
+    public async Task<bool> AbortExposureAsync(CancellationToken ct) { await sim.Delay(100, ct); return !_abortScenario; }
     public Task<bool> DewHeaterBoostAsync(CancellationToken ct) => Task.FromResult(false);
-    public async Task<bool> ResumeGuidingAsync(CancellationToken ct) { await sim.Delay(600, ct); return !_mountStopped && !_disconnected; }
-    public async Task<bool> StopGuidingAsync(CancellationToken ct) { await sim.Delay(200, ct); return !faults.Take("stop.fail"); }
+    public async Task<bool> ResumeGuidingAsync(CancellationToken ct) { await sim.Delay(600, ct); Calls.Add("resume"); return !_mountStopped && !_disconnected; }
+    public async Task<bool> StopGuidingAsync(CancellationToken ct) { await sim.Delay(200, ct); Calls.Add("stop"); return !faults.Take("stop.fail") && !faults.Take("shoot.stopfail"); }
     public async Task<bool> DitherAsync(CancellationToken ct) { await sim.Delay(1200, ct); return true; }
 
-    public async Task<bool> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)
+    public async Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)
     {
-        for (var i = 0; i < 3; i++) { step(i); await sim.Delay(1500, ct); }
+        step(0);
+        await sim.Delay(1500, ct);
+        if (faults.Take("shoot.flipfail")) return new FlipOutcome(false, false, false);
+        for (var i = 1; i < 3; i++) { step(i); await sim.Delay(1500, ct); }
         _ha = -Math.Abs(_ha);
-        return true;
+        return new FlipOutcome(true, true, true);
     }
 
     public async Task<RefocusOutcome> RefocusAsync(Action<int, double> point, CancellationToken ct)

@@ -168,6 +168,122 @@ public class ShootAndWrapTests
         Assert.Equal(0, v.Good);
     }
 
+    // ── Codex 리뷰 14절 (CX-SHOOT-01~09) ─────────
+
+    [Fact]
+    public async Task CX01_가이딩_정지를_확인하지_못하면_다음으로_못_가고_다시_확인하면_풀린다()
+    {
+        var r = NewShoot(2);
+        r.Faults.Arm("shoot.stopfail");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.False(v.GuideStopped);
+        Assert.NotNull(r.Session.BlocksNext());
+        Assert.Null(await r.Session.RecheckStopAsync());
+        Assert.True(r.Session.View().GuideStopped);
+        Assert.Null(r.Session.BlocksNext());
+    }
+
+    [Fact]
+    public async Task CX02_반전_자체가_실패하면_더_찍지_않고_끝낸다()
+    {
+        var r = NewShoot(20);
+        r.Faults.Arm("shoot.flipfail");
+        r.Faults.Arm("shoot.flip");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal("flip", v.Ended);
+        Assert.Equal(0, v.Good + v.Excluded);
+    }
+
+    [Fact]
+    public async Task CX06_PHD2가_가이딩_중이어도_적도의가_멈추면_끝낸다()
+    {
+        // 모의 "shoot.mount"는 가이딩 상태와 별개로 추적만 꺼진다 — 분류 단위로도 확인
+        Assert.Equal(GuideLoss.MountStopped, GuideWatch.Classify(Sig(guiding: true, tracking: false)));
+        var r = NewShoot(10);
+        r.Faults.Arm("shoot.mount");
+        r.Session.Start(r.Ctx);
+        Assert.Equal("mount", (await UntilEnded(r.Session)).Ended);
+    }
+
+    [Fact]
+    public async Task CX07_가이더_없는_구성은_가이드_문제_없이_끝까지_찍는다()
+    {
+        var sim = new SimOptions { Speed = 0 };
+        var faults = new SimFaults();
+        faults.Arm("shoot.guider"); // 가이더가 없으니 영향 없어야 함
+        var session = new ShootSession(new SimulatedShootDevices(sim, faults), new PrepareMode(true), NullLogger<ShootSession>.Instance);
+        var results = new PrepResults();
+        results.Set(new FocusResult(false, 12340, 2.1, 12.4, DateTimeOffset.Now));
+        var ctx = Harness.TargetContext(results, new InMemoryPrepMemory(), Harness.Plan() with { EstimatedFrames = 4 }, hasGuider: false);
+        session.Start(ctx);
+        var v = await UntilEnded(session);
+        Assert.Equal("done", v.Ended);
+        Assert.DoesNotContain(ShootMode.Dither, session.ModeHistory);
+        Assert.DoesNotContain(ShootMode.Paused, session.ModeHistory);
+        Assert.True(v.GuideStopped);
+    }
+
+    [Fact]
+    public async Task CX05_다시_가운데는_가이딩을_멈춘_뒤에_하고_끝나면_가이딩을_다시_켠다()
+    {
+        var sim = new SimOptions { Speed = 0 };
+        var faults = new SimFaults();
+        var dev = new SimulatedShootDevices(sim, faults);
+        var session = new ShootSession(dev, new PrepareMode(true), NullLogger<ShootSession>.Instance);
+        var results = new PrepResults();
+        results.Set(new FocusResult(false, 12340, 2.1, 12.4, DateTimeOffset.Now));
+        var ctx = Harness.TargetContext(results, new InMemoryPrepMemory(), Harness.Plan() with { EstimatedFrames = 3 });
+        faults.Arm("shoot.wind");
+        faults.Arm("shoot.reselectfail"); // 별 다시 고르기 실패 → 다시 가운데
+        session.Start(ctx);
+        Assert.Equal("done", (await UntilEnded(session)).Ended);
+        var order = string.Join(",", dev.Calls);
+        Assert.Contains("reselect,stop,recenter,resume", order);
+    }
+
+    [Fact]
+    public async Task CX09_노출을_멈추지_못해_저장된_사진은_제외로_센다()
+    {
+        var r = NewShoot(10);
+        r.Faults.Arm("shoot.abortfail");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal("mount", v.Ended);
+        Assert.Equal(1, v.Excluded);
+        Assert.Equal(1, v.Tally["F"]);
+    }
+
+    [Fact]
+    public async Task CX03_홈이나_추적_끄기를_확인하지_못하면_연결을_끊기_전에_묻는다()
+    {
+        var (flow, sim, results) = WrapNight();
+        sim.Faults.Arm("wrap.tracking");
+        await flow.Wrap.Press("skip"); // 보정 프레임 건너뛰기 → 바로 장비 정리
+        var v = await flow.Wrap.Until(x => x.Has("confirmed"), "적도의 확인 질문");
+        Assert.Equal("적도의를 정리하지 못했습니다", v.Current!.Guide.Title);
+        Assert.Null(results.Get<PackResult>()); // 아직 연결 끊기·프로그램 닫기 안 함
+        await flow.Wrap.Press("retry");
+        await flow.Wrap.Until(x => x.Ready, "요약");
+        var pack = results.Get<PackResult>()!;
+        Assert.True(pack.TrackingOff && pack.SafeToPowerOff && !pack.UserConfirmed);
+    }
+
+    [Fact]
+    public async Task CX08_다크를_연속으로_못_찍으면_멈추고_고르게_한다()
+    {
+        var (flow, sim, results) = WrapNight();
+        sim.Faults.Arm("wrap.dark");
+        await flow.Wrap.Press("panel");
+        await flow.Wrap.Press("covered");
+        var v = await flow.Wrap.Until(x => x.Has("keep"), "다크 실패 질문");
+        Assert.Contains("다크", v.Current!.Guide.Title);
+        await flow.Wrap.Press("retry");
+        await flow.Wrap.RunToReady();
+        Assert.Equal(20, results.Get<DarkResult>()!.Sets.Single().Count);
+    }
+
     // ── 마무리 ─────────
 
     private static (PrepareFlow Flow, Harness.Sim Sim, PrepResults Results) WrapNight(int exposure = 180)

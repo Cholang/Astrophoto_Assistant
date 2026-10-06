@@ -80,7 +80,7 @@ public static class PrepareSetup
 public sealed record PrepareMode(bool Simulate);
 
 /// <summary>준비 묶음을 시작한다: 장비 준비는 N.I.N.A. 프로필(관측지·장비)만으로, 대상은 확정 계획·오늘 밤 정보로. 결과 기록은 그날 밤 함께</summary>
-public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService tonight, Engine.EquipmentChoices equipment, PrepareFlow flow, MountLock mount, IPrepMemory memory)
+public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService tonight, Engine.EquipmentChoices equipment, PrepareFlow flow, MountLock mount, IPrepMemory memory, Shoot.ShootSession shoot)
 {
     /// <summary>장비 준비 시작 (같은 밤이면 이어서). 할 수 없으면 이유(사용자에게 보여 줄 문장)</summary>
     public async Task<string?> StartRigAsync(CancellationToken ct)
@@ -100,6 +100,8 @@ public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService ton
     /// <summary>마무리 시작 (같은 밤이면 이어서). 결과 기록은 그날 밤 것(촬영한 노출·ISO를 다크가 읽는다)</summary>
     public async Task<string?> StartWrapAsync(CancellationToken ct)
     {
+        // 찍는 중이거나 가이딩 정지를 확인하지 못했으면 마무리(적도의를 위로)를 시작하지 않는다 (CX-SHOOT-01)
+        if (shoot.BlocksNext() is { } blocked) return blocked;
         if (await tonight.ReadProfileAsync(ct) is not { } profile) return "N.I.N.A. 프로필을 읽지 못했습니다. N.I.N.A.가 켜져 있는지 확인해 주세요.";
         var evening = Sky.TonightService.EveningOf(DateTimeOffset.Now);
         var ctx = new PrepContext(null, profile.Site, profile.Rig.PixelScale is > 0 and var px ? px : 2.0,
@@ -121,6 +123,7 @@ public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService ton
     /// <summary>대상 시작 (같은 계획이면 이어서). 할 수 없으면 이유</summary>
     public string? StartTarget()
     {
+        if (shoot.BlocksNext() is { } blocked) return blocked;
         if (planner.Confirmed is not { } plan) return "확정된 계획이 없습니다. 계획에서 \"이 대상으로 이동\"을 눌러 주세요.";
         if (planner.Night is not { } night) return "오늘 밤 정보를 읽지 못했습니다. 계획 화면을 다시 열어 주세요.";
         var ctx = new PrepContext(plan, night.Site, night.Rig.PixelScale is > 0 and var px ? px : 2.0,

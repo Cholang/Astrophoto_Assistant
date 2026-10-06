@@ -5,7 +5,7 @@ import PrepGuide from '../components/PrepGuide'
 import { FlipSteps, ShootGauges, ShootGrades } from '../components/ShootPanels'
 import { useRailExtra } from '../components/StepRail'
 import type { CurrentView, PrepAction, Tone } from '../prepare'
-import { stopShoot, watchShoot, type ShootView } from '../shoot'
+import { recheckShootStop, stopShoot, watchShoot, type ShootView } from '../shoot'
 import styles from './PrepareScreen.module.css'
 
 /**
@@ -27,6 +27,8 @@ const ENDED: Record<string, string> = {
   cloud: '별이 30분 넘게 돌아오지 않아 촬영을 멈췄어요. 하늘을 확인해 주세요. ',
   mount: '적도의가 추적을 멈췄어요. 한계에 닿았거나 전원이 끊겼는지 확인해 주세요. ',
   guider: '가이드 카메라(PHD2) 연결이 끊겨 다시 연결하지 못했어요. 연결을 확인해 주세요. ',
+  flip: '자오선 반전이 되지 않아 촬영을 멈췄어요. 적도의를 확인해 주세요. ',
+  recenter: '다시 가운데로 맞추지 못해 촬영을 멈췄어요. ',
 }
 
 /** 가이드 별을 잃어 멈췄을 때 원인별 안내 (docs/SHOOT_IMPLEMENTATION.md B) */
@@ -49,6 +51,9 @@ const FAULTS: [string, string][] = [
   ['shoot.temp', '기온 변화'],
   ['shoot.flip', '반전 시각'],
   ['shoot.low', '대상 낮아짐'],
+  ['shoot.flipfail', '반전 실패'],
+  ['shoot.stopfail', '끝날 때 가이딩 정지 확인 실패'],
+  ['shoot.abortfail', '노출 멈춤 실패'],
 ]
 
 export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void; onRetarget: () => void }) {
@@ -63,11 +68,12 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
 
   const ended = view?.mode === 'Ended'
   // 중단을 고른 뒤 끝나면 고른 곳으로
+  const stopped = view?.guideStopped ?? true
   useEffect(() => {
-    if (!ended || !then) return
+    if (!ended || !then || !stopped) return
     if (then === 'wrap') onWrap()
     else onRetarget()
-  }, [ended, then, onWrap, onRetarget])
+  }, [ended, then, stopped, onWrap, onRetarget])
 
   useRailExtra({
     stage: '촬영',
@@ -143,6 +149,11 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
     )
   } else if (view.mode === 'Paused') {
     ;[title, text] = PAUSE[view.pause ?? 'cloud'] ?? PAUSE.cloud
+  } else if (ended && !stopped) {
+    // 가이딩 정지를 확인하지 못함: 다시 확인하기 전에는 다음으로 가지 않는다 (CX-SHOOT-01)
+    title = '가이딩이 멈췄는지 확인해 주세요'
+    text = '촬영은 멈췄지만 PHD2 가이딩이 멈췄는지 확인하지 못했어요. 가이딩이 켜진 채로 적도의를 옮기면 위험해요. PHD2를 확인한 뒤 다시 확인을 눌러 주세요.'
+    actions = [{ id: 'recheck', label: '장비 상태 다시 확인', primary: true }]
   } else if (ended) {
     title = '촬영을 마쳤어요'
     text = `${ENDED[view.ended ?? ''] ?? ''}가이딩을 멈췄어요. 이제 보정 프레임(플랫·다크)을 찍고 장비를 정리해요. 아직 밤이 남았으면 다른 대상을 찍어도 돼요.`
@@ -162,8 +173,9 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
 
   const status: { text: string; tone: Tone } | null = actError ? { text: actError, tone: 'Fail' } : view.note
 
-  const act = (id: string) => {
+  const act = async (id: string) => {
     if (id === 'continue') return setAsking(false)
+    if (id === 'recheck') return setActError(await recheckShootStop())
     if (ended) return id === 'wrap' ? onWrap() : onRetarget()
     void stop(id as Then)
   }
@@ -174,7 +186,7 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
       <div className={styles.scrim} />
       <div className={styles.over}>
         <PrepGuide task="촬영" title={title} text={text} />
-        <PrepCenter readout={null} status={status} actions={actions} onAct={act} custom={custom} />
+        <PrepCenter readout={null} status={status} actions={actions} onAct={(id) => void act(id)} custom={custom} />
         <ShootGrades v={view} />
       </div>
       {/* [임시] 모의 실패: 다음 동작 하나를 일부러 (모의 장비일 때만) */}

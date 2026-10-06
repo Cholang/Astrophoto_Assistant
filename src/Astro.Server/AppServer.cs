@@ -192,6 +192,9 @@ public static class AppServer
         // "촬영 중단": 지금 사진까지 찍고 멈춘다 (그 뒤 마무리 / 다른 대상은 화면이 고름)
         shoot.MapPost("/stop", (Shoot.ShootSession session) =>
             session.Stop() is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+        // 끝났는데 가이딩 정지를 확인하지 못했을 때 "장비 상태 다시 확인"
+        shoot.MapPost("/recheck-stop", async (Shoot.ShootSession session) =>
+            await session.RecheckStopAsync() is { } problem ? Results.Conflict(new { error = problem }) : Results.NoContent());
 
         // 오늘 밤 요약: 대상별 촬영 + 보정 프레임 + 장비 정리 (그날 밤 결과 기록에서)
         night.MapGet("/summary", (Prepare.Flow.PrepareFlow flow) =>

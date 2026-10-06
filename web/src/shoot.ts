@@ -40,6 +40,8 @@ export interface ShootView {
   pause: string | null
   pausedSeconds: number
   guideExposureMs: number
+  /** 끝날 때 가이딩 정지를 확인했는가 — false면 마무리·다른 대상으로 못 감 (CX-SHOOT-01) */
+  guideStopped: boolean
 }
 
 /** 촬영을 시작하고(찍는 중이면 이어서) 상태가 바뀔 때마다 onState. 끝내려면 돌려준 함수를 부른다 */
@@ -77,6 +79,18 @@ export async function stopShoot(): Promise<string | null> {
   }
 }
 
+/** "장비 상태 다시 확인": 가이딩 정지를 다시 확인한다. 확인되면 null */
+export async function recheckShootStop(): Promise<string | null> {
+  try {
+    const r = await fetch('/api/shoot/recheck-stop', { method: 'POST' })
+    if (r.ok) return null
+    const body = (await r.json().catch(() => null)) as { error?: string } | null
+    return body?.error ?? '가이딩이 멈췄는지 확인하지 못했습니다.'
+  } catch {
+    return '내부 서버에 연결하지 못했습니다.'
+  }
+}
+
 /** 오늘 밤 요약 (마무리 끝) */
 export interface NightSummary {
   targets: { targetId: string; name: string; good: number; excluded: number; exposureSeconds: number; iso: number; folder: string | null; pausedMinutes: Record<string, number> | null }[]
@@ -84,7 +98,7 @@ export interface NightSummary {
   folder: string | null
   flat: { skipped: boolean; count: number; exposureSeconds: number } | null
   dark: { skipped: boolean; flatDarks: number; sets: { exposureSeconds: number; iso: number; count: number }[]; homed: boolean } | null
-  pack: { homed: boolean; disconnected: boolean; closed: boolean } | null
+  pack: { homed: boolean; trackingOff: boolean; disconnected: boolean; closed: boolean; userConfirmed: boolean; safeToPowerOff: boolean } | null
 }
 
 export async function nightSummary(): Promise<NightSummary | null> {

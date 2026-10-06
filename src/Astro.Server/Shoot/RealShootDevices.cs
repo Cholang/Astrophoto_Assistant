@@ -19,10 +19,19 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
 
     public async Task<FrameShot> ExposeAsync(int seconds, int iso, Action<int> elapsed, CancellationToken ct)
     {
+        var started = DateTimeOffset.Now;
         var shot = await rig.CaptureAsync(seconds, solve: false, save: true, left => elapsed(seconds - left), ct, gain: iso, imageType: "LIGHT");
         if (!shot.Ok || shot.Result is not { } res) return new FrameShot(false, shot.Problem, null, null);
         if (res.TryGetProperty("Image", out var img) && img.GetString() is { Length: > 0 } b64) live.Set("shoot", Convert.FromBase64String(b64), "image/jpeg");
-        var saved = await rig.LastSavedAsync(ct);
+        // 이번 촬영 뒤에 저장된 기록인지 확인 (CX-SHOOT-04) — 저장 기록이 늦게 갱신될 수 있어 잠깐 다시 본다.
+        // 확인 못 하면 실패: 이전 사진의 통계로 평가하거나 이전 파일을 옮기지 않는다
+        (DateTimeOffset Date, string File, double Hfr, int Stars)? saved = null;
+        for (var i = 0; i < 10; i++)
+        {
+            if (await rig.LastSavedAsync(ct) is { } s && s.Date >= started && s.File.Length > 0) { saved = s; break; }
+            await Task.Delay(1000, ct);
+        }
+        if (saved is null) return new FrameShot(false, "저장된 사진을 확인하지 못했습니다", null, null);
         var stats = await rig.LastStatsAsync(ct);
         var hfr = saved is { Hfr: > 0 and var h } && double.IsFinite(h) ? h : stats?.Hfr ?? 0;
         var stars = saved?.Stars ?? stats?.Stars ?? 0;
@@ -38,6 +47,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
     private readonly List<double> _snr = [], _hfd = [], _jump = [];
     private Task? _listen;
     private int _guideMs;
+    private long _steps;
 
     public int GuideExposureMs => _guideMs;
 
@@ -61,6 +71,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
                         if (name != "GuideStep" && name != "StarLost") continue;
                         lock (_gate)
                         {
+                            _steps++;
                             if (e.TryGetProperty("SNR", out var snr) && snr.TryGetDouble(out var s)) Push(_snr, s);
                             if (e.TryGetProperty("HFD", out var hfd) && hfd.TryGetDouble(out var h)) Push(_hfd, h);
                             var dx = e.TryGetProperty("dx", out var x) && x.TryGetDouble(out var xv) ? Math.Abs(xv) : 0;
@@ -88,13 +99,14 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         EnsureListening(ct);
         string state;
         try { state = await phd2.AppStateAsync(ct); }
-        catch (Phd2Exception) { return new GuideRaw(false, false, true, [], [], null, null); }
+        catch (Phd2Exception) { return new GuideRaw(false, false, (await rig.MountAsync(ct))?.Tracking ?? true, [], [], null, null, _steps); }
         var connected = state != "" && await rig.GuiderConnectedAsync(ct);
         var mount = await rig.MountAsync(ct);
         lock (_gate)
             return new GuideRaw(connected, state == "Guiding", mount?.Tracking ?? true, _snr.ToArray(), _hfd.ToArray(),
                 _jump.Count > 0 ? _jump.TakeLast(3).Max() : null,
-                null); // 이슬 여유: WandererBox 기온·습도 읽기는 아직 (docs/SHOOT_IMPLEMENTATION.md 확인 목록)
+                null, // 이슬 여유: WandererBox 기온·습도 읽기는 아직 (docs/SHOOT_IMPLEMENTATION.md 확인 목록)
+                _steps);
     }
 
     public async Task<bool> SetGuideExposureAsync(int ms, CancellationToken ct)
@@ -158,10 +170,15 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
 
     public async Task<bool> StopGuidingAsync(CancellationToken ct)
     {
-        await rig.StopGuidingAsync(ct);
-        for (var i = 0; i < 10; i++)
+        await rig.StopGuidingAsync(ct); // 답은 참고만 — 확인은 PHD2 상태로
+        for (var i = 0; i < 15; i++)
         {
-            if (!await GuidingAsync(ct)) return true;
+            try
+            {
+                // N.I.N.A. 가이딩 정지 뒤 PHD2는 Looping으로 남는다 (2026-10-06 실기). LostLock·Calibrating·조회 실패는 멈춤이 아님
+                if (await phd2.AppStateAsync(ct) is "Stopped" or "Looping") return true;
+            }
+            catch (Phd2Exception) { /* 조회 실패 — 다시 */ }
             await Task.Delay(1000, ct);
         }
         return false;
@@ -183,11 +200,11 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         }
     }
 
-    public async Task<bool> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)
+    public async Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)
     {
         step(0);
-        await rig.StopGuidingAsync(ct);
-        if (!await rig.FlipAsync(ct)) return false;
+        if (!await StopGuidingAsync(ct)) return new FlipOutcome(false, false, false); // 가이딩을 멈추지 못하면 반전하지 않는다
+        if (!await rig.FlipAsync(ct)) return new FlipOutcome(false, false, false);
         step(1);
         var centered = false;
         for (var i = 0; i < 5 && !centered; i++)
@@ -197,7 +214,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         }
         step(2);
         var guiding = await ResumeGuidingAsync(ct);
-        return centered && guiding;
+        return new FlipOutcome(true, centered, guiding);
     }
 
     public async Task<RefocusOutcome> RefocusAsync(Action<int, double> point, CancellationToken ct)

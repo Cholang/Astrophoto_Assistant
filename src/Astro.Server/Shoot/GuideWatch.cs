@@ -24,9 +24,9 @@ public enum GuideLoss
 
 /// <summary>
 /// 장비에서 읽은 가이딩 신호 (최근 것이 끝). Snr·Hfd는 PHD2 GuideStep, LastJumpPx는 최근 몇 걸음 중 가장 큰 오차(픽셀),
-/// DewMarginC = 기온 − 이슬점(모르면 null)
+/// DewMarginC = 기온 − 이슬점(모르면 null), Steps = 지금까지 받은 가이드 걸음 수(기준 표본에 같은 값을 두 번 넣지 않게)
 /// </summary>
-public sealed record GuideRaw(bool Connected, bool Guiding, bool MountTracking, IReadOnlyList<double> Snr, IReadOnlyList<double> Hfd, double? LastJumpPx, double? DewMarginC);
+public sealed record GuideRaw(bool Connected, bool Guiding, bool MountTracking, IReadOnlyList<double> Snr, IReadOnlyList<double> Hfd, double? LastJumpPx, double? DewMarginC, long Steps = 0);
 
 /// <summary>원인 판정에 쓰는 것: 장비 신호 + 주 사진(최근 사진의 별 수·배경 ÷ 그날 기준) + 가이딩 기준(처음 안정됐을 때의 SNR·HFD)</summary>
 public sealed record GuideSignals(GuideRaw Raw, double? MainStarsRatio, double? MainMeanRatio, double SnrBaseline, double HfdBaseline);

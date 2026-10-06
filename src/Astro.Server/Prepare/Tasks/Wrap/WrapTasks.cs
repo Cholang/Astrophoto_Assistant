@@ -30,7 +30,12 @@ public sealed record FlatExposure(bool Ok, double Seconds, double MeanPercent, b
 public sealed record FlatResult(bool Skipped, int Count, double ExposureSeconds, int Iso, double MeanPercent, DateTimeOffset At);
 public sealed record DarkSet(int ExposureSeconds, int Iso, int Count);
 public sealed record DarkResult(bool Skipped, int FlatDarks, IReadOnlyList<DarkSet> Sets, bool Homed, DateTimeOffset At);
-public sealed record PackResult(bool Homed, bool Disconnected, bool Closed, DateTimeOffset At);
+/// <summary>UserConfirmed = 홈·추적 끄기를 확인하지 못해 사용자가 직접 확인했다고 누름</summary>
+public sealed record PackResult(bool Homed, bool TrackingOff, bool Disconnected, bool Closed, bool UserConfirmed, DateTimeOffset At)
+{
+    /// <summary>전원을 꺼도 되는가: 적도의가 홈·추적 끔(또는 사용자 확인)이고 연결을 끊음</summary>
+    public bool SafeToPowerOff => (Homed && TrackingOff || UserConfirmed) && Disconnected;
+}
 
 /// <summary>마무리 ① 플랫: 망원경을 위로 → 패널 씌우기(사용자) → 노출 찾기 → 30장. 끝나면 묻지 않고 다크(뚜껑 질문)로</summary>
 public sealed class FlatTask(IWrapDevices devices) : IPrepTask
@@ -117,7 +122,15 @@ public sealed class FlatTask(IWrapDevices devices) : IPrepTask
 /// </summary>
 public sealed class DarkTask(IWrapDevices devices) : IPrepTask
 {
-    public const int DefaultCount = 20, MinCount = 5, MaxCount = 40, StepCount = 5, FlatDarks = 30;
+    public const int DefaultCount = 20, MinCount = 5, MaxCount = 40, StepCount = 5, FlatDarks = 30, MaxFails = 3;
+
+    /// <summary>연속으로 찍지 못함 (CX-SHOOT-08): 이유와 함께 다시 시도 · 지금까지만 쓰기 · 건너뛰기</summary>
+    private static async Task<string> CaptureFailedAsync(ITaskRun run, string what, int taken, CancellationToken ct)
+    {
+        run.Guide($"{what}를 찍지 못했습니다", "카메라 연결이나 저장 공간을 확인한 뒤 다시 시도해 주세요. 지금까지 찍은 것만 쓰거나 건너뛸 수도 있어요.");
+        run.Status($"{what} {MaxFails}장을 이어서 찍지 못했습니다", Tone.Fail);
+        return await run.AskAsync([new("retry", "다시 시도", true), new("keep", $"지금까지만 쓰기 ({taken}장)"), new("skip", "다크 건너뛰기")], ct);
+    }
     private Task<bool>? _home;
 
     public string Id => "dark";
@@ -179,11 +192,18 @@ public sealed class DarkTask(IWrapDevices devices) : IPrepTask
         run.Guide("플랫 다크를 찍고 있어요", "플랫과 같은 노출로 빛 없이 찍어 센서 자체의 신호를 기록해요.");
         var flatExp = flat?.ExposureSeconds ?? 1;
         var flatIso = flat?.Iso ?? FlatTask.IsoOf(ctx);
-        for (var i = 0; i < FlatDarks; i++)
+        var flatDarks = 0;
+        var fails = 0;
+        while (flatDarks < FlatDarks)
         {
-            run.Readout("count", $"{i} / {FlatDarks}장", $"플랫 다크 · 노출 {flatExp:0.###}초", Tone.Busy, live: true);
+            run.Readout("count", $"{flatDarks} / {FlatDarks}장", $"플랫 다크 · 노출 {flatExp:0.###}초", Tone.Busy, live: true);
             run.Status(Homing() + "다크 촬영 중에는 다른 짐을 정리하셔도 돼요");
-            if (!await devices.CaptureAsync("DARKFLAT", flatExp, flatIso, ct)) i--;
+            if (await devices.CaptureAsync("DARKFLAT", flatExp, flatIso, ct)) { flatDarks++; fails = 0; continue; }
+            if (++fails < MaxFails) continue;
+            fails = 0;
+            var c = await CaptureFailedAsync(run, "플랫 다크", flatDarks, ct);
+            if (c == "skip") return new Completed(new DarkResult(true, flatDarks, [], await _home, ctx.Now()), "건너뜀", "다크를 건너뛰어요", "장비를 정리해요.") { AutoNext = true };
+            if (c == "keep") break;
         }
 
         run.SubStep(2);
@@ -205,16 +225,21 @@ public sealed class DarkTask(IWrapDevices devices) : IPrepTask
                 if (ask is not null && await Task.WhenAny(capture, ask) == ask && ask.IsCompletedSuccessfully) stop = true;
                 askCts.Cancel();
                 try { if (ask is not null) await ask; } catch (OperationCanceledException) { }
-                if (await capture) taken++;
+                if (await capture) { taken++; fails = 0; continue; }
+                if (++fails < MaxFails) continue;
+                fails = 0;
+                var c = await CaptureFailedAsync(run, "다크", taken + done.Sum(d => d.Count), ct);
+                if (c == "skip") return new Completed(new DarkResult(true, flatDarks, done, await _home, ctx.Now()), "건너뜀", "다크를 건너뛰어요", "장비를 정리해요.") { AutoNext = true };
+                if (c == "keep") stop = true;
             }
             done.Add(new DarkSet(exposure, iso, taken));
             if (stop) break;
         }
         var homed = await _home;
         var n = done.Sum(d => d.Count);
-        run.Readout("count", $"{n}장", $"플랫 다크 {FlatDarks}장 · 다크 {n}장 · \"다크\" 폴더", Tone.Ok);
+        run.Readout("count", $"{n}장", $"플랫 다크 {flatDarks}장 · 다크 {n}장 · \"다크\" 폴더", Tone.Ok);
         run.Status(null);
-        return new Completed(new DarkResult(false, FlatDarks, done, homed, ctx.Now()), $"플랫 다크 {FlatDarks} · 다크 {n}장",
+        return new Completed(new DarkResult(false, flatDarks, done, homed, ctx.Now()), $"플랫 다크 {flatDarks} · 다크 {n}장",
             "다크를 찍었어요", "이제 장비를 정리해요. 뚜껑은 그대로 두셔도 돼요.") { AutoNext = true };
     }
 
@@ -238,11 +263,28 @@ public sealed class PackTask(IWrapDevices devices) : IPrepTask
         run.SubStep(0);
         run.Readout("pack", "1 / 3", "적도의 홈 · 추적 끔", Tone.Busy);
         run.Status("적도의를 정리하는 중입니다");
-        bool homed;
-        await using (await ctx.Mount.AcquireAsync(ct))
+        bool homed, trackingOff, confirmed = false, first = true;
+        while (true)
         {
-            homed = ctx.Results.Get<DarkResult>() is { Homed: true } || await devices.HomeAsync(ct);
-            await devices.TrackingOffAsync(ct);
+            await using (await ctx.Mount.AcquireAsync(ct))
+            {
+                homed = first && ctx.Results.Get<DarkResult>() is { Homed: true } || await devices.HomeAsync(ct);
+                // 홈을 확인하지 못했으면 움직임부터 멈춘다 (홈 시간 초과가 정지를 뜻하지 않음)
+                if (!homed) await devices.StopAsync(ct);
+                trackingOff = await devices.TrackingOffAsync(ct);
+            }
+            first = false;
+            if (homed && trackingOff) break;
+            // 확인 전에는 연결 끊기·프로그램 닫기·전원 안내를 하지 않는다 (CX-SHOOT-03)
+            run.Guide("적도의를 정리하지 못했습니다", homed
+                ? "추적을 끄지 못했어요. N.I.N.A.에서 추적이 꺼졌는지 확인해 주세요."
+                : "홈 위치에 도착한 것을 확인하지 못해 적도의를 멈췄어요. 적도의가 멈춰 있는지, 케이블이 걸리지 않았는지 확인해 주세요.");
+            run.Readout("pack", "1 / 3", $"{(homed ? "홈" : "홈 확인 못 함")} · {(trackingOff ? "추적 끔" : "추적 끄기 확인 못 함")}", Tone.Fail);
+            run.Status("장비 연결을 끊기 전에 적도의를 확인해야 해요", Tone.Fail);
+            if (await run.AskAsync([new("retry", "다시 시도", true), new("confirmed", "직접 확인했어요")], ct) == "confirmed") { confirmed = true; break; }
+            run.Guide("장비를 정리하고 있어요", "적도의를 홈에 두고 추적을 끈 뒤, 장비 연결을 끊고 프로그램을 닫아요. 전원은 이 다음에 끄시면 돼요.");
+            run.Readout("pack", "1 / 3", "적도의 홈 · 추적 끔", Tone.Busy);
+            run.Status("적도의를 정리하는 중입니다");
         }
         run.SubStep(1);
         run.Readout("pack", "2 / 3", "장비 연결 끊기", Tone.Busy);
@@ -252,10 +294,11 @@ public sealed class PackTask(IWrapDevices devices) : IPrepTask
         run.Readout("pack", "3 / 3", "N.I.N.A.·PHD2 닫기", Tone.Busy);
         run.Status("프로그램을 닫는 중입니다");
         var closed = await devices.CloseProgramsAsync(ct);
-        var line = $"{(homed ? "홈" : "홈 확인 못 함")} · {(disconnected ? "연결 끊음" : "연결 일부 남음")} · {(closed ? "프로그램 닫음" : "프로그램 열려 있음")}";
-        run.Readout("pack", "끝", line, homed && disconnected && closed ? Tone.Ok : Tone.Warn);
+        var result = new PackResult(homed, trackingOff, disconnected, closed, confirmed, ctx.Now());
+        var line = $"{(homed ? "홈" : confirmed ? "홈 (직접 확인)" : "홈 확인 못 함")} · {(disconnected ? "연결 끊음" : "연결 일부 남음")} · {(closed ? "프로그램 닫음" : "프로그램 열려 있음")}";
+        run.Readout("pack", "끝", line, result.SafeToPowerOff && closed ? Tone.Ok : Tone.Warn);
         run.Status(null);
-        return new Completed(new PackResult(homed, disconnected, closed, ctx.Now()), line, "장비를 정리했어요", "오늘 밤 요약을 보여 드릴게요.") { AutoNext = true };
+        return new Completed(result, line, "장비를 정리했어요", "오늘 밤 요약을 보여 드릴게요.") { AutoNext = true };
     }
 
     public Task<EndStateCheck> CheckEndStateAsync(PrepContext ctx, CancellationToken ct) => Task.FromResult(EndStateCheck.Pass);

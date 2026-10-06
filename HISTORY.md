@@ -8,7 +8,42 @@
 
 ---
 
-## 2026-10-07 · [Claude] 촬영 · 마무리 구현 (시안 v10), 가이드 별 잃음 원인별 대응, AA 종료 확인 창
+## 2026-10-07 · [Claude] Codex 리뷰 14절 반영 (CX-SHOOT-01~09 + 동시성·표본 중복)
+
+**요청**: Codex 리뷰(REVIEW_CODEX.md 14절) 검토 — 9건 모두 동의, 추가 의견(이전 실행 기다리기·가이딩 조회 하나씩·기준 표본 중복)도 반영
+
+**변경**
+- CX-SHOOT-01: `IShootDevices.StopGuidingAsync`는 PHD2 Stopped·Looping일 때만 true(LostLock·조회 실패 아님). `ShootSession` 끝 상태 `GuideStopped`, `RecheckStopAsync`(`POST /api/shoot/recheck-stop`), `BlocksNext` — `PrepareStarter.StartWrapAsync`·`StartTarget`이 막음. 화면: 확인 전 "장비 상태 다시 확인"만, 고른 곳(마무리·다른 대상)으로는 확인 뒤에 이동
+- CX-SHOOT-02: `FlipOutcome(Flipped, Centered, Guiding)`, 반전 실패면 `EndAsync("flip")`, 반전은 `MountLock` 안에서. 실제 어댑터는 가이딩 정지 확인 뒤에만 반전
+- CX-SHOOT-03: `PackTask` — 홈·추적 끄기 확인 전에는 연결 끊기·프로그램 닫기 없음, 홈 실패면 `StopAsync` 후 "다시 시도 / 직접 확인했어요". `PackResult`에 TrackingOff·UserConfirmed·SafeToPowerOff, 요약의 전원 안내는 SafeToPowerOff일 때만
+- CX-SHOOT-04: `RealShootDevices.ExposeAsync` — 촬영 시작 뒤 저장 기록만(10초까지 다시 조회), 없으면 실패
+- CX-SHOOT-05: `RecenterSafelyAsync`(가이딩 멈춤 확인 → 잠금 → 센터링 → 가이딩 재개, 실패면 촬영 끝), 바람·구름 경로가 사용
+- CX-SHOOT-06: `CheckGuideAsync` — MountStopped·Disconnected는 Guiding보다 먼저. 실제 어댑터는 PHD2를 못 읽어도 적도의 추적은 따로
+- CX-SHOOT-07: 가이더 없으면(`HasGuider=false`) 가이드 감시·디더링·정지 확인 건너뜀, 적도의 추적만
+- CX-SHOOT-08: `DarkTask` 플랫 다크·다크 연속 3번 실패 → 이유 + 다시 시도 / 지금까지만 쓰기 / 다크 건너뛰기
+- CX-SHOOT-09: 노출을 멈추지 못해 저장된 사진은 `ExcludeFrame`(제외 폴더 + F)
+- 추가: 새 촬영은 이전 실행이 끝난 뒤 시작, `PollGuideAsync` 한 번에 하나, `GuideRaw.Steps`로 새 걸음만 기준 표본에
+- 모의 실패: shoot.stopfail·flipfail·abortfail·reselectfail, wrap.home·tracking·dark (촬영 화면 모의 실패 버튼에도 일부)
+
+**확인**: 서버 테스트 99 통과·1 건너뜀(새로 CX01·02·03·05·06·07·08·09, 세 번 연속 통과). 웹·데스크톱 빌드. CX-SHOOT-04는 실제 어댑터라 단위 테스트 없음(빌드·코드 확인). 실장비 미확인
+
+**남은 것**: 실장비 확인(docs/SHOOT_IMPLEMENTATION.md), WandererBox 이슬점·열선, 노출 설계 A, 다크 "여기까지만"과 촬영 완료가 겹치는 경계 테스트
+
+---
+
+## 2026-10-06 · [Codex] 단계 재구성·촬영·마무리 리뷰 (`a20a1b5..73063b4`)
+
+**요청**: `f52a805`·`73063b4`의 HISTORY와 최신 리뷰 요청 범위를 중심으로 코드 리뷰. 결과를 `docs/codex/REVIEW_CODEX.md`에 새 절로 기록.
+
+**변경**: 리뷰 14절에 CX-SHOOT-01~09 기록(P1 6건, P2 3건). 가이딩 정지·반전·장비 정리 실패의 진행 차단 누락, 저장 파일 동일성 미확인, 가이딩 중 재센터링, 추적 중단 판정 소실, 무가이드 구성, 다크 무한 재시도, 중단 실패 후 저장 사진 누락. 동시성·Ask 취소 검토와 최적화 방향 포함. 구현 코드는 수정하지 않음.
+
+**확인**: HEAD `73063b4`, 시작 시 작업 트리 깨끗함. `AA_REAL=0` 서버 테스트 91 통과·1 건너뜀, 웹 빌드 통과. 저장소 밖 임시 프로그램에서 현재 DLL과 가짜 장비로 6개 핵심 경로 재현. 앱 실행·실장비 조회/명령·실제 사진 이동 없음. 테스트 수는 실기 검증을 뜻하지 않음.
+
+**남은 것**: 구현 담당의 리뷰 처리와 실패/경쟁 조건 회귀 테스트. 리뷰·HISTORY만 기록, 커밋·푸시하지 않음. 아래 구현 항목의 날짜(2026-10-07)는 원문 유지.
+
+---
+
+## 2026-10-07 · 73063b4 [Claude] 촬영 · 마무리 구현 (시안 v10), 가이드 별 잃음 원인별 대응, AA 종료 확인 창
 
 **요청**: 촬영·마무리 흐름 합의 → 시안 v10 → 앱 구현(코덱스 리뷰 없이 먼저, 장비 연결 전제). 사진 등급 A+·A·B·C·F, F는 제외 폴더(지우지 않음), 등급은 왼쪽 아래(지금 등급 + 등급별 누적, 기준 툴팁). 디더링·자오선 반전·초점 다시·구름은 자동. "촬영 중단" → 끝내고 마무리 / 다른 대상으로 변경 / 계속 찍기. 마무리 = 플랫(수동 패널, 30장) → 뚜껑 → 플랫 다크·다크(기본 20, 5장씩 조절, 여기까지만) → 장비 정리(N.I.N.A.·PHD2 닫기) → 오늘 밤 요약. 레일 "앱 끄기" → "AA 종료" + 진행 중이면 확인 창, 요약에서는 숨김. 가이딩 중 별 잃음은 원인(빛·구름·이슬·가이드 초점·바람/케이블·적도의 멈춤·끊김)별 대응. X-T5는 N.I.N.A. gain = ISO(사용자 확인). 답변은 항상 한국어(CLAUDE.md)
 
