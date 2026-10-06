@@ -48,5 +48,8 @@ public sealed record CurrentView(
     string TaskId, int RunId, IReadOnlyList<SubStepView> SubSteps,
     GuideView Guide, CenterView Center, LiveView? Live);
 
-/// <summary>준비 화면 전체. Ready = 사용자가 "촬영 시작"을 눌렀다, Simulated = 모의 장비(화면은 그림으로 흉내, 아니면 Live.Url의 실제 이미지)</summary>
-public sealed record PrepView(bool Started, IReadOnlyList<TaskRowView> Tasks, CurrentView? Current, bool Ready, int Version, bool Simulated = true);
+/// <summary>
+/// 묶음 화면 전체. Ready = 끝 버튼(대상: "촬영 시작", 장비 준비: "대상 고르기")을 눌렀다, Simulated = 모의 장비(화면은 그림으로 흉내, 아니면 Live.Url의 실제 이미지).
+/// Group = rig(장비 준비) | target(대상). Handoff = 다른 묶음이 장비를 쓰는 동안 멈춰 둠 — 화면이 그 묶음(예: rig)으로 넘어간다
+/// </summary>
+public sealed record PrepView(bool Started, IReadOnlyList<TaskRowView> Tasks, CurrentView? Current, bool Ready, int Version, bool Simulated = true, string Group = "all", string? Handoff = null);

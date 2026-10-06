@@ -181,19 +181,24 @@ public static class AppServer
 
     private static void MapPrepare(RouteGroupBuilder prepare)
     {
-        // 확정 계획으로 준비 시작 (같은 계획이면 하던 곳에서 그대로). 준비 시작 = ① 바로 시작
-        prepare.MapPost("/start", (Prepare.PrepareStarter starter, Prepare.Flow.PrepareRunner runner) =>
-            starter.Start() is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(runner.View()));
-        prepare.MapGet("/state", (Prepare.Flow.PrepareRunner runner) => runner.View());
+        // 묶음 두 개 (DESIGN.md "단계 재구성"): rig = 장비 준비(계획 없이, 그날 밤), target = 대상(확정 계획 하나). 같은 것이면 하던 곳에서 그대로
+        prepare.MapPost("/rig/start", async (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow, CancellationToken ct) =>
+            await starter.StartRigAsync(ct) is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(flow.Rig.View()));
+        prepare.MapPost("/target/start", (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow) =>
+            starter.StartTarget() is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(flow.Target.View()));
+        prepare.MapGet("/{group}/state", (string group, Prepare.Flow.PrepareFlow flow) =>
+            flow.Runner(group) is { } r ? Results.Ok(r.View()) : Results.NotFound());
         // 상태가 바뀔 때마다 (Server-Sent Events)
-        prepare.MapGet("/watch", (Prepare.Flow.PrepareRunner runner, CancellationToken ct) =>
-            TypedResults.ServerSentEvents(runner.WatchAsync(ct), eventType: "state"));
+        prepare.MapGet("/{group}/watch", (string group, Prepare.Flow.PrepareFlow flow, CancellationToken ct) =>
+            flow.Runner(group) is { } r ? (IResult)TypedResults.ServerSentEvents(r.WatchAsync(ct), eventType: "state") : Results.NotFound());
         // 버튼 (중앙 정보의 버튼·끝 버튼·다시 하기)
-        prepare.MapPost("/act", (PrepAct input, Prepare.Flow.PrepareRunner runner) =>
-            runner.Act(input.Action) is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
-        // 준비 중단 (진행 표시 아래) — 하던 작업을 멈추고 정지를 확인
-        prepare.MapPost("/abort", async (Prepare.Flow.PrepareRunner runner) =>
-            await runner.AbortAsync() ? Results.NoContent() : Results.Conflict(new { error = "장비가 멈췄는지 확인하지 못했습니다. 장비 상태를 확인해 주세요." }));
+        prepare.MapPost("/{group}/act", (string group, PrepAct input, Prepare.Flow.PrepareFlow flow) =>
+            flow.Runner(group) is not { } r ? Results.NotFound()
+            : r.Act(input.Action) is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+        // 중단 (진행 표시 아래) — 하던 작업을 멈추고 정지를 확인
+        prepare.MapPost("/{group}/abort", async (string group, Prepare.Flow.PrepareFlow flow) =>
+            flow.Runner(group) is not { } r ? Results.NotFound()
+            : await r.AbortAsync() ? Results.NoContent() : Results.Conflict(new { error = "장비가 멈췄는지 확인하지 못했습니다. 장비 상태를 확인해 주세요." }));
 
         // [모의] 화면·시험용: 다음 동작 하나 실패시키기(키는 SimFaults.Known), 대상이 보인다고 가정, 모의 속도
         prepare.MapPost("/sim/fail-next/{key}", (string key, Prepare.Sim.SimFaults faults) =>
@@ -202,9 +207,9 @@ public static class AppServer
             faults.Arm(key);
             return Results.NoContent();
         });
-        prepare.MapPost("/sim/ignore-altitude", (Prepare.Flow.PrepareRunner runner) =>
+        prepare.MapPost("/sim/ignore-altitude", (Prepare.Flow.PrepareFlow flow) =>
         {
-            if (runner.Context is { } c) c.IgnoreAltitude = true;
+            if (flow.Target.Context is { } c) c.IgnoreAltitude = true;
             return Results.NoContent();
         });
         // 실장비: 하늘 화면 이미지 (sharpcap 창 캡처 · guide PHD2 사진 · photo 솔빙 사진 · test 시험 사진)

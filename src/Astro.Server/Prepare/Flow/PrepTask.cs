@@ -51,7 +51,11 @@ public abstract record TaskOutcome;
 /// 끝남. Result = 결과 기록(뒤 작업이 읽음), ResultLine = 진행 표시의 결과 한 줄, GuideTitle = 끝난 뒤 제목 줄의 결과 말,
 /// GuideText = 의미·다음 할 일(숫자 없음), Extra = 끝 버튼 옆 보조 버튼 ("redo:작업id"면 러너가 그 작업을 다시 함)
 /// </summary>
-public sealed record Completed(object Result, string ResultLine, string GuideTitle, string GuideText, IReadOnlyList<PrepAction>? Extra = null) : TaskOutcome;
+public sealed record Completed(object Result, string ResultLine, string GuideTitle, string GuideText, IReadOnlyList<PrepAction>? Extra = null) : TaskOutcome
+{
+    /// <summary>묻지 않고 다음 작업으로 넘어간다 (예: 초점 확인이 괜찮으면 결과를 잠깐 보여 주고 가이딩으로)</summary>
+    public bool AutoNext { get; init; }
+}
 
 /// <summary>다른 작업부터 다시 하자고 러너에 제안 (예: 센터링이 안 되면 초점부터). 러너가 의존표대로 처리</summary>
 public sealed record RedoRequest(string TaskId) : TaskOutcome;
@@ -72,12 +76,20 @@ public interface ITaskRun
     Task<string> AskAsync(IReadOnlyList<PrepAction> actions, CancellationToken ct);
 }
 
-/// <summary>준비 한 번(확정 계획 하나)의 상황. 작업들이 같이 읽는다</summary>
+/// <summary>
+/// 준비 묶음 한 번의 상황. 작업들이 같이 읽는다. 장비 준비 묶음은 계획 없이(plan = null), 대상 묶음은 확정 계획 하나로 시작한다.
+/// Results·Memory는 그날 밤 두 묶음이 함께 쓴다 (대상을 바꿔도 장비 준비 결과 유지).
+/// </summary>
 public sealed class PrepContext(
-    PreparationPlan plan, Site site, double mainPixelScaleArcsec, bool hasGuider, bool hasFocuser,
+    PreparationPlan? plan, Site site, double mainPixelScaleArcsec, bool hasGuider, bool hasFocuser,
     PrepResults results, MountLock mount, IPrepMemory memory, Func<DateTimeOffset> clock)
 {
-    public PreparationPlan Plan { get; } = plan;
+    /// <summary>계획이 없을 때(장비 준비) 쓰는 노출 — 극축 정렬 허용 오차의 기준</summary>
+    public const int DefaultExposureSeconds = 120;
+
+    public bool HasPlan => plan is not null;
+    /// <summary>대상 계획. 대상 묶음에서만 (장비 준비 묶음의 작업은 읽지 않는다)</summary>
+    public PreparationPlan Plan => plan ?? throw new InvalidOperationException("대상 계획이 없는 준비입니다 (장비 준비 묶음)");
     public Site Site { get; } = site;
     /// <summary>주 카메라 한 픽셀이 담는 하늘 크기(″) — 가이딩 판정 기준</summary>
     public double MainPixelScaleArcsec { get; } = mainPixelScaleArcsec;
@@ -89,7 +101,9 @@ public sealed class PrepContext(
     public Func<DateTimeOffset> Now { get; } = clock;
 
     /// <summary>⑦에서 노출을 바꾸면 계획 값 대신 이 값 (계획에 반영)</summary>
-    public int ExposureSeconds { get; set; } = plan.ExposureSeconds;
+    public int ExposureSeconds { get; set; } = plan?.ExposureSeconds ?? DefaultExposureSeconds;
+    /// <summary>센터링 실패·시험 사진이 "초점 다시 맞추기"를 고르면 켠다 — 초점 확인이 비교 없이 바로 다시 맞춘다 (한 번 쓰고 끈다)</summary>
+    public bool RefocusRequested { get; set; }
     /// <summary>[모의] 낮에 흐름을 볼 때 대상이 보인다고 가정</summary>
     public bool IgnoreAltitude { get; set; }
 

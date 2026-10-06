@@ -5,6 +5,7 @@ using Astro.Server.Prepare.Sim;
 using Astro.Server.Prepare.Tasks.Calibration;
 using Astro.Server.Prepare.Tasks.Center;
 using Astro.Server.Prepare.Tasks.Focus;
+using Astro.Server.Prepare.Tasks.FocusCheck;
 using Astro.Server.Prepare.Tasks.Guiding;
 using Astro.Server.Prepare.Tasks.Polar;
 using Astro.Server.Prepare.Tasks.Slew;
@@ -26,7 +27,34 @@ public static class Harness
         new(plan ?? Plan(), new Site(37.82, 127.14), 2.41, hasGuider, hasFocuser, new PrepResults(), new MountLock(),
             memory ?? new InMemoryPrepMemory(), () => DateTimeOffset.Now);
 
+    /// <summary>장비 준비 묶음 상황 (계획 없음). results·memory는 대상과 함께 쓴다</summary>
+    public static PrepContext RigContext(PrepResults results, IPrepMemory memory, bool hasGuider = true, bool hasFocuser = true) =>
+        new(null, new Site(37.82, 127.14), 2.41, hasGuider, hasFocuser, results, new MountLock(), memory, () => DateTimeOffset.Now);
+
+    /// <summary>대상 묶음 상황 (확정 계획 하나)</summary>
+    public static PrepContext TargetContext(PrepResults results, IPrepMemory memory, PreparationPlan? plan = null, bool hasGuider = true, bool hasFocuser = true) =>
+        new(plan ?? Plan(), new Site(37.82, 127.14), 2.41, hasGuider, hasFocuser, results, new MountLock(), memory, () => DateTimeOffset.Now);
+
     public sealed record Sim(SimOptions Options, SimFaults Faults);
+
+    /// <summary>실제 작업 8개 + 모의 장비로 두 묶음 (장비 준비 · 대상). 묻지 않고 넘어가는 작업은 기다리지 않는다</summary>
+    public static (PrepareFlow Flow, Sim Sim) Flow()
+    {
+        var sim = new Sim(new SimOptions { Speed = 0 }, new SimFaults());
+        var focuser = new SimulatedFocusDevices(sim.Options, sim.Faults); // 초점·초점 확인이 같은 포커서
+        IPrepTask[] tasks =
+        [
+            new PolarTask(new SimulatedPolarDevices(sim.Options, sim.Faults)),
+            new CalibrationTask(new SimulatedCalibrationDevices(sim.Options, sim.Faults)),
+            new FocusTask(focuser),
+            new SlewTask(new SimulatedSlewDevices(sim.Options, sim.Faults)),
+            new CenterTask(new SimulatedCenterDevices(sim.Options, sim.Faults)),
+            new FocusCheckTask(focuser),
+            new GuidingTask(new SimulatedGuidingDevices(sim.Options, sim.Faults)),
+            new TestShotTask(new SimulatedTestShotDevices(sim.Options, sim.Faults)),
+        ];
+        return (new PrepareFlow(tasks, NullLogger<PrepareRunner>.Instance, simulated: true, autoNextDelay: TimeSpan.Zero), sim);
+    }
 
     public static (PrepareRunner Runner, Sim Sim) RealTasks()
     {

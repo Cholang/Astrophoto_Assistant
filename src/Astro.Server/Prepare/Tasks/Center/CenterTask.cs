@@ -11,12 +11,14 @@ public interface ICenterDevices
     Task<CenterEndState> ReadEndStateAsync(CancellationToken ct);
 }
 
-public sealed record CenterAttempt(bool Solved, double ErrorArcmin, double? CameraAngleDeg);
+/// <summary>한 회차 결과. Hfr·Stars = 그 사진의 별 크기·별 수 (못 재면 null — 초점 확인이 읽음)</summary>
+public sealed record CenterAttempt(bool Solved, double ErrorArcmin, double? CameraAngleDeg, double? Hfr = null, int? Stars = null);
 public sealed record CenterEndState(double ErrorArcmin, bool MountMoving, bool Tracking, bool CameraExposing);
 
 /// <summary>
 /// ⑤ 센터링 (DESIGN.md ⑤): 사진·솔빙·보정 반복, 목표 1′ 안, 최대 10번. 카메라 방향은 돌리지 않고 기록만.
-/// 솔빙 실패 → 노출 늘려 다시 → 하늘 전체 검색 → "초점이나 구름" 안내 + 초점 다시 맞추기(러너에 제안).
+/// 솔빙 실패 → 노출 늘려 다시 → 하늘 전체 검색 → "초점이나 구름" 안내 + 초점 다시 맞추기(초점 확인에 넘김).
+/// 맞추면 그 사진으로 구도를 보여 주고 "이 대상으로 확정 / 다른 대상"(탐색).
 /// </summary>
 public sealed class CenterTask(ICenterDevices devices) : IPrepTask
 {
@@ -56,7 +58,12 @@ public sealed class CenterTask(ICenterDevices devices) : IPrepTask
                     run.Guide("위치를 계산하지 못했습니다", "노출을 늘리고 하늘 전체에서 찾아도 별 배치를 찾지 못했습니다. 초점이 나갔거나 구름이 지나가는 중일 수 있습니다. 초점이나 구름을 확인해 주세요.");
                     run.Status("센터링에 실패했습니다", Tone.Fail);
                     var c = await run.AskAsync([new("retry", "다시 시도", true), new("refocus", "초점 다시 맞추기")], ct);
-                    if (c == "refocus") return new RedoRequest("focus");
+                    if (c == "refocus")
+                    {
+                        // 초점 확인이 비교 없이 바로 다시 맞춘다 (장비 준비의 초점은 그대로)
+                        ctx.RefocusRequested = true;
+                        return new RedoRequest("focuscheck");
+                    }
                     goto NextRound;
                 }
                 run.SubStep(2);
@@ -70,8 +77,10 @@ public sealed class CenterTask(ICenterDevices devices) : IPrepTask
                     run.Readout("center-error", $"{a.ErrorArcmin:F1}′", $"대상과 화면 가운데의 거리 · 목표 1′ 안{angleText}", Tone.Ok,
                         new Dictionary<string, double> { ["errorArcmin"] = a.ErrorArcmin, ["attempt"] = i });
                     run.Status(null);
-                    return new Completed(new CenterResult(a.ErrorArcmin, a.CameraAngleDeg, i, ctx.Now()), $"오차 {a.ErrorArcmin:F1}′{angleText}",
-                        "가운데에 맞췄어요", "목표(1′) 안으로 맞췄어요. 지금 카메라 방향을 기억해 두었다가 다음에 같은 대상을 찍을 때 알려 드립니다. 다음은 가이딩을 시작합니다.");
+                    // 탐색: 이 사진(센터링 사진)으로 구도를 보고 이 대상으로 확정하거나 다른 대상으로 (DESIGN.md "단계 재구성")
+                    return new Completed(new CenterResult(a.ErrorArcmin, a.CameraAngleDeg, i, ctx.Now(), a.Hfr, a.Stars), $"오차 {a.ErrorArcmin:F1}′{angleText}",
+                        "이 대상으로 확정할까요?", "가운데에 맞춘 사진이에요. 구도가 마음에 들면 확정하세요. 다른 대상을 고르면 계획으로 돌아가고, 장비 준비는 그대로 씁니다.",
+                        [new("flow:replan", "다른 대상")]);
                 }
                 run.Status("적도의를 조금 옮기는 중입니다");
             }

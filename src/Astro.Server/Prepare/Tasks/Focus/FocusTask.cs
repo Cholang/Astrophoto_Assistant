@@ -2,7 +2,7 @@ using Astro.Server.Prepare.Flow;
 
 namespace Astro.Server.Prepare.Tasks.Focus;
 
-/// <summary>④ 초점 장비. 실제: N.I.N.A. 포커서 이동·자동초점(설정은 AA 추천값으로 먼저), 온도 프로브</summary>
+/// <summary>장비 준비 ③ 초점 장비 (대상 묶음의 초점 확인도 같은 장비). 실제: N.I.N.A. 포커서 이동·자동초점(설정은 AA 추천값으로 먼저), 온도 프로브</summary>
 public interface IFocusDevices
 {
     /// <summary>포커서 범위(걸음). 제조사 설정의 0~최대 (DESIGN.md ④ — 한계는 제조사 기능에 맡김)</summary>
@@ -25,7 +25,7 @@ public sealed record AutofocusRun(bool Ok, bool StarsFound, int BestPosition, do
 public sealed record FocusEndState(bool Moving, int Position, bool Error);
 
 /// <summary>
-/// ④ 초점 (DESIGN.md ④): 지난번 맞은 위치(그때 기온과 함께)에서 시작 → 자동초점(AA 추천값) → 결과를 AA 말로.
+/// 장비 준비 ③ 초점 (DESIGN.md ④ — 캘리브레이션 위치의 별로, 대상과 무관): 지난번 맞은 위치(그때 기온과 함께)에서 시작 → 자동초점(AA 추천값) → 결과를 AA 말로.
 /// 별이 안 보이면 포커서 범위 안에서 넓게 훑기 → 그래도 안 되면 손 초점 안내. 포커서 에러(멈춤 감지)는 바로 멈추고 해제 안내.
 /// </summary>
 public sealed class FocusTask(IFocusDevices devices) : IPrepTask
@@ -102,7 +102,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
                 new Dictionary<string, double> { ["hfr"] = af.Hfr, ["position"] = af.BestPosition });
             run.Status(null);
             return new Completed(new FocusResult(false, af.BestPosition, af.Hfr, temp, ctx.Now()), $"좋아요 · HFR {af.Hfr:F1} · 위치 {af.BestPosition:N0}",
-                "좋아요", "곡선이 깔끔해요. 가장 좋은 위치로 포커서를 옮기고 이번 기온과 함께 기억했어요. 다음은 사진을 찍어 대상을 화면 가운데로 맞춥니다.",
+                "좋아요", "곡선이 깔끔해요. 가장 좋은 위치를 이번 기온과 함께 기억했어요. 이것으로 장비 준비가 끝났고, 오늘 밤 대상을 바꿔도 그대로 씁니다.",
                 [new("redo:focus", "다시 자동초점")]);
         }
     }
@@ -130,7 +130,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
     }
 
     private static Completed ManualDone(PrepContext ctx) =>
-        new(new FocusResult(true, null, null, null, ctx.Now()), "손으로 맞춤", "손으로 맞췄어요", "다음은 사진을 찍어 대상을 화면 가운데로 맞춥니다. 사진이 흐리면 센터링이 안 될 수 있어요.");
+        new(new FocusResult(true, null, null, null, ctx.Now()), "손으로 맞춤", "손으로 맞췄어요", "이것으로 장비 준비가 끝났습니다. 사진이 흐리면 대상 단계의 센터링이 안 될 수 있어요.");
 
     public async Task<EndStateCheck> CheckEndStateAsync(PrepContext ctx, CancellationToken ct)
     {

@@ -15,8 +15,11 @@ public sealed record SlewResult(double ArrivalErrorDeg, double AltitudeDeg, Date
 /// <summary>④ 초점. Manual = 손으로 맞춤(위치·HFR 모름)</summary>
 public sealed record FocusResult(bool Manual, int? Position, double? Hfr, double? TemperatureC, DateTimeOffset At);
 
-/// <summary>⑤ 센터링</summary>
-public sealed record CenterResult(double ErrorArcmin, double? CameraAngleDeg, int Attempts, DateTimeOffset At);
+/// <summary>⑤ 센터링. Hfr·Stars = 마지막 센터링 사진의 별 크기·별 수 (초점 확인이 읽음, 못 재면 null)</summary>
+public sealed record CenterResult(double ErrorArcmin, double? CameraAngleDeg, int Attempts, DateTimeOffset At, double? Hfr = null, int? Stars = null);
+
+/// <summary>대상 묶음의 초점 확인. Refocused면 Position·Hfr·TemperatureC가 새로 맞춘 값 (시험 사진이 초점 결과보다 이것을 먼저 읽음)</summary>
+public sealed record FocusCheckResult(bool Refocused, double? TemperatureChangeC, double? CenterHfr, int? Position, double? Hfr, double? TemperatureC, DateTimeOffset At);
 
 /// <summary>⑥ 가이딩 (RMS, ″)</summary>
 public sealed record GuidingResult(double TotalArcsec, double RaArcsec, double DecArcsec, string Grade, DateTimeOffset At);

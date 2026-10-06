@@ -2,7 +2,7 @@ using Astro.Server.Prepare.Sim;
 
 namespace Astro.Server.Prepare.Tasks.Guiding;
 
-/// <summary>⑥ 모의 장비. "guiding.star"가 걸리면 노출을 늘려도 별을 못 찾는다</summary>
+/// <summary>⑥ 모의 장비. "guiding.star"가 걸리면 노출을 늘려도 별을 못 찾는다, "guiding.calibration"이면 한 번 보정값 불일치</summary>
 public sealed class SimulatedGuidingDevices(SimOptions sim, SimFaults faults) : IGuidingDevices
 {
     private bool _guiding;
@@ -10,6 +10,7 @@ public sealed class SimulatedGuidingDevices(SimOptions sim, SimFaults faults) : 
     public async Task<GuideStart> StartAsync(double exposureSeconds, Action<string> phase, CancellationToken ct)
     {
         await sim.Delay(1000, ct);
+        if (faults.Take("guiding.calibration")) return new GuideStart(false, true, CalibrationMismatch: true, Problem: "보정값 불일치");
         if (faults.IsArmed("guiding.star"))
         {
             if (exposureSeconds >= 3) faults.Take("guiding.star"); // 늘린 노출까지 실패 → 다시 시도하면 성공

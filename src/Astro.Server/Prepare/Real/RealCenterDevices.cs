@@ -32,7 +32,10 @@ public sealed class RealCenterDevices(NinaRig rig, LiveImages live) : ICenterDev
             if (await rig.StartSlewAsync(raDeg, decDeg, ct) is null)
                 await rig.WaitSlewAsync(raDeg, decDeg, null, TimeSpan.FromMinutes(2), ct);
         }
-        return new CenterAttempt(true, _lastError, double.IsFinite(angle) ? angle : null);
+        // 이 사진의 별 크기·별 수 (초점 확인이 장비 준비 때 초점과 비교). 못 읽으면 비교하지 않는다
+        var stats = await rig.LastStatsAsync(ct);
+        return new CenterAttempt(true, _lastError, double.IsFinite(angle) ? angle : null,
+            stats is { Hfr: > 0 and var hfr } && double.IsFinite(hfr) ? hfr : null, stats?.Stars);
     }
 
     public async Task<bool> StopAsync(CancellationToken ct) =>

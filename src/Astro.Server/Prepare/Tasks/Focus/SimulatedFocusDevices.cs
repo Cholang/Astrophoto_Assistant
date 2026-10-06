@@ -3,7 +3,7 @@ using Astro.Server.Prepare.Sim;
 
 namespace Astro.Server.Prepare.Tasks.Focus;
 
-/// <summary>④ 모의 장비. "focus.stars" = 별이 안 보여 넓게 훑어도 못 찾음, "focus.stall" = 멈춤 감지</summary>
+/// <summary>③ 모의 장비. "focus.stars" = 별이 안 보여 넓게 훑어도 못 찾음, "focus.stall" = 멈춤 감지, "focus.temp" = 그 뒤로 기온이 3.3°C 내려감</summary>
 public sealed class SimulatedFocusDevices(SimOptions sim, SimFaults faults) : IFocusDevices
 {
     private int _position = 12300;
@@ -11,7 +11,7 @@ public sealed class SimulatedFocusDevices(SimOptions sim, SimFaults faults) : IF
 
     public Task<(int Min, int Max)> LimitsAsync(CancellationToken ct) => Task.FromResult((0, 56000));
     public Task<int> PositionAsync(CancellationToken ct) => Task.FromResult(_position);
-    public Task<double?> TemperatureAsync(CancellationToken ct) => Task.FromResult<double?>(12.4);
+    public Task<double?> TemperatureAsync(CancellationToken ct) => Task.FromResult<double?>(faults.IsArmed("focus.temp") ? 9.1 : 12.4);
 
     public async Task<FocuserMove> MoveAsync(int position, CancellationToken ct)
     {

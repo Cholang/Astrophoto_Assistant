@@ -11,6 +11,7 @@ import EquipmentScreen, { type EquipmentDone } from './screens/EquipmentScreen'
 import NewProfileScreen from './screens/NewProfileScreen'
 import PlanScreen from './screens/PlanScreen'
 import PrepareScreen from './screens/PrepareScreen'
+import { prepareState, type PrepGroup } from './prepare'
 import PreflightScreen from './screens/PreflightScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import SetupCheckScreen from './screens/SetupCheckScreen'
@@ -23,8 +24,8 @@ import styles from './App.module.css'
 
 // flow.mmd ① 시작 · 연결:
 // 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결
-// → 출발 전 점검 → 촬영 계획 → 촬영 준비 → (다음: 촬영)
-type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'site' | 'preflight' | 'plan' | 'prepare' | 'shoot'
+// → 출발 전 점검 → 장비 준비(rig) → 대상(계획 → target) → (다음: 촬영). DESIGN.md "단계 재구성" (2026-10-07)
+type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'site' | 'preflight' | 'rig' | 'plan' | 'target' | 'shoot'
 
 /** 화면 → 하단 단계 레일의 단계. 부팅·프로필 화면에는 레일이 없다 (DESIGN.md 2장) */
 const STAGE_OF: Partial<Record<Phase, Stage>> = {
@@ -33,25 +34,27 @@ const STAGE_OF: Partial<Record<Phase, Stage>> = {
   equipment: '연결',
   site: '연결',
   preflight: '점검',
-  plan: '계획',
-  prepare: '준비',
+  rig: '장비 준비',
+  plan: '대상',
+  target: '대상',
   shoot: '촬영',
 }
 
 /** N.I.N.A.가 켜져 있어야 하는 화면 (1단계 엔진 켜기 이후). 여기서 N.I.N.A.가 꺼지면 알린다 */
-const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare', 'shoot']
+const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'rig', 'plan', 'target', 'shoot']
 
 /** 상태 줄에 관측지를 보여 주는 화면 (장비 연결 이후). 연필은 장비 연결·관측지 고르기 화면에서는 숨긴다 */
-const SITE_SHOWN: Phase[] = ['equipment', 'site', 'preflight', 'plan', 'prepare', 'shoot']
-const SITE_EDITABLE: Phase[] = ['preflight', 'plan', 'prepare']
+const SITE_SHOWN: Phase[] = ['equipment', 'site', 'preflight', 'rig', 'plan', 'target', 'shoot']
+const SITE_EDITABLE: Phase[] = ['preflight', 'rig', 'plan', 'target']
 
 /** 상단 상태 줄의 지금 단계 이름 */
 const LABEL_OF: Partial<Record<Phase, string>> = {
   equipment: '장비 연결',
   site: '관측지',
   preflight: '출발 전 점검',
-  plan: '촬영 계획',
-  prepare: '촬영 준비',
+  rig: '장비 준비',
+  plan: '대상 · 계획',
+  target: '대상',
   shoot: '촬영',
 }
 
@@ -216,13 +219,20 @@ export default function App() {
     if (ninaLost) setDevices((d) => d?.map((x) => ({ ...x, connected: false })) ?? d)
   }, [ninaLost])
   const restartNina = useCallback(() => {
-    if (phase === 'site' || phase === 'preflight' || phase === 'plan' || phase === 'prepare') resumeTo.current = phase
+    if (phase === 'site' || phase === 'preflight' || phase === 'rig' || phase === 'plan' || phase === 'target') resumeTo.current = phase
     setNina('Unknown')
     fadeTo('engine')
   }, [phase, fadeTo])
+  const toRig = useCallback(() => fadeTo('rig'), [fadeTo])
   const toPlan = useCallback(() => fadeTo('plan'), [fadeTo])
-  const toPrepare = useCallback(() => fadeTo('prepare'), [fadeTo])
+  const toTarget = useCallback(() => fadeTo('target'), [fadeTo])
   const toShoot = useCallback(() => fadeTo('shoot'), [fadeTo])
+  // 장비 준비가 끝나면 대상으로: 대상이 장비 준비 작업을 다시 하자고 해 멈춰 둔 것이면 그 대상을 이어서, 아니면 계획부터
+  const rigDone = useCallback(async () => {
+    const target = await prepareState('target')
+    fadeTo(target?.handoff === 'rig' ? 'target' : 'plan')
+  }, [fadeTo])
+  const handoff = useCallback((to: PrepGroup) => fadeTo(to === 'rig' ? 'rig' : 'target'), [fadeTo])
   const frame = useFrame()
   const siteInfo = describeSite(site ?? null, profile, profiles ?? [])
 
@@ -308,9 +318,10 @@ export default function App() {
             onDone={() => fadeTo(siteReturn.current)}
           />
         )}
-        {phase === 'preflight' && <PreflightScreen onContinue={toPlan} />}
-        {phase === 'plan' && <PlanScreen onContinue={toPrepare} />}
-        {phase === 'prepare' && <PrepareScreen onContinue={toShoot} />}
+        {phase === 'preflight' && <PreflightScreen onContinue={toRig} />}
+        {phase === 'rig' && <PrepareScreen key="rig" group="rig" onDone={() => void rigDone()} />}
+        {phase === 'plan' && <PlanScreen onContinue={toTarget} />}
+        {phase === 'target' && <PrepareScreen key="target" group="target" onDone={toShoot} onReplan={toPlan} onHandoff={handoff} />}
         {phase === 'shoot' && (
           <main className={styles.placeholder}>
             <h1>촬영</h1>

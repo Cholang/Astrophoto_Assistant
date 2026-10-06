@@ -24,9 +24,9 @@ public sealed class SimFaults
         "polar.handover", "polar.stars", "polar.giveback",
         "calibration.star", "calibration.measure",
         "slew.move", "slew.low",
-        "focus.stars", "focus.stall",
-        "center.solve",
-        "guiding.star",
+        "focus.stars", "focus.stall", "focus.temp",
+        "center.solve", "center.hfr",
+        "guiding.star", "guiding.calibration",
         "test.expose", "test.download", "test.bright",
         "stop.fail",
     ];

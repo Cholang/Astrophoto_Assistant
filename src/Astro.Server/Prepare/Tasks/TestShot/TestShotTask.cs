@@ -74,7 +74,8 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
 
             run.SubStep(2);
             run.Live("test-photo", $"/api/prepare/live/test?f={Uri.EscapeDataString(stats.FilePath)}");
-            var focusHfr = ctx.Results.Get<FocusResult>()?.Hfr;
+            // 대상 단계에서 초점을 다시 맞췄으면 그 값과 비교한다
+            var focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr;
             var verdict = TestShotRules.Judge(stats, focusHfr, ctx.ExposureSeconds);
             var values = new Dictionary<string, double>
             {
@@ -98,7 +99,11 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
                 run.Status(problem.Status, Tone.Warn);
                 var c = await run.AskAsync([new("retry", "다시 찍기", true), new("keep", "그대로 진행"), new(problem.RedoAction, problem.RedoLabel)], ct);
                 if (c == "retry") continue;
-                if (c == problem.RedoAction) return new RedoRequest(problem.RedoAction[5..]);
+                if (c == problem.RedoAction)
+                {
+                    if (problem.RedoAction == "redo:focuscheck") ctx.RefocusRequested = true; // 비교 없이 바로 다시 맞춘다
+                    return new RedoRequest(problem.RedoAction[5..]);
+                }
             }
             run.Status(null);
             var result = new TestShotResult(ctx.ExposureSeconds, stats.Hfr, stats.Eccentricity, stats.SaturatedPercent, stats.FilePath, ctx.Now());
@@ -144,7 +149,7 @@ public static class TestShotRules
         if (s.Background > BackgroundLimit && exposureSeconds > 30)
             return new Verdict(caption, Tone.Warn, (int)Math.Round(exposureSeconds * 0.75 / 10) * 10, null);
         if (focusHfr is { } fh && s.Hfr > fh * HfrGrowthLimit)
-            return new Verdict(caption, Tone.Warn, null, new("초점이 밀렸어요", $"별 크기가 초점을 맞출 때({fh:F1})보다 커졌습니다({s.Hfr:F1}). 기온이 바뀌었을 수 있어요.", "별 크기 증가", "redo:focus", "초점 다시 맞추기"));
+            return new Verdict(caption, Tone.Warn, null, new("초점이 밀렸어요", $"별 크기가 초점을 맞출 때({fh:F1})보다 커졌습니다({s.Hfr:F1}). 기온이 바뀌었을 수 있어요.", "별 크기 증가", "redo:focuscheck", "초점 다시 맞추기"));
         if (s.Eccentricity > EccentricityLimit)
             return new Verdict(caption, Tone.Warn, null, new("별이 길쭉해요", "별이 한쪽으로 늘어졌습니다. 가이딩이나 추적이 흔들렸을 수 있어요.", "별 모양 길쭉함", "redo:guiding", "가이딩 다시 재기"));
         return new Verdict(caption, Tone.Ok, null, null);

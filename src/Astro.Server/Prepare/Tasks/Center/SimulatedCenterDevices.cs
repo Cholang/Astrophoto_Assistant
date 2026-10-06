@@ -2,7 +2,7 @@ using Astro.Server.Prepare.Sim;
 
 namespace Astro.Server.Prepare.Tasks.Center;
 
-/// <summary>⑤ 모의 장비: 12.4′ → 2.1′ → 0.4′. "center.solve"가 걸리면 노출을 늘려도·하늘 전체에서도 못 찾는다</summary>
+/// <summary>⑤ 모의 장비: 12.4′ → 2.1′ → 0.4′, 별 크기 2.3 · 별 48개. "center.solve"가 걸리면 노출을 늘려도·하늘 전체에서도 못 찾는다, "center.hfr"면 별이 커짐(2.9)</summary>
 public sealed class SimulatedCenterDevices(SimOptions sim, SimFaults faults) : ICenterDevices
 {
     private static readonly double[] Errors = [12.4, 2.1, 0.4];
@@ -21,7 +21,7 @@ public sealed class SimulatedCenterDevices(SimOptions sim, SimFaults faults) : I
         }
         _error = Errors[Math.Min(_round++, Errors.Length - 1)];
         if (_error <= CenterTask.TargetArcmin) _round = 0;
-        return new CenterAttempt(true, _error, 87);
+        return new CenterAttempt(true, _error, 87, faults.IsArmed("center.hfr") ? 2.9 : 2.3, 48);
     }
 
     public async Task<bool> StopAsync(CancellationToken ct)

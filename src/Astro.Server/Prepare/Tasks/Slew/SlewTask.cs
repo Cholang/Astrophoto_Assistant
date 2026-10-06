@@ -58,7 +58,7 @@ public sealed class SlewTask(ISlewDevices devices) : IPrepTask
                 new Dictionary<string, double> { ["arrivalDeg"] = moved.ArrivalErrorDeg, ["altitudeDeg"] = alt });
             run.Status(null);
             return new Completed(new SlewResult(moved.ArrivalErrorDeg, alt, ctx.Now()), $"고도 {alt:F0}° · 도착 오차 {moved.ArrivalErrorDeg:F1}°",
-                $"{ctx.TargetName}에 도착했습니다", "목표 근처에 도착했습니다. 정확한 중앙은 센터링에서 맞춥니다. 다음은 대상 근처의 별로 초점을 맞춥니다.");
+                $"{ctx.TargetName}에 도착했습니다", "목표 근처에 도착했습니다. 다음은 사진을 찍어 대상을 화면 가운데로 맞추고, 그 사진으로 구도를 확인합니다.");
         }
     }
 

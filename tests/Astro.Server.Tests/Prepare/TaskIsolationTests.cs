@@ -135,7 +135,9 @@ public class TaskIsolationTests
         var outcome = await new CenterTask(new SimulatedCenterDevices(Fast, faults)).RunAsync(run, CancellationToken.None).WaitAsync(Harness.Timeout);
         Assert.Contains(run.Statuses, s => s.Contains("4초"));
         Assert.Contains(run.Statuses, s => s.Contains("하늘 전체"));
-        Assert.Equal("focus", Assert.IsType<RedoRequest>(outcome).TaskId);
+        // 초점은 대상 단계의 초점 확인이 비교 없이 바로 다시 맞춘다
+        Assert.Equal("focuscheck", Assert.IsType<RedoRequest>(outcome).TaskId);
+        Assert.True(run.Context.RefocusRequested);
     }
 
     [Fact]

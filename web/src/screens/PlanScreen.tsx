@@ -2,6 +2,7 @@ import { ArrowRight } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Button from '../components/Button'
 import NightChart from '../components/NightChart'
+import { useRailExtra } from '../components/StepRail'
 import { PRODUCT } from '../product'
 import { sendChat, type Message, type Plan, type PlanState } from '../plan'
 import styles from './PlanScreen.module.css'
@@ -44,7 +45,18 @@ export default function PlanScreen({ onContinue }: { onContinue: () => void }) {
   return <PlanBody initial={state} onContinue={onContinue} />
 }
 
+/** 대상 단계의 작업 (진행 표시). 계획 화면에서는 계획이 지금 작업이고 나머지는 대상 묶음(서버)이 이어서 한다 */
+const TARGET_ITEMS = [
+  ['plan', '계획'],
+  ['slew', '이동'],
+  ['center', '센터링'],
+  ['focuscheck', '초점 확인'],
+  ['guiding', '가이딩'],
+  ['test', '시험 사진'],
+] as const
+
 function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () => void }) {
+  useRailExtra({ stage: '대상', items: TARGET_ITEMS.map(([id, label], i) => ({ id, label, state: i === 0 ? 'now' : 'todo' })) })
   const [messages, setMessages] = useState<Message[]>(initial.messages)
   const [plan, setPlan] = useState<Plan>(initial.plan)
   const [chart, setChart] = useState(initial.chart)
@@ -118,7 +130,7 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
     [busy],
   )
 
-  // "이 계획으로 준비 시작": 서버가 계획을 실행 값으로 확정한다. 실행할 수 없는 계획이면(관측 가능한 시간 없음 등) 이유를 오류 줄에
+  // "이 대상으로 이동": 서버가 계획을 실행 값으로 확정하고 대상 묶음(이동부터)으로 넘어간다. 실행할 수 없는 계획이면(관측 가능한 시간 없음 등) 이유를 오류 줄에
   const [starting, setStarting] = useState(false)
   const start = async () => {
     if (starting) return
@@ -223,7 +235,7 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
               <small>{summarySub(plan)}</small>
             </div>
             <Button variant="primary" onClick={() => void start()} disabled={!plan.complete || busy || starting} tabIndex={plan.complete ? 0 : -1}>
-              이 계획으로 준비 시작
+              이 대상으로 이동
             </Button>
           </div>
         </div>

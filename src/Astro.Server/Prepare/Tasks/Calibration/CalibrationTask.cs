@@ -55,7 +55,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
             if (choice == "reuse")
             {
                 var reused = last with { Reused = true, At = ctx.Now() };
-                return new Completed(reused, "이번 밤 보정값 재사용", "보정값을 다시 씁니다", "같은 밤 보정값을 그대로 씁니다. 다음은 대상으로 이동합니다.");
+                return new Completed(reused, "이번 밤 보정값 재사용", "보정값을 다시 씁니다", "같은 밤 보정값을 그대로 씁니다. 다음은 이 근처 별로 초점을 맞춥니다.");
             }
         }
 
@@ -72,7 +72,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
                     new Dictionary<string, double> { ["orthoDeg"] = data.OrthogonalityErrorDeg, ["raRate"] = data.RaRate, ["decRate"] = data.DecRate });
                 if (tone == Tone.Ok)
                     return new Completed(result, $"{grade} · 직교 오차 {data.OrthogonalityErrorDeg:F1}°", grade,
-                        "가이딩 보정값을 만들었습니다. 다음은 대상으로 이동합니다.", [new("redo:calibration", "다시 하기")]);
+                        "가이딩 보정값을 만들었습니다. 대상을 바꿔도 이 보정값을 그대로 씁니다. 다음은 이 근처 별로 초점을 맞춥니다.", [new("redo:calibration", "다시 하기")]);
                 run.Guide("다시 하는 게 좋아요", "보정값이 정확하지 않을 수 있습니다.");
                 run.Status(reason, Tone.Warn);
                 var c = await run.AskAsync([new("redo", "다시 하기", true), new("accept", "그래도 진행")], ct);

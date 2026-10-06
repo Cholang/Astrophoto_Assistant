@@ -1,5 +1,6 @@
 using Astro.Server.Prepare.Flow;
 using Astro.Server.Prepare.Tasks.Calibration;
+using Astro.Server.Prepare.Tasks.FocusCheck;
 using Astro.Server.Prepare.Tasks.Guiding;
 using Astro.Server.Prepare.Tasks.Polar;
 using Astro.Server.Prepare.Tasks.TestShot;
@@ -47,8 +48,21 @@ public class RulesAndContractTests
         var ok = new ShotStats(2.3, .3, .2, .4, .6, "a");
         Assert.Equal(Tone.Ok, TestShotRules.Judge(ok, 2.1, 120).Tone);
         Assert.Equal(90, TestShotRules.Judge(ok with { Background = .5 }, 2.1, 120).SuggestExposure);
-        Assert.Equal("redo:focus", TestShotRules.Judge(ok with { Hfr = 3.0 }, 2.1, 120).Problem!.RedoAction);
+        Assert.Equal("redo:focuscheck", TestShotRules.Judge(ok with { Hfr = 3.0 }, 2.1, 120).Problem!.RedoAction);
         Assert.Equal("redo:guiding", TestShotRules.Judge(ok with { Eccentricity = .8 }, 2.1, 120).Problem!.RedoAction);
+    }
+
+    [Fact]
+    public void 초점_확인_근거_두_가지()
+    {
+        // 기온 변화 2°C 이상, 또는 센터링 사진 별 크기가 초점 때보다 30% 이상 (별이 충분할 때만)
+        Assert.False(new FocusCheckTask.Evidence(12, 0.5, 2.3, 2.1, 48).TemperatureBad);
+        Assert.True(new FocusCheckTask.Evidence(9, -3.3, 2.3, 2.1, 48).TemperatureBad);
+        Assert.False(new FocusCheckTask.Evidence(12, 0.5, 2.3, 2.1, 48).HfrBad);
+        Assert.True(new FocusCheckTask.Evidence(12, 0.5, 2.9, 2.1, 48).HfrBad);
+        Assert.Equal(38, new FocusCheckTask.Evidence(12, 0.5, 2.9, 2.1, 48).GrowthPercent);
+        Assert.False(new FocusCheckTask.Evidence(12, 0.5, 2.9, 2.1, 5).HfrBad); // 별이 적으면 비교하지 않음
+        Assert.False(new FocusCheckTask.Evidence(null, null, null, 2.1, null).TemperatureBad);
     }
 
     /// <summary>결과 기록의 모양을 고정한다. 이 시험이 깨지면 그 기록을 읽는 모든 작업을 같이 확인하고 리뷰할 것</summary>
@@ -57,7 +71,8 @@ public class RulesAndContractTests
     [InlineData(typeof(CalibrationResult), "Reused:Boolean OrthogonalityErrorDeg:Nullable`1 Position:String Evening:DateOnly At:DateTimeOffset")]
     [InlineData(typeof(SlewResult), "ArrivalErrorDeg:Double AltitudeDeg:Double At:DateTimeOffset")]
     [InlineData(typeof(FocusResult), "Manual:Boolean Position:Nullable`1 Hfr:Nullable`1 TemperatureC:Nullable`1 At:DateTimeOffset")]
-    [InlineData(typeof(CenterResult), "ErrorArcmin:Double CameraAngleDeg:Nullable`1 Attempts:Int32 At:DateTimeOffset")]
+    [InlineData(typeof(CenterResult), "ErrorArcmin:Double CameraAngleDeg:Nullable`1 Attempts:Int32 At:DateTimeOffset Hfr:Nullable`1 Stars:Nullable`1")]
+    [InlineData(typeof(FocusCheckResult), "Refocused:Boolean TemperatureChangeC:Nullable`1 CenterHfr:Nullable`1 Position:Nullable`1 Hfr:Nullable`1 TemperatureC:Nullable`1 At:DateTimeOffset")]
     [InlineData(typeof(GuidingResult), "TotalArcsec:Double RaArcsec:Double DecArcsec:Double Grade:String At:DateTimeOffset")]
     [InlineData(typeof(TestShotResult), "ExposureSeconds:Int32 Hfr:Nullable`1 Eccentricity:Nullable`1 SaturatedPercent:Nullable`1 FilePath:String At:DateTimeOffset")]
     public void 결과_기록의_모양(Type type, string shape)

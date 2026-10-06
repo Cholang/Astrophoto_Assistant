@@ -3,14 +3,15 @@ import LiveView from '../components/LiveView'
 import PrepCenter from '../components/PrepCenter'
 import PrepGuide from '../components/PrepGuide'
 import { useRailExtra, type RailItem } from '../components/StepRail'
-import { prepareAct, watchPrepare, type PrepTaskStatus, type PrepView } from '../prepare'
+import { prepareAbort, prepareAct, watchPrepare, type PrepGroup, type PrepTaskStatus, type PrepView } from '../prepare'
 import styles from './PrepareScreen.module.css'
 
 /**
- * 촬영 준비 (DESIGN.md 3장 "촬영 준비", 시안 mockups/aa-prepare-arcs-v8.html).
+ * 장비 준비 · 대상 묶음 화면 (DESIGN.md "단계 재구성", 시안 mockups/aa-prepare-arcs-v9.html). group으로 묶음을 고른다.
  * 화면 영역: 하늘 화면(배경 전체, LiveView) · 안내(왼쪽 위, PrepGuide) · 중앙 정보(가운데 아래, PrepCenter) · 진행 표시(오른쪽, StepRail).
- * 진행은 서버(Prepare/Flow/PrepareRunner)가 하고, 이 화면은 상태를 받아 그리고 버튼만 전달한다.
- * 사용자가 "촬영 시작"을 누르면(ready) 촬영 단계로.
+ * 진행은 서버(Prepare/Flow/PrepareRunner 두 개)가 하고, 이 화면은 상태를 받아 그리고 버튼만 전달한다.
+ * 끝 버튼(장비 준비: "대상 고르기", 대상: "촬영 시작")을 누르면(ready) onDone. 센터링 뒤 "다른 대상"이면 onReplan,
+ * 대상이 장비 준비 작업을 다시 하자고 해 멈춰 두면(handoff) onHandoff.
  */
 
 const RAIL_STATE: Record<PrepTaskStatus, RailItem['state']> = {
@@ -28,13 +29,27 @@ const FAULTS: Record<string, [string, string][]> = {
   polar: [['polar.handover', '넘겨받기'], ['polar.stars', '별 찾기'], ['polar.giveback', '돌려주기']],
   calibration: [['calibration.star', '위치 A 별 없음'], ['calibration.measure', '측정']],
   slew: [['slew.low', '대상 낮음'], ['slew.move', '이동']],
-  focus: [['focus.stars', '별 없음'], ['focus.stall', '포커서 멈춤']],
-  center: [['center.solve', '솔빙']],
-  guiding: [['guiding.star', '가이드 별']],
+  focus: [['focus.stars', '별 없음'], ['focus.stall', '포커서 멈춤'], ['focus.temp', '기온 3.3°C 내려감 (다음 초점 확인)']],
+  center: [['center.solve', '솔빙'], ['center.hfr', '센터링 사진 별 커짐 (다음 초점 확인)']],
+  focuscheck: [['focus.stars', '다시 맞출 때 별 없음']],
+  guiding: [['guiding.star', '가이드 별'], ['guiding.calibration', '보정값 불일치']],
   test: [['test.expose', '노출'], ['test.download', '내려받기'], ['test.bright', '배경 밝음']],
 }
 
-export default function PrepareScreen({ onContinue }: { onContinue: () => void }) {
+/** 대상 묶음의 진행 표시 맨 위 작업: 계획 (계획 화면에서 끝내고 온다) */
+const PLAN_ITEM: RailItem = { id: 'plan', label: '계획', state: 'done' }
+
+export default function PrepareScreen({
+  group,
+  onDone,
+  onReplan,
+  onHandoff,
+}: {
+  group: PrepGroup
+  onDone: () => void
+  onReplan?: () => void
+  onHandoff?: (to: PrepGroup) => void
+}) {
   const [view, setView] = useState<PrepView | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [actError, setActError] = useState<string | null>(null)
@@ -44,7 +59,7 @@ export default function PrepareScreen({ onContinue }: { onContinue: () => void }
   const [grid, setGrid] = useState(false)
   const [faultsOpen, setFaultsOpen] = useState(false)
 
-  useEffect(() => watchPrepare(setView, setProblem), [])
+  useEffect(() => watchPrepare(group, setView, setProblem), [group])
 
   const cur = view?.current ?? null
   const liveKind = cur?.live?.kind ?? 'none'
@@ -57,41 +72,47 @@ export default function PrepareScreen({ onContinue }: { onContinue: () => void }
 
   const statusProblem = cur?.center.status?.tone === 'Fail'
 
-  // 진행 표시(오른쪽)에 준비의 7작업과 "준비 중단"을 넘긴다. 작업만 — 세부 과정은 넣지 않는다 (2026-10-06 사용자 결정)
-  useRailExtra(
+  // 진행 표시(오른쪽)에 묶음의 작업과 중단 버튼을 넘긴다. 작업만 — 세부 과정은 넣지 않는다 (2026-10-06 사용자 결정)
+  const items: RailItem[] | undefined =
     view && view.tasks.length > 0
-      ? {
-          sky: true,
-          items: view.tasks.map((t) => {
-            const now = t.id === cur?.taskId
-            return {
-              id: t.id,
-              label: t.title,
-              state: now && statusProblem ? 'problem' : RAIL_STATE[t.status],
-            }
-          }),
-          action: { label: '준비 중단', onClick: () => void fetch('/api/prepare/abort', { method: 'POST' }) },
-        }
-      : { sky: true },
-  )
+      ? view.tasks.map((t) => ({
+          id: t.id,
+          label: t.title,
+          state: t.id === cur?.taskId && statusProblem ? 'problem' : RAIL_STATE[t.status],
+        }))
+      : undefined
+  useRailExtra({
+    stage: group === 'rig' ? '장비 준비' : '대상',
+    sky: true,
+    items: group === 'target' ? [PLAN_ITEM, ...(items ?? [])] : items,
+    action: { label: group === 'rig' ? '준비 중단' : '대상 중단', onClick: () => prepareAbort(group) },
+  })
 
   useEffect(() => {
-    if (view?.ready) onContinue()
-  }, [view?.ready, onContinue])
+    if (view?.ready) onDone()
+  }, [view?.ready, onDone])
+
+  const handoff = view?.handoff ?? null
+  useEffect(() => {
+    if (handoff) onHandoff?.(handoff)
+  }, [handoff, onHandoff])
 
   const act = async (action: string) => {
     if (sending) return
     setSending(true)
     setActError(null)
-    setActError(await prepareAct(action))
+    const err = await prepareAct(group, action)
+    setActError(err)
     setSending(false)
+    // 다른 단계로 가는 버튼 (센터링 뒤 "다른 대상" → 계획)
+    if (!err && action === 'flow:replan') onReplan?.()
   }
 
   if (problem)
     return (
       <main className={styles.stage}>
         <LiveView current={null} />
-        <PrepGuide task="촬영 준비" title="시작하지 못했습니다" text={problem} />
+        <PrepGuide task={group === 'rig' ? '장비 준비' : '대상'} title="시작하지 못했습니다" text={problem} />
       </main>
     )
 

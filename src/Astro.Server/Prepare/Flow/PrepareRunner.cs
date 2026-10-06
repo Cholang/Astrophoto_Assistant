@@ -3,14 +3,31 @@ using System.Runtime.CompilerServices;
 namespace Astro.Server.Prepare.Flow;
 
 /// <summary>
-/// 촬영 준비 진행자 (docs/PREPARE_IMPLEMENTATION.md 2.3·2.4). 작업 내용은 모르고 다음만 맡는다:
-/// 순서와 끝 버튼, 다시 하기 의존표, 끝 상태 약속 확인, 멈춤 확인(IMPL-01), 실행 번호로 늦은 갱신 차단·오래된 값 표시(IMPL-04),
-/// 다시 하기 순서(중단 → 정지 확인 → 이전 결과 차단 → 무효화 → 재실행, IMPL-05). 상태는 서버가 갖고 화면은 그리기만 한다.
+/// 묶음 하나의 설정: 이름(rig · target), 다시 하면 "다시 확인 필요"가 되는 뒤 작업(DESIGN.md "이전 단계로 돌아가기"), 마지막 작업 뒤의 끝 버튼.
+/// 끝 버튼이 "flow:"로 시작하면 화면이 다음 단계로 넘어간다 (장비 준비 끝 → 대상 고르기).
 /// </summary>
-public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareRunner> log)
+public sealed record RunnerSetup(string Group, IReadOnlyDictionary<string, string[]> Dependents, PrepAction Finish)
 {
-    /// <summary>다시 하면 "다시 확인 필요"가 되는 뒤 작업 (DESIGN.md "이전 단계로 돌아가기")</summary>
-    public static readonly IReadOnlyDictionary<string, string[]> Dependents = new Dictionary<string, string[]>
+    /// <summary>장비 준비 묶음: 극축 정렬 · 캘리브레이션 · 초점 (계획 없이, 그날 밤 유지)</summary>
+    public static readonly RunnerSetup Rig = new("rig", new Dictionary<string, string[]>
+    {
+        ["polar"] = ["calibration", "focus"],
+        ["calibration"] = [],
+        ["focus"] = [],
+    }, new PrepAction("flow:target", "대상 고르기", true));
+
+    /// <summary>대상 묶음: 이동 · 센터링 · 초점 확인 · 가이딩 · 시험 사진 (확정 계획 하나)</summary>
+    public static readonly RunnerSetup Target = new("target", new Dictionary<string, string[]>
+    {
+        ["slew"] = ["center", "focuscheck", "guiding", "test"],
+        ["center"] = ["focuscheck", "guiding", "test"],
+        ["focuscheck"] = ["test"],
+        ["guiding"] = ["test"],
+        ["test"] = [],
+    }, new PrepAction("start", "촬영 시작", true));
+
+    /// <summary>한 묶음에 일곱 작업 (재구성 전 순서 — 러너 시험용)</summary>
+    public static readonly RunnerSetup Single = new("all", new Dictionary<string, string[]>
     {
         ["polar"] = ["calibration", "slew", "focus", "center", "guiding", "test"],
         ["calibration"] = ["slew", "center", "guiding", "test"],
@@ -19,7 +36,18 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         ["center"] = ["guiding", "test"],
         ["guiding"] = ["test"],
         ["test"] = [],
-    };
+    }, new PrepAction("start", "촬영 시작", true));
+}
+
+/// <summary>
+/// 촬영 준비 진행자 (docs/PREPARE_IMPLEMENTATION.md 2.3·2.4). 묶음 하나(장비 준비 또는 대상)를 맡고, 작업 내용은 모르고 다음만 맡는다:
+/// 순서와 끝 버튼, 다시 하기 의존표, 끝 상태 약속 확인, 멈춤 확인(IMPL-01), 실행 번호로 늦은 갱신 차단·오래된 값 표시(IMPL-04),
+/// 다시 하기 순서(중단 → 정지 확인 → 이전 결과 차단 → 무효화 → 재실행, IMPL-05). 상태는 서버가 갖고 화면은 그리기만 한다.
+/// 묶음 사이의 일(다른 묶음 작업 다시 하기, 다른 묶음이 장비를 쓰기 전 멈추기)은 PrepareFlow가 BeforeRun·ForeignRedo·SuspendAsync로 맡는다.
+/// </summary>
+public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareRunner> log, RunnerSetup? setup = null)
+{
+    private readonly RunnerSetup _setup = setup ?? RunnerSetup.Single;
 
     private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(15);
@@ -36,6 +64,10 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
     private CancellationTokenSource? _runCts;
     private Task _runTask = Task.CompletedTask;
     private bool _ready;
+    private string? _key;
+    /// <summary>다른 묶음이 장비를 쓰는 동안 멈춰 둠 (Handoff = 화면이 갈 묶음). 같은 열쇠로 Start하면 이어서 한다</summary>
+    private bool _suspended;
+    private string? _handoff;
     /// <summary>정지를 확인하지 못한 작업과, 확인되면 이어서 할 일</summary>
     private (IPrepTask Task, Func<Task> Then)? _stopUnconfirmed;
     private Timer? _heartbeat;
@@ -60,6 +92,22 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
     /// <summary>모의 장비로 도는가 (화면에 알림)</summary>
     public bool Simulated { get; init; } = true;
 
+    public string Group => _setup.Group;
+    public IReadOnlyList<IPrepTask> Tasks => _tasks;
+
+    /// <summary>작업 하나를 시작하기 직전 (PrepareFlow: 다른 묶음이 장비를 쓰고 있으면 먼저 멈춘다). false면 시작하지 않는다</summary>
+    public Func<string, Task<bool>>? BeforeRun { get; set; }
+    /// <summary>이 묶음에 없는 작업을 다시 하자는 요청 (예: 가이딩 → 캘리브레이션). PrepareFlow가 다른 묶음에 넘긴다</summary>
+    public Func<string, Task>? ForeignRedo { get; set; }
+    /// <summary>묻지 않고 넘어가는 작업(AutoNext)의 결과를 보여 주는 시간</summary>
+    public TimeSpan AutoNextDelay { get; init; } = TimeSpan.FromSeconds(1.8);
+
+    /// <summary>시작했고 모든 작업이 끝났거나 건너뜀</summary>
+    public bool AllDone
+    {
+        get { lock (_gate) return _ctx is not null && _rows.Values.All(r => r.Status is PrepTaskStatus.Done or PrepTaskStatus.Skipped); }
+    }
+
     // ── 상태 읽기 ─────────
 
     public PrepView View()
@@ -78,7 +126,7 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 c.Finished || i < c.SubIndex ? PrepTaskStatus.Done : i == c.SubIndex ? PrepTaskStatus.Running : PrepTaskStatus.Pending)).ToList();
             cur = new CurrentView(c.Task.Id, c.RunId, subs, c.Guide, new CenterView(c.Readout, c.Status, c.Actions), c.Live);
         }
-        return new PrepView(_ctx is not null, rows, cur, _ready, _version, Simulated);
+        return new PrepView(_ctx is not null, rows, cur, _ready, _version, Simulated, _setup.Group, _suspended ? _handoff : null);
     }
 
     /// <summary>상태가 바뀔 때마다 하나씩 (Server-Sent Events)</summary>
@@ -121,32 +169,54 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
 
     // ── 시작 ─────────
 
-    /// <summary>확정 계획 하나로 준비를 시작한다. 같은 계획이면 하던 곳에서 그대로(화면 재접속). 준비 시작 = ① 바로 시작</summary>
-    public void Start(PrepContext ctx)
+    /// <summary>확정 계획 하나로 시작 (열쇠 = 확정 시각)</summary>
+    public void Start(PrepContext ctx) => Start(ctx, ctx.Plan.ConfirmedAt.ToString("O"));
+
+    /// <summary>
+    /// 묶음을 시작한다. 같은 열쇠(같은 계획·같은 밤)면 하던 곳에서 그대로(화면 재접속) — 멈춰 둔 상태면 다시 확인할 첫 작업부터 이어서.
+    /// 다른 열쇠면 하던 작업과 계속 도는 장비(가이딩)를 멈추고 확인한 뒤 처음부터.
+    /// </summary>
+    public void Start(PrepContext ctx, string key)
     {
+        bool same;
         lock (_gate)
         {
-            if (_ctx is not null && _ctx.Plan.ConfirmedAt == ctx.Plan.ConfirmedAt) return;
+            same = _ctx is not null && _key == key;
+            if (same)
+            {
+                if (!_suspended) return;
+                _suspended = false;
+                _handoff = null;
+                Changed();
+            }
         }
-        _ = StartFreshAsync(ctx);
+        if (same) RunNext();
+        else _ = StartFreshAsync(ctx, key);
     }
 
-    private async Task StartFreshAsync(PrepContext ctx)
+    private async Task StartFreshAsync(PrepContext ctx, string key)
     {
-        // 새 계획: 하던 작업이 있으면 멈추고 정지를 확인한 뒤 시작
-        if (!await StopCurrentAsync(() => StartFreshAsync(ctx))) return;
+        // 새 계획: 하던 작업과 끝난 뒤에도 도는 작업(가이딩)을 멈추고 정지를 확인한 뒤 시작
+        if (!await StopCurrentAsync(() => StartFreshAsync(ctx, key))) return;
+        if (!await StopLingeringAsync(_tasks.Select(t => t.Id).ToList(), () => StartFreshAsync(ctx, key))) return;
         lock (_gate)
         {
             _ctx = ctx;
+            _key = key;
             _ready = false;
+            _suspended = false;
+            _handoff = null;
             _cur = null;
             _rows.Clear();
+            // 결과 기록은 두 묶음이 함께 쓴다: 이 묶음의 지난 결과만 지운다
+            foreach (var t in _tasks)
+                if (ResultType(t.Id) is { } type) ctx.Results.Remove(type);
             foreach (var t in _tasks)
                 _rows[t.Id] = (t.AppliesTo(ctx) ? PrepTaskStatus.Pending : PrepTaskStatus.Skipped, null);
             _heartbeat ??= new Timer(_ => Heartbeat(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
             Changed();
         }
-        log.LogInformation("준비 시작: {Target}", ctx.Plan.TargetName);
+        log.LogInformation("준비 시작 ({Group}): {Target}", _setup.Group, ctx.HasPlan ? ctx.Plan.TargetName : "계획 없음");
         RunNext();
     }
 
@@ -158,7 +228,15 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         {
             next = _tasks.FirstOrDefault(t => _rows[t.Id].Status is PrepTaskStatus.Pending or PrepTaskStatus.NeedsRecheck);
         }
-        if (next is not null) RunTask(next);
+        if (next is not null) { RunTask(next); return; }
+        // 다시 할 작업이 없음 (예: 멈춰 뒀다가 이어서 했는데 영향받은 작업이 없었음) → 끝 버튼
+        lock (_gate)
+        {
+            if (_cur is not { } c) return;
+            c.Status = null;
+            c.Actions = [_setup.Finish];
+            Changed();
+        }
     }
 
     private void RunTask(IPrepTask task)
@@ -180,6 +258,18 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         {
             try
             {
+                if (BeforeRun is { } before && !await before(task.Id))
+                {
+                    lock (_gate)
+                    {
+                        if (_cur != cur) return;
+                        _rows[task.Id] = (PrepTaskStatus.Failed, null);
+                        cur.Status = new StatusLine("다른 단계에서 쓰던 장비를 멈추지 못했습니다. 장비 상태를 확인한 뒤 다시 시도해 주세요.", Tone.Fail);
+                        cur.Actions = [new("retry", "다시 시도", true)];
+                        Changed();
+                    }
+                    return;
+                }
                 var outcome = await task.RunAsync(handle, ct);
                 await OnOutcomeAsync(cur, outcome);
             }
@@ -247,10 +337,28 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
             cur.Status = null;
             _rows[cur.Task.Id] = (PrepTaskStatus.Done, done.ResultLine);
             var next = _tasks.FirstOrDefault(t => _rows[t.Id].Status is PrepTaskStatus.Pending or PrepTaskStatus.NeedsRecheck);
-            var primary = next is null ? new PrepAction("start", "촬영 시작", true) : new PrepAction("next", next.StartLabel, true);
+            if (done.AutoNext && next is not null)
+            {
+                // 묻지 않고 넘어감: 결과를 잠깐 보여 준 뒤 다음 작업 (그 사이 중단·다시 하기가 오면 넘어가지 않는다)
+                cur.Actions = [];
+                Changed();
+                _ = AutoNextAsync(cur);
+                return;
+            }
+            var primary = next is null ? _setup.Finish : new PrepAction("next", next.StartLabel, true);
             cur.Actions = [primary, .. done.Extra ?? []];
             Changed();
         }
+    }
+
+    private async Task AutoNextAsync(Current cur)
+    {
+        await Task.Delay(AutoNextDelay);
+        lock (_gate)
+        {
+            if (_cur != cur || !cur.Finished || cur.Actions.Count > 0 || _suspended) return;
+        }
+        RunNext();
     }
 
     private Completed? _pendingFinish;
@@ -276,13 +384,18 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 return null;
             }
         }
+        if (actionId == _setup.Finish.Id)
+        {
+            // 마지막 작업 뒤 끝 버튼: 대상 묶음은 촬영 시작, 장비 준비는 대상 단계로 (화면이 넘어간다)
+            lock (_gate) { _ready = true; Changed(); }
+            log.LogInformation("묶음 끝 ({Group}): {Action}", _setup.Group, actionId);
+            return null;
+        }
+        // 화면이 다른 단계로 넘어가는 버튼 (예: 센터링 뒤 "다른 대상" → 계획). 러너는 그대로 둔다
+        if (actionId.StartsWith("flow:", StringComparison.Ordinal)) return null;
         switch (actionId)
         {
             case "next": RunNext(); break;
-            case "start":
-                lock (_gate) { _ready = true; Changed(); }
-                log.LogInformation("준비 완료: 촬영 시작");
-                break;
             case "retry": _ = RetryAsync(cur.Task); break;
             case "restart": RunNext(); break;
             case "endcheck":
@@ -304,9 +417,14 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
     public async Task RedoAsync(string taskId, bool fromRunning)
     {
         var task = _tasks.FirstOrDefault(t => t.Id == taskId);
-        if (task is null) return;
+        if (task is null)
+        {
+            // 다른 묶음의 작업 (예: 가이딩 → 캘리브레이션): PrepareFlow가 이 묶음을 멈춰 두고 넘긴다
+            if (ForeignRedo is { } foreign) await foreign(taskId);
+            return;
+        }
         if (fromRunning && !await StopCurrentAsync(() => RedoAsync(taskId, fromRunning: false))) return;
-        var affected = new[] { taskId }.Concat(Dependents.GetValueOrDefault(taskId, [])).ToList();
+        var affected = new[] { taskId }.Concat(_setup.Dependents.GetValueOrDefault(taskId, [])).ToList();
         // 무효가 되는 작업 중 끝난 뒤에도 장비가 계속 도는 것(가이딩)은 결과만 지우지 않고 실제로 멈춘다 (CX-PREP-CODE-01)
         if (!await StopLingeringAsync(affected, () => RedoAsync(taskId, fromRunning: false))) return;
         lock (_gate)
@@ -335,6 +453,41 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         if (!await StopCurrentAsync(again)) return false;
         if (!await StopLingeringAsync(_tasks.Select(t => t.Id).ToList(), again)) return false;
         MarkAborted();
+        return true;
+    }
+
+    /// <summary>
+    /// 다른 묶음이 장비를 쓰기 전에 이 묶음을 멈춰 둔다 (PrepareFlow): 하던 작업·계속 도는 장비(가이딩)를 멈추고 확인한 뒤,
+    /// ids(영향받는 작업)를 "다시 확인 필요"로 바꾸고 결과를 지운다. handoff = 화면이 갈 묶음. 같은 열쇠로 Start하면 이어서 한다.
+    /// 시작하지 않았으면 할 일 없음. 정지를 확인하지 못하면 false.
+    /// </summary>
+    public async Task<bool> SuspendAsync(IReadOnlyList<string> ids, string text, string? handoff = null)
+    {
+        lock (_gate) if (_ctx is null) return true;
+        Func<Task> again = async () => await SuspendAsync(ids, text, handoff);
+        if (!await StopCurrentAsync(again)) return false;
+        if (!await StopLingeringAsync(_tasks.Select(t => t.Id).ToList(), again)) return false;
+        lock (_gate)
+        {
+            foreach (var id in ids)
+            {
+                if (!_rows.TryGetValue(id, out var row) || row.Status is PrepTaskStatus.Skipped or PrepTaskStatus.Pending) continue;
+                _rows[id] = (PrepTaskStatus.NeedsRecheck, null);
+                if (ResultType(id) is { } type) _ctx!.Results.Remove(type);
+            }
+            if (_cur is { } c)
+            {
+                if (!c.Finished && _rows[c.Task.Id].Status is PrepTaskStatus.Running or PrepTaskStatus.Waiting or PrepTaskStatus.Failed)
+                    _rows[c.Task.Id] = (PrepTaskStatus.NeedsRecheck, null);
+                c.Ask = null;
+                c.Status = new StatusLine(text, Tone.Warn);
+                c.Actions = [];
+            }
+            _suspended = true;
+            _handoff = handoff;
+            _ready = false;
+            Changed();
+        }
         return true;
     }
 
@@ -374,7 +527,7 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
             }
             lock (_gate)
             {
-                foreach (var id in new[] { task.Id }.Concat(Dependents.GetValueOrDefault(task.Id, [])))
+                foreach (var id in new[] { task.Id }.Concat(_setup.Dependents.GetValueOrDefault(task.Id, [])))
                 {
                     if (!_rows.TryGetValue(id, out var row) || row.Status is PrepTaskStatus.Skipped or PrepTaskStatus.Pending) continue;
                     _rows[id] = (PrepTaskStatus.NeedsRecheck, null);
@@ -469,6 +622,7 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         "calibration" => typeof(CalibrationResult),
         "slew" => typeof(SlewResult),
         "focus" => typeof(FocusResult),
+        "focuscheck" => typeof(FocusCheckResult),
         "center" => typeof(CenterResult),
         "guiding" => typeof(GuidingResult),
         "test" => typeof(TestShotResult),
