@@ -9,6 +9,7 @@ using Astro.Server.Prepare.Tasks.Guiding;
 using Astro.Server.Prepare.Tasks.Polar;
 using Astro.Server.Prepare.Tasks.Slew;
 using Astro.Server.Prepare.Tasks.TestShot;
+using Astro.Server.Prepare.Tasks.Wrap;
 
 namespace Astro.Server.Prepare;
 
@@ -35,6 +36,8 @@ public static class PrepareSetup
             s.AddSingleton<ICenterDevices, SimulatedCenterDevices>();
             s.AddSingleton<IGuidingDevices, SimulatedGuidingDevices>();
             s.AddSingleton<ITestShotDevices, SimulatedTestShotDevices>();
+            s.AddSingleton<IWrapDevices, SimulatedWrapDevices>();
+            s.AddSingleton<Shoot.IShootDevices, Shoot.SimulatedShootDevices>();
         }
         else
         {
@@ -48,6 +51,8 @@ public static class PrepareSetup
             s.AddSingleton<ICenterDevices, Real.RealCenterDevices>();
             s.AddSingleton<IGuidingDevices, Real.RealGuidingDevices>();
             s.AddSingleton<ITestShotDevices, Real.RealTestShotDevices>();
+            s.AddSingleton<IWrapDevices, RealWrapDevices>();
+            s.AddSingleton<Shoot.IShootDevices, Shoot.RealShootDevices>();
         }
         // 작업 순서 = 등록 순서. 장비 준비(극축 정렬 · 캘리브레이션 · 초점) → 대상(이동 · 센터링 · 초점 확인 · 가이딩 · 시험 사진)
         s.AddSingleton<IPrepTask, PolarTask>();
@@ -58,6 +63,11 @@ public static class PrepareSetup
         s.AddSingleton<IPrepTask, FocusCheckTask>();
         s.AddSingleton<IPrepTask, GuidingTask>();
         s.AddSingleton<IPrepTask, TestShotTask>();
+        // 마무리 (플랫 → 다크 → 장비 정리)
+        s.AddSingleton<IPrepTask, FlatTask>();
+        s.AddSingleton<IPrepTask, DarkTask>();
+        s.AddSingleton<IPrepTask, PackTask>();
+        s.AddSingleton<Shoot.ShootSession>();
         s.AddSingleton<MountLock>();
         s.AddSingleton<IPrepMemory, InMemoryPrepMemory>();
         s.AddSingleton(sp => new PrepareFlow(sp.GetServices<IPrepTask>(), sp.GetRequiredService<ILogger<PrepareRunner>>(), simulate));
@@ -84,6 +94,27 @@ public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService ton
             hasFocuser: !equipment.IsWithout("focuser"),
             flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
         flow.StartRig(ctx, evening);
+        return null;
+    }
+
+    /// <summary>마무리 시작 (같은 밤이면 이어서). 결과 기록은 그날 밤 것(촬영한 노출·ISO를 다크가 읽는다)</summary>
+    public async Task<string?> StartWrapAsync(CancellationToken ct)
+    {
+        if (await tonight.ReadProfileAsync(ct) is not { } profile) return "N.I.N.A. 프로필을 읽지 못했습니다. N.I.N.A.가 켜져 있는지 확인해 주세요.";
+        var evening = Sky.TonightService.EveningOf(DateTimeOffset.Now);
+        var ctx = new PrepContext(null, profile.Site, profile.Rig.PixelScale is > 0 and var px ? px : 2.0,
+            hasGuider: profile.Rig.HasGuider && !equipment.IsWithout("guider"),
+            hasFocuser: !equipment.IsWithout("focuser"),
+            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
+        flow.StartWrap(ctx, evening);
+        return null;
+    }
+
+    /// <summary>촬영 시작: 대상 묶음이 끝난(촬영 시작을 누른) 상황으로</summary>
+    public string? StartShoot(Shoot.ShootSession shoot)
+    {
+        if (flow.Target.Context is not { } ctx || !flow.Target.AllDone) return "대상 준비가 끝나지 않았습니다. 시험 사진까지 마친 뒤 촬영을 시작해 주세요.";
+        shoot.Start(ctx);
         return null;
     }
 

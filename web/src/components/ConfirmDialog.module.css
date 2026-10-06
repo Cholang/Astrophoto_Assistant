@@ -1,0 +1,58 @@
+/* 확인 창: 가운데 작은 카드 + 어두운 배경. 색은 모두 토큰 (촬영 테마에서도 빨강만) */
+.dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: 26px 28px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.message {
+  margin: 0 0 22px;
+  font-size: 16px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.primary,
+.quiet {
+  min-height: 42px;
+  padding: 0 20px;
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  min-width: 96px;
+  border: 1px solid var(--primary-border);
+  background: var(--primary-bg);
+  color: var(--primary-text);
+}
+
+.quiet {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.primary:focus-visible,
+.quiet:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--focus);
+}

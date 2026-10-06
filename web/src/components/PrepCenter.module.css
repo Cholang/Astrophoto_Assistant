@@ -193,3 +193,56 @@
   outline: 3px solid var(--focus);
   outline-offset: 4px;
 }
+
+/* 다크 장수 고르기: 숫자 좌우 쉐브론 (마무리 — 시안 v10) */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.stepper button {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--sky-line);
+  border-radius: var(--radius);
+  background: rgb(0 0 0 / 0.35);
+  color: var(--star);
+  cursor: pointer;
+}
+
+.stepper button svg {
+  width: 28px;
+  height: 28px;
+}
+
+.stepper button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.stepper button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.stepper button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--sky), 0 0 0 5px var(--focus);
+}
+
+.stepper strong {
+  min-width: 120px;
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper strong small {
+  margin-left: 4px;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--sky-muted);
+}

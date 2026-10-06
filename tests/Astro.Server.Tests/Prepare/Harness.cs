@@ -10,6 +10,7 @@ using Astro.Server.Prepare.Tasks.Guiding;
 using Astro.Server.Prepare.Tasks.Polar;
 using Astro.Server.Prepare.Tasks.Slew;
 using Astro.Server.Prepare.Tasks.TestShot;
+using Astro.Server.Prepare.Tasks.Wrap;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Astro.Server.Tests.Prepare;
@@ -42,6 +43,7 @@ public static class Harness
     {
         var sim = new Sim(new SimOptions { Speed = 0 }, new SimFaults());
         var focuser = new SimulatedFocusDevices(sim.Options, sim.Faults); // 초점·초점 확인이 같은 포커서
+        var wrap = new SimulatedWrapDevices(sim.Options, sim.Faults);
         IPrepTask[] tasks =
         [
             new PolarTask(new SimulatedPolarDevices(sim.Options, sim.Faults)),
@@ -52,6 +54,7 @@ public static class Harness
             new FocusCheckTask(focuser),
             new GuidingTask(new SimulatedGuidingDevices(sim.Options, sim.Faults)),
             new TestShotTask(new SimulatedTestShotDevices(sim.Options, sim.Faults)),
+            new FlatTask(wrap), new DarkTask(wrap), new PackTask(wrap),
         ];
         return (new PrepareFlow(tasks, NullLogger<PrepareRunner>.Instance, simulated: true, autoNextDelay: TimeSpan.Zero), sim);
     }
@@ -104,7 +107,8 @@ public static class Harness
         {
             var v = await runner.Until(x => x.Ready || x.Current?.Center.Actions.Count > 0, "버튼 또는 준비 끝");
             if (v.Ready) return v;
-            var primary = v.Current!.Center.Actions.First(a => a.Primary);
+            var primary = v.Current!.Center.Actions.FirstOrDefault(a => a.Primary);
+            if (primary is null) { await Task.WhenAny(runner.NextChangeAsync(), Task.Delay(200)); continue; } // 주 버튼이 없는 질문(여기까지만 찍기 등)은 누르지 않는다
             if (primary.Id == "stop") { await Task.WhenAny(runner.NextChangeAsync(), Task.Delay(200)); continue; } // 멈춤은 누르지 않는다
             Assert.Null(runner.Act(primary.Id));
             await Task.Delay(5);

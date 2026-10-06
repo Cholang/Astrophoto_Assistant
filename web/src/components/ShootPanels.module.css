@@ -1,0 +1,219 @@
+/* 촬영 계기판 (중앙 정보의 측정값 칸): 가이딩 · 진행 · 별 크기. 진행만 크게 (시안 v10) */
+.gauges {
+  display: grid;
+  grid-template-columns: 300px 560px 300px;
+  align-items: end;
+  gap: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+}
+
+.gauge svg {
+  width: 300px;
+  height: 60px;
+}
+
+.gp {
+  fill: none;
+  stroke: var(--star);
+  stroke-width: 2;
+  opacity: 0.85;
+}
+
+.gl {
+  stroke: var(--sky-line);
+  stroke-width: 1.5;
+}
+
+.gauge b {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.gauge span {
+  font-size: 15px;
+  color: var(--sky-muted);
+}
+
+.prog {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.prog strong {
+  font-size: 46px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.prog strong small {
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--sky-muted);
+}
+
+.prog span {
+  font-size: 16px;
+  color: var(--sky-muted);
+}
+
+/* 노출 중 · ISO는 막대 위 (2026-10-07 사용자 결정) */
+.prog .exp {
+  font-size: 17px;
+  color: var(--star);
+}
+
+.meter {
+  width: 560px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--sky-line);
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 300ms linear;
+}
+
+/* 등급: 왼쪽 아래, 맨 아래 줄이 계기판 설명 줄과 같은 높이 (중앙 정보 bottom 56 + 버튼 56 + 상태 줄 34 + 간격 32 = 178) */
+.score {
+  position: absolute;
+  left: var(--gutter, 96px);
+  bottom: 178px;
+  z-index: 3;
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  color: var(--star);
+  text-shadow: 0 2px 12px var(--sky);
+}
+
+.grade {
+  min-height: 76px;
+  font-size: 76px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.grade[data-x='true'] { color: var(--fail); }
+
+.tally {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tally li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px auto;
+  align-items: baseline;
+  color: var(--sky-muted);
+}
+
+.tally b {
+  color: var(--star);
+  font-weight: 700;
+  cursor: help;
+  outline: none;
+}
+
+.tally li[data-x='true'] b { color: var(--fail); }
+
+.tally li[data-now='true'] b {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.tally b:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+  border-radius: 4px;
+}
+
+/* 분류 기준 툴팁: 그 줄 오른쪽에 */
+.tally b:hover::after,
+.tally b:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 96px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 340px;
+  padding: 10px 14px;
+  border: 1px solid var(--sky-line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-shadow: none;
+  white-space: normal;
+  word-break: keep-all;
+  z-index: 5;
+}
+
+/* 자오선 반전 단계 */
+.flip {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+}
+
+.flip > span {
+  font-size: 16px;
+  color: var(--sky-muted);
+}
+
+.seq {
+  display: flex;
+  gap: 34px;
+  font-size: 21px;
+}
+
+.seq span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--sky-muted);
+}
+
+.seq span svg {
+  width: 20px;
+  height: 20px;
+}
+
+.seq span[data-s='done'] { color: var(--pass); }
+
+.seq span[data-s='now'] {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.seq span[data-s='todo']::before,
+.seq span[data-s='now']::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px dashed currentColor;
+}
+
+.seq span[data-s='now']::before {
+  border-style: solid;
+  background: currentColor;
+}

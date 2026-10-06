@@ -1,3 +1,5 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import type { ReactNode } from 'react'
 import type { PrepAction, ReadoutView, Tone } from '../prepare'
 import StatusIcon, { type Status } from './StatusIcon'
 import styles from './PrepCenter.module.css'
@@ -13,19 +15,33 @@ export default function PrepCenter({
   actions,
   onAct,
   disabled,
+  custom,
 }: {
   readout: ReadoutView | null
+  /** 측정값 칸에 화면이 직접 그리는 것 (촬영의 계기판 등) */
+  custom?: ReactNode
   status: { text: string; tone: Tone } | null
   actions: PrepAction[]
   onAct: (id: string) => void
   disabled?: boolean
 }) {
-  const primary = actions.find((a) => a.primary) ?? actions[0]
-  const rest = actions.filter((a) => a !== primary)
+  // 다크 장수 고르기: 줄이기·늘리기는 숫자 좌우 쉐브론으로 (버튼 줄에 두지 않음)
+  const stepper = readout?.kind === 'dark-count'
+  const shown = stepper ? actions.filter((a) => a.id !== 'less' && a.id !== 'more') : actions
+  const primary = shown.find((a) => a.primary) ?? shown[0]
+  const rest = shown.filter((a) => a !== primary)
   return (
     <section className={styles.center} aria-live="polite">
       <div className={styles.readout} data-fresh={readout?.freshness ?? 'Fresh'}>
-        {readout && (readout.kind === 'polar-offset' ? <PolarReadout r={readout} /> : <Metric r={readout} />)}
+        {custom ??
+          (readout &&
+            (readout.kind === 'polar-offset' ? (
+              <PolarReadout r={readout} />
+            ) : stepper ? (
+              <Stepper r={readout} onAct={onAct} disabled={disabled || !actions.some((a) => a.id === 'less')} />
+            ) : (
+              <Metric r={readout} />
+            )))}
       </div>
 
       <p className={styles.status} data-tone={status?.tone ?? 'None'}>
@@ -66,6 +82,28 @@ function Metric({ r }: { r: ReadoutView }) {
         {r.caption}
         {freshNote(r)}
       </span>
+    </div>
+  )
+}
+
+/** 다크 장수: 숫자 좌우에 줄이기·늘리기 (기본 20, 5장씩 5~40 — 서버가 범위를 지킴) */
+function Stepper({ r, onAct, disabled }: { r: ReadoutView; onAct: (id: string) => void; disabled?: boolean }) {
+  const n = r.values.count ?? 0
+  return (
+    <div className={styles.metric}>
+      <div className={styles.stepper}>
+        <button type="button" onClick={() => onAct('less')} disabled={disabled || n <= (r.values.min ?? 0)} aria-label="5장 줄이기">
+          <ChevronLeft strokeWidth={2.5} aria-hidden="true" />
+        </button>
+        <strong>
+          {r.big}
+          <small>장</small>
+        </strong>
+        <button type="button" onClick={() => onAct('more')} disabled={disabled || n >= (r.values.max ?? 99)} aria-label="5장 늘리기">
+          <ChevronRight strokeWidth={2.5} aria-hidden="true" />
+        </button>
+      </div>
+      <span>{r.caption}</span>
     </div>
   )
 }

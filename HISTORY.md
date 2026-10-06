@@ -8,7 +8,26 @@
 
 ---
 
-## 2026-10-07 · [Claude] 단계 재구성(장비 준비 · 대상) — 러너 둘, 초점 확인, 레일 움직임, 시안 v9
+## 2026-10-07 · [Claude] 촬영 · 마무리 구현 (시안 v10), 가이드 별 잃음 원인별 대응, AA 종료 확인 창
+
+**요청**: 촬영·마무리 흐름 합의 → 시안 v10 → 앱 구현(코덱스 리뷰 없이 먼저, 장비 연결 전제). 사진 등급 A+·A·B·C·F, F는 제외 폴더(지우지 않음), 등급은 왼쪽 아래(지금 등급 + 등급별 누적, 기준 툴팁). 디더링·자오선 반전·초점 다시·구름은 자동. "촬영 중단" → 끝내고 마무리 / 다른 대상으로 변경 / 계속 찍기. 마무리 = 플랫(수동 패널, 30장) → 뚜껑 → 플랫 다크·다크(기본 20, 5장씩 조절, 여기까지만) → 장비 정리(N.I.N.A.·PHD2 닫기) → 오늘 밤 요약. 레일 "앱 끄기" → "AA 종료" + 진행 중이면 확인 창, 요약에서는 숨김. 가이딩 중 별 잃음은 원인(빛·구름·이슬·가이드 초점·바람/케이블·적도의 멈춤·끊김)별 대응. X-T5는 N.I.N.A. gain = ISO(사용자 확인). 답변은 항상 한국어(CLAUDE.md)
+
+**변경**
+- 서버 `Shoot/`: `ShootSession`(끝 조건·반전·재초점·디더링·등급·제외 폴더·`NightShootResult` 기록, 찍기 전·찍는 동안 가이드 별 지켜보기 → `HandleLossAsync`·`WaitForStarAsync`, 원인별 멈춘 시간), `ShotGrader`(등급 규칙), `GuideWatch`(원인 가르기 규칙·이슬점), `IShootDevices` + `Simulated/RealShootDevices`(PHD2 이벤트 수신·디더·별 다시 고르기·가이더 다시 연결·다시 가운데). API `/api/shoot/*`, `/api/night/summary·open-folder`
+- 서버 마무리 `Prepare/Tasks/Wrap/`: `FlatTask`·`DarkTask`·`PackTask` + `IWrapDevices`(모의·실제), `RunnerSetup.Wrap`, `PrepareFlow.Wrap`, `/api/prepare/wrap/start`. 러너: 마지막 작업이 AutoNext면 끝 버튼 없이 Ready. `NinaRig`: imageType·gain(ISO)·Home·Flip·Connect/Disconnect·BitDepth
+- 화면: `ShootScreen`(+`ShootPanels` 계기판·등급·반전 단계, 원인별 멈춤 안내, 모의 실패), 마무리 = `PrepareScreen group="wrap"`(`PrepCenter` 다크 장수 고르기), `SummaryScreen`, `ConfirmDialog`, `StepRail`(`complete`·`hideExit`, "AA 종료"), App 흐름 target → shoot → wrap → summary, 촬영 들어가면 적색 테마
+- 시안 `mockups/aa-shoot-wrap-v10.html`(새 파일), v9·v10 레일 세로 가운데 CSS 고침
+- 문서: DESIGN.md "촬영"·"마무리" 절, `docs/SHOOT_IMPLEMENTATION.md`(구조·실장비 확인 목록·노출/별 잃음 설계와 PHD2 실기 결과), CLAUDE.md 한국어 규칙
+
+**확인**: 서버 테스트 91 통과·1 건너뜀(새로 — 등급, 끝 조건, F 제외, 반전·재초점·멈춤 자동, 중단, 마무리 전체·다크 장수·여기까지만·건너뛰기·패널 밝음, 별 잃음 원인 가르기·원인별 흐름·적도의 멈춤). 화면은 서버 응답을 흉내 낸 임시 페이지에서 캡처(촬영·중단 질문·반전·재초점·멈춤·끝·다크 장수·요약, 적색 픽셀 검사). PHD2 실기(내장 Simulator + On-camera): GuideStep 필드, 가이딩 중 노출 바꾸기, LostLock·StarLost, 별이 돌아오면 PHD2가 스스로 재개, 가이딩 중 find_star 거절 → 멈춤·루프·고르기·가이딩 순서로 7초 재개. RPC에 게인 명령 없음. 실장비(N.I.N.A.·X-T5·적도의)로는 촬영·마무리 미확인, N.I.N.A.를 켠 앱 전체 흐름도 이 세션에서 직접 못 봄
+
+**남은 것**: 실장비 확인 8가지(docs/SHOOT_IMPLEMENTATION.md), WandererBox 기온·습도(이슬점)·열선 제어, 노출 설계 A(시작 사다리·기억·SharpCap), 별 모양(이심률) 분석, 등급·SNR 기준값 실제 하늘로, AA 장비 확인에서 PHD2가 시뮬레이터 프로필이면 알리기
+
+**리뷰 요청 범위(Codex)**: `src/Astro.Server/Shoot/*`, `Prepare/Tasks/Wrap/*`, `Prepare/Flow/PrepareRunner.cs`(AutoNext 끝·Wrap)·`PrepareFlow.cs`, `Prepare/Real/NinaRig.cs` 추가분, `AppServer.cs`(shoot·night·wrap 경로), web `screens/ShootScreen·SummaryScreen`, `components/ShootPanels·ConfirmDialog·StepRail·PrepCenter`, `App.tsx`. 특히: 촬영 루프의 동시성(찍는 동안 지켜보기·노출 멈춤·중단 요청), 끝날 때 가이딩 정지 확인, 다크 중 "여기까지만" Ask 취소 처리, 원인 판정 규칙의 오판 가능성, 실장비 경로의 위험(적도의 이동·프로그램 닫기·파일 옮기기)
+
+---
+
+## 2026-10-07 · f52a805 [Claude] 단계 재구성(장비 준비 · 대상) — 러너 둘, 초점 확인, 레일 움직임, 시안 v9
 
 **요청**: 단계를 연결 → 점검 → 장비 준비(극축·캘리브레이션·초점) → 대상(계획·이동·센터링·초점 확인·가이딩·시험 사진) → 촬영 → 마무리로 재구성(Codex 의견 반영). v9 시안으로 흐름 확정 — 단계 끝 수동 확인이 곧 다음 단계로, 레일은 부드럽게 전환·초록 선이 한쪽 끝부터 자라게, 작업 간격 75px. 초점 확인은 기온 변화 + 센터링 사진 별 크기 두 근거. 그 뒤 앱 구현. 업데이트 알림은 완성 전까지 설치 프로그램 4개 모두 새 버전이 있는 것으로
 

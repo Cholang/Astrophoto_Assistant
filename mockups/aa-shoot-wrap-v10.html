@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AA 촬영·마무리 시안 v10</title>
+<!--
+  v10 (Claude, 2026-10-07): 촬영 · 마무리 단계 (사용자와 흐름 합의 뒤).
+  - 촬영: 주인공은 방금 찍은 사진(배경 전체). 왼쪽 아래 지금 등급 + 등급별 누적 장수(A+·A·B·C·F, 등급에 올리면 기준), 아래 계기판(가이딩 · 진행 · 별 크기)
+  - 시퀀스는 N.I.N.A.가 돌린다 — 디더링·자오선 반전(항상 자동)·초점 다시 맞추기·구름 멈춤/이어서. AA는 이벤트를 보여 준다
+  - 실패한 사진(별 흐름·구름)은 등급 F → 제외 폴더로 (지우지 않음, 사용자가 밖에서 정리)
+  - 다른 대상은 전용 버튼 없이: 레일 아래 "촬영 중단" → 끝내고 마무리하기 / 다른 대상으로 변경 / 계속 찍기 (지금 사진까지 찍고 가이딩 정지).
+    계획 장수·대상 낮아짐·새벽이면 자동으로 끝 — "플랫 찍으러 가기" / "다른 대상으로 변경" (계속 찍기 없음). 촬영에 들어가면 적색 테마로
+  - 마무리: 망원경을 위로 → 플랫 패널 씌우기 → 플랫 → 뚜껑 덮기 → 플랫 다크·다크(적도의는 그동안 홈) → 장비 정리 → 오늘 밤 요약
+  - 화면 틀·안내·중앙 정보·진행 표시 움직임은 v9와 같다. 모의 시안이라 장비는 움직이지 않는다
+-->
+<style>
+:root {
+  --page-bg: #17181a; --page-surface: #202124; --page-text: #e8e5df; --page-muted: #9d9a94; --page-line: #34363a; --page-accent: #f0a93b;
+  --font: 'Pretendard Variable', Pretendard, 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page-bg); color: var(--page-text); font-family: var(--font); font-size: 15px; line-height: 1.6; word-break: keep-all; }
+.page { max-width: 1760px; margin: 0 auto; padding: 24px 20px 56px; display: grid; gap: 14px; }
+.top h1 { margin: 0; font-size: 22px; font-weight: 800; }
+.top p { margin: 4px 0 0; color: var(--page-muted); font-size: 14px; max-width: 1200px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.controls .lbl { font-size: 13px; color: var(--page-muted); margin: 0 4px 0 8px; }
+.ctl { padding: 5px 12px; border: 1px solid var(--page-line); border-radius: 8px; background: var(--page-surface); color: var(--page-text); font: inherit; font-size: 13px; cursor: pointer; }
+.ctl[aria-pressed="true"] { border-color: var(--page-accent); color: var(--page-accent); font-weight: 700; }
+.frame { position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; border: 1px solid var(--page-line); border-radius: 12px; }
+
+/* ───────── 앱 (1920×1200, 앱과 같은 토큰) ───────── */
+.app { position: absolute; left: 0; top: 0; width: 1920px; height: 1200px; transform-origin: 0 0; transform: scale(var(--s, 1));
+  display: flex; flex-direction: column; font-family: var(--font); font-size: 15.5px; line-height: 1.6; color: var(--text); background: var(--bg); overflow: hidden; --radius: 10px; --gutter: 96px; --rail-w: 150px; }
+.app, .app[data-t="dark"] { --bg:#1e1f21; --surface:#27292c; --surface-2:#303236; --line:#3b3e42; --text:#ebe8e3; --muted:#a3a09a; --accent:#f0a93b; --pass:#72bf8e; --fail:#f07a52; --warn:#f0a93b; --primary-bg:#f0a93b; --primary-border:#f0a93b; --primary-text:#231800; --step-done-line:#5e8f6f;
+  --sky:#0e0f11; --star:#e8e6e1; --sky-muted:rgb(255 255 255 / .55); --sky-line:rgb(255 255 255 / .16); }
+.app[data-t="light"] { --bg:#f1f1ef; --surface:#fafaf9; --surface-2:#e7e7e4; --line:#d6d6d2; --text:#25272a; --muted:#676a6e; --accent:#b36b00; --pass:#2f7d4e; --fail:#c24a26; --warn:#a06200; --primary-bg:#b36b00; --primary-border:#b36b00; --primary-text:#fff; --step-done-line:#8fb89d;
+  --sky:#16181b; --star:#ebe8e3; --sky-muted:rgb(255 255 255 / .6); --sky-line:rgb(255 255 255 / .18); }
+.app[data-t="night"] { --bg:#000; --surface:#0c0000; --surface-2:#170000; --line:#3c0000; --text:#b80000; --muted:#9a0000; --accent:#d00000; --pass:#b80000; --fail:#b80000; --warn:#b80000; --primary-bg:#260000; --primary-border:#8a0000; --primary-text:#d00000; --step-done-line:#6a0000;
+  --sky:#000; --star:#b80000; --sky-muted:#9a0000; --sky-line:rgb(184 0 0 / .3); }
+.app svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* 상태 바 */
+.bar { flex: 0 0 44px; display: flex; align-items: center; gap: 20px; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--bg); position: relative; z-index: 5; }
+.bar .brand { font-weight: 800; color: var(--text); } .bar .ver { margin-left: -12px; font-size: 11px; }
+.bar .prof { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; } .bar .ava { width: 22px; height: 22px; border-radius: 6px; background: var(--surface-2); }
+.bar .devs { display: flex; gap: 14px; flex: 1; } .bar .dev { display: inline-flex; align-items: center; gap: 6px; } .bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pass); }
+.bar .site, .bar .clock { color: var(--text); }
+
+/* 화면 영역 + 오른쪽 진행 표시 */
+.body { flex: 1; min-height: 0; display: flex; }
+.app[data-sky="1"] .body { background: var(--sky); }
+.screen { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+
+/* ── 진행 표시 (앱 StepRail과 같은 모양) ── */
+.rail { position: relative; z-index: 2; flex: none; width: var(--rail-w); display: flex; flex-direction: column; padding: 34px 22px 24px 12px; color: var(--muted); background: var(--bg); }
+.app[data-sky="1"]:not([data-t="light"]) .rail { background: transparent; }
+.rail ol { list-style: none; margin: 0; padding: 0; }
+.rail > .track { margin: auto 0; } /* .rail ol보다 강하게 — 세로 가운데 (앱 StepRail과 같게) */
+/* 점마다 위·아래 반쪽 선을 가진다: 묶음이 접히고 펴져도 선이 이어지고, 초록 채움이 반쪽씩 차례로 흘러간다 */
+.node { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.node.stage { min-height: 28px; padding: 11px 0; }
+.node.item { min-height: 75px; padding-right: 8px; cursor: default; }
+.ln { position: absolute; right: 12px; width: 0; border-left: 1px dashed var(--line); }
+.ln.in { top: 0; height: 50%; }
+.ln.out { top: 50%; bottom: 0; }
+.track > .node:first-child .ln.in, .node[data-last] .ln.out { display: none; }
+.ln b { position: absolute; left: -1.5px; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--pass) 70%, transparent); transform: scaleY(0); transform-origin: top; transition: transform var(--dur, 200ms) linear var(--dl, 0ms); }
+.ln[data-f] b { transform: scaleY(1); }
+.grp { height: 0; overflow-x: visible; overflow-y: clip; transition: height 460ms cubic-bezier(.3, .7, .2, 1); }
+.grp[data-settled] { overflow: visible; }
+.sname { font-size: 13px; white-space: nowrap; transition: font-size 420ms ease, color 420ms ease, opacity 420ms ease; }
+.sdot { position: relative; flex: none; width: 26px; height: 26px; display: grid; place-items: center; border: 1.5px dashed var(--line); border-radius: 50%; background: var(--rail-bg, var(--bg)); color: var(--pass); z-index: 1; transition: border-color 320ms ease; }
+.app[data-sky="1"]:not([data-t="light"]) .rail { --rail-bg: var(--sky); }
+.sdot svg { grid-area: 1 / 1; width: 14px; height: 14px; stroke-width: 2.5; opacity: 0; transform: scale(.4); transition: opacity 260ms ease, transform 360ms cubic-bezier(.3, 1.6, .5, 1); }
+.sdot::after { content: ''; grid-area: 1 / 1; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); transform: scale(0); transition: transform 360ms cubic-bezier(.3, 1.6, .5, 1); }
+.stage[data-s="done"] .sname { color: var(--text); opacity: .75; }
+.stage[data-s="done"] .sdot { border-style: solid; border-color: var(--pass); }
+.stage[data-s="done"] .sdot svg { opacity: 1; transform: none; }
+.stage[data-s="now"] .sname { font-size: 20px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); }
+.stage[data-s="now"] .sdot { border: 2px solid var(--accent); }
+.stage[data-s="now"] .sdot::after { transform: scale(1); }
+.items { padding-top: 4px; }
+.iname { font-size: 14px; white-space: nowrap; opacity: 0; transition: opacity 320ms ease, color 320ms ease; }
+.node.item:hover .iname, .item[data-s="now"] .iname, .item[data-s="problem"] .iname { opacity: 1; }
+.item[data-s="now"] .iname { font-size: 17px; font-weight: 600; color: var(--accent); }
+.idot { flex: none; width: 10px; height: 10px; border: 1px dashed var(--muted); border-radius: 50%; background: var(--rail-bg, var(--bg)); z-index: 1; transition: background-color 320ms ease, border-color 320ms ease, transform 360ms cubic-bezier(.3, 1.6, .5, 1); }
+.item[data-s="done"] .idot { border: 1px solid var(--pass); background: var(--pass); }
+.item[data-s="now"] .idot { border: 1px solid var(--accent); background: var(--accent); transform: scale(1.2); animation: glow 3.2s ease-in-out infinite; }
+@keyframes glow { 0%,100% { box-shadow: 0 0 2px 0 color-mix(in srgb, var(--accent) 35%, transparent); } 50% { box-shadow: 0 0 14px 5px color-mix(in srgb, var(--accent) 55%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .ln b, .grp, .sname, .sdot, .sdot svg, .sdot::after, .iname, .idot { transition: none !important; } }
+.railEnd { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding-top: 16px; }
+.railEnd button { height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.railEnd button.exit { border-color: transparent; background: none; color: var(--muted); font-weight: 400; }
+/* AA 종료 확인 창 (앱 ConfirmDialog와 같은 모양) */
+.confirm { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgb(0 0 0 / .55); }
+.confirm .box { width: 460px; padding: 26px 28px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.confirm p { margin: 0 0 22px; font-size: 16px; }
+.confirm .box > div { display: flex; justify-content: flex-end; gap: 10px; }
+.confirm button { min-height: 42px; padding: 0 20px; border-radius: var(--radius); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.confirm .ok { min-width: 96px; border: 1px solid var(--primary-border); background: var(--primary-bg); color: var(--primary-text); }
+.confirm .no { border: 1px solid var(--line); background: none; color: var(--text); font-weight: 500; }
+
+/* ── 하늘 화면 (장비 준비·대상 묶음 화면의 배경) ── */
+.view { position: absolute; inset: 0; background: var(--sky); }
+.view svg { position: absolute; inset: 0; width: 100%; height: 100%; mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent); }
+.view .star { fill: var(--star); }
+.view .lbl { font-family: var(--font); font-size: 17px; fill: var(--sky-muted); }
+.view .lblS { font-family: var(--font); font-size: 17px; fill: var(--star); }
+.view .lblA { font-family: var(--font); font-size: 17px; fill: var(--accent); }
+.view .grid { fill: none; stroke: var(--sky-line); stroke-width: 1.2; }
+.view .acc { fill: none; stroke: var(--accent); stroke-width: 3; }
+.view .accFill { fill: var(--accent); }
+.view .fov { fill: none; stroke: var(--star); stroke-width: 2; stroke-dasharray: 10 8; opacity: .8; }
+.view .cross { stroke: var(--sky-muted); stroke-width: 2; }
+.view .box { fill: none; stroke: var(--pass); stroke-width: 2.5; }
+.scrim { position: absolute; left: 0; right: 0; bottom: 0; height: 400px; background: linear-gradient(to top, var(--sky), transparent); pointer-events: none; }
+
+/* 안내 (왼쪽 위) */
+.guide { position: absolute; left: var(--gutter); top: 74px; width: 1100px; color: var(--star); text-shadow: 0 2px 14px var(--sky); z-index: 2; }
+.gtitle { display: flex; align-items: baseline; gap: 18px; }
+.gtitle span { font-size: 20px; color: var(--sky-muted); white-space: nowrap; }
+.gtitle i { font-size: 22px; font-style: normal; color: var(--sky-muted); }
+.gtitle h2 { margin: 0; font-size: 42px; font-weight: 700; line-height: 1.3; letter-spacing: -.01em; }
+.gtext { margin: 18px 0 0; max-width: 1050px; min-height: calc(2 * 1.6em); font-size: 22px; line-height: 1.6; }
+
+/* 중앙 정보 (가운데 아래): 측정값 → 상태 줄 → 버튼 */
+.center { position: absolute; left: 0; right: 0; bottom: 56px; display: grid; grid-template-rows: 180px 34px 56px; row-gap: 16px; justify-items: center; color: var(--star); text-shadow: 0 2px 12px var(--sky); z-index: 3; }
+.readout { align-self: end; width: min(1040px, 100%); display: grid; justify-items: center; gap: 6px; text-align: center; }
+.readout strong { font-size: 34px; font-weight: 650; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.readout strong[data-k="ok"] { color: var(--pass); } .readout strong[data-k="warn"] { color: var(--warn); }
+.readout span { font-size: 16px; color: var(--sky-muted); font-variant-numeric: tabular-nums; max-width: 920px; }
+.readout .sum { display: grid; grid-template-columns: repeat(3, auto); gap: 6px 40px; font-size: 18px; text-align: left; }
+.readout .sum b { color: var(--pass); font-weight: 650; margin-right: 10px; }
+.readout .sum b[data-k="warn"] { color: var(--warn); }
+.readout .sum.fc { grid-template-columns: auto; }
+.status { margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 18px; color: var(--sky-muted); }
+.status[data-k="ok"] { color: var(--pass); } .status[data-k="warn"] { color: var(--warn); }
+.status .mini { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--sky-line); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.actions { position: relative; width: 280px; height: 56px; }
+.actions[data-empty="1"] { visibility: hidden; }
+.primary, .quiet { height: 56px; border-radius: var(--radius); font: inherit; cursor: pointer; text-shadow: none; }
+.primary { width: 280px; padding: 8px 16px; border: 1.5px solid var(--primary-border); background: var(--primary-bg); color: var(--primary-text); font-size: 18px; font-weight: 800; }
+.secondary { position: absolute; left: calc(100% + 16px); top: 0; display: flex; gap: 8px; white-space: nowrap; }
+.quiet { padding: 0 18px; border: 1.5px solid var(--sky-line); background: rgb(0 0 0 / .35); color: var(--star); font-size: 16px; font-weight: 600; }
+.peek { position: absolute; top: 28px; right: 40px; padding: 10px 18px; border: 1px solid var(--sky-line); border-radius: var(--radius); background: rgb(0 0 0 / .45); color: var(--star); font: inherit; font-size: 16px; z-index: 4; display: none; }
+
+/* ① 극축 정렬: 등급 말 크게 + 나사 방향 */
+.pgrade { font-size: 44px; font-weight: 700; line-height: 1.2; margin-bottom: 8px; }
+.pgrade[data-k="ok"] { color: var(--pass); } .pgrade[data-k="busy"] { color: var(--accent); } .pgrade[data-k="fail"] { color: var(--fail); }
+.pdirs { display: flex; gap: 40px; justify-content: center; align-items: center; font-variant-numeric: tabular-nums; }
+.pdirs div { display: grid; grid-template-columns: 42px 124px; column-gap: 14px; align-items: center; text-align: left; }
+.pdirs b { grid-row: span 2; font-size: 44px; font-weight: 400; color: var(--accent); }
+.pdirs span { font-size: 16px; color: var(--sky-muted); } .pdirs strong { font-size: 34px; font-weight: 550; }
+.pdirs i { font-style: normal; font-size: 30px; color: var(--sky-muted); opacity: .5; }
+
+/* 탐색: 구도 칩 (계획에서 정한 구도) */
+.compose { position: absolute; top: 28px; right: 40px; display: grid; gap: 4px; justify-items: end; color: var(--sky-muted); font-size: 15px; text-shadow: 0 2px 10px var(--sky); z-index: 3; }
+.compose b { color: var(--star); font-weight: 600; }
+
+/* ── 계획 화면 (대상 단계의 첫 작업 — 지금 앱 계획 화면 그대로) ── */
+.plan { position: absolute; inset: 0; display: grid; grid-template-columns: 560px 1fr; background: var(--bg); }
+.chat { border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 22px 22px 18px; gap: 14px; overflow: hidden; }
+.msgs { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow: hidden; justify-content: flex-end; }
+.msg { max-width: 86%; padding: 12px 16px; border-radius: 12px; background: var(--surface); font-size: 15px; line-height: 1.55; }
+.msg small { display: block; font-size: 11px; font-weight: 800; color: var(--accent); margin-bottom: 2px; }
+.msg.me { align-self: flex-end; background: var(--surface-2); font-weight: 600; }
+.msg.note { align-self: center; background: none; border: 1px dashed var(--line); color: var(--muted); font-size: 13px; padding: 4px 12px; border-radius: 999px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.ask { height: 46px; border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: center; padding: 0 16px; color: var(--muted); font-size: 14px; }
+.right { display: grid; grid-template-rows: 270px 1fr 70px; min-width: 0; }
+.night { border-bottom: 1px solid var(--line); padding: 18px 24px 8px; }
+.night .head { display: flex; gap: 16px; align-items: baseline; font-size: 13px; color: var(--muted); }
+.night .head b { color: var(--text); font-size: 15px; }
+.night svg { width: 100%; height: 210px; }
+.night .ax { font-family: var(--font); font-size: 13px; fill: var(--muted); }
+.cards { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; padding: 18px 24px 8px; min-height: 0; }
+.card { border: 1.5px solid var(--line); border-radius: 12px; padding: 16px 18px; background: var(--surface); display: grid; align-content: start; gap: 4px; position: relative; }
+.card[data-s="done"] { border-color: var(--step-done-line); }
+.card[data-s="asking"] { border-color: var(--accent); }
+.card .ct { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+.card .ct em { font-style: normal; color: var(--pass); font-size: 12px; }
+.card h3 { margin: 4px 0 2px; font-size: 21px; }
+.card .sub { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.card dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 0; margin: 0; font-size: 14px; }
+.card dt { color: var(--muted); } .card dd { margin: 0; font-weight: 650; }
+.card .thumb { position: absolute; right: 16px; top: 42px; width: 116px; height: 78px; border: 1.5px dashed var(--muted); border-radius: 6px; display: grid; place-items: center; background: var(--sky); }
+.card .thumb i { width: 70px; height: 34px; border-radius: 50%; background: radial-gradient(var(--star), transparent 70%); opacity: .7; transform: rotate(-30deg); }
+.card .empty { color: var(--muted); font-size: 14px; margin-top: 30px; }
+.foot { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-top: 1px solid var(--line); }
+.foot b { font-size: 16px; } .foot span { display: block; font-size: 13px; color: var(--muted); }
+.foot .go { height: 46px; padding: 0 24px; border: 1.5px solid var(--primary-border); border-radius: 10px; background: var(--primary-bg); color: var(--primary-text); font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; }
+.foot .go[disabled] { opacity: .35; cursor: default; }
+.foot .back { height: 46px; padding: 0 18px; margin-right: 10px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+
+/* 촬영 (자리만) */
+.shoot { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 20px; text-align: center; }
+.shoot h2 { color: var(--text); font-size: 34px; margin: 0 0 8px; }
+.shoot button { margin-top: 26px; }
+
+
+/* ── v10 촬영 ── */
+/* 버튼이 조용한 것만일 때: 가운데에 */
+.actions.only { width: auto; display: flex; gap: 8px; justify-content: center; }
+/* 방금 찍은 사진의 등급 + 등급별 누적 장수 (왼쪽 아래 구석, 2026-10-07 사용자 결정).
+   근거(별 크기·가이딩)는 계기판과 겹쳐 두지 않는다. 등급 글자에 올리면 분류 기준 툴팁 */
+.score { position: absolute; left: var(--gutter); bottom: 178px; z-index: 3; display: grid; justify-items: start; gap: 14px; color: var(--star); text-shadow: 0 2px 12px var(--sky); }
+.score .g { font-size: 76px; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+.score .g[data-x] { color: var(--fail); }
+.tally { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 17px; font-variant-numeric: tabular-nums; }
+.tally li { position: relative; display: grid; grid-template-columns: 38px auto; align-items: baseline; color: var(--sky-muted); }
+.tally b { color: var(--star); font-weight: 700; cursor: help; }
+.tally li[data-x] b { color: var(--fail); }
+.tally li[data-now] b { text-decoration: underline; text-underline-offset: 4px; }
+.tally li b:hover::after, .tally li b:focus-visible::after { content: attr(data-tip); position: absolute; left: 96px; top: 50%; transform: translateY(-50%); width: 340px; padding: 10px 14px; border: 1px solid var(--sky-line); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 400; line-height: 1.5; white-space: normal; text-shadow: none; z-index: 5; }
+.tally b:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* 계기판 (중앙 정보의 측정값 칸): 가이딩 · 진행 · 별 크기. 진행만 크게 */
+.gauges { display: grid; grid-template-columns: 300px 560px 300px; align-items: end; gap: 52px; }
+.gauge { display: grid; gap: 2px; justify-items: center; }
+.gauge svg { width: 300px; height: 60px; }
+.gauge .gp { fill: none; stroke: var(--star); stroke-width: 2; opacity: .85; }
+.gauge .gl { stroke: var(--sky-line); stroke-width: 1.5; }
+.gauge b { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gauge span { font-size: 15px; color: var(--sky-muted); }
+.prog { display: grid; gap: 8px; justify-items: center; }
+.prog strong { font-size: 46px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.prog strong small { font-size: 26px; font-weight: 500; color: var(--sky-muted); }
+.prog .exp { font-size: 17px; color: var(--star); }
+.meter { width: 560px; height: 6px; border-radius: 3px; background: var(--sky-line); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); transition: width 300ms linear; }
+.prog span { font-size: 16px; color: var(--sky-muted); font-variant-numeric: tabular-nums; }
+/* 자오선 반전 · 장비 정리: 차례로 하는 일 (끝남 · 지금 · 남음) */
+.seq { display: flex; gap: 34px; justify-content: center; font-size: 21px; }
+.seq span { display: inline-flex; align-items: center; gap: 10px; color: var(--sky-muted); }
+.seq span svg { width: 20px; height: 20px; }
+.seq span[data-s="done"] { color: var(--pass); }
+.seq span[data-s="now"] { color: var(--accent); font-weight: 700; }
+.seq span[data-s="todo"]::before, .seq span[data-s="now"]::before { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed currentColor; }
+.seq span[data-s="now"]::before { border-style: solid; background: currentColor; }
+/* 마무리: 플랫 패널 화면 · 다크 화면 */
+.flatv { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--star) 34%, var(--sky)) 0%, color-mix(in srgb, var(--star) 22%, var(--sky)) 45%, color-mix(in srgb, var(--star) 8%, var(--sky)) 100%); }
+/* 오늘 밤 요약 */
+/* 다크 장수 고르기: 숫자 좌우 쉐브론 (시작 버튼 위) */
+.stepper { display: flex; align-items: center; gap: 22px; }
+.stepper button { width: 52px; height: 52px; display: grid; place-items: center; border: 1.5px solid var(--sky-line); border-radius: var(--radius); background: rgb(0 0 0 / .35); color: var(--star); cursor: pointer; }
+.stepper button svg.i { width: 28px; height: 28px; stroke-width: 2.5; }
+.stepper button:hover:not([disabled]) { border-color: var(--accent); }
+.stepper button[disabled] { opacity: .3; cursor: default; }
+.stepper strong { min-width: 120px; font-size: 52px; font-weight: 700; line-height: 1.1; }
+.stepper strong small { font-size: 24px; font-weight: 500; color: var(--sky-muted); margin-left: 4px; }
+.nsum { display: grid; grid-template-columns: auto auto auto auto; gap: 6px 40px; font-size: 19px; text-align: left; align-items: baseline; font-variant-numeric: tabular-nums; }
+.nsum b { font-weight: 650; }
+.nsum span { color: var(--sky-muted); font-size: 16px; }
+.nsum .hd { color: var(--sky-muted); font-size: 14px; }
+.center.tall { grid-template-rows: 250px 34px 56px; }
+/* 대상 단계로 돌아감 (v9 계획 화면 자리) */
+.backto { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 19px; background: var(--bg); }
+.backto h2 { color: var(--text); font-size: 32px; margin: 0 0 10px; }
+.backto button { margin-top: 24px; }
+
+.fade { animation: fade 260ms ease-out both; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fade, .item[data-s="now"] .idot, .status .mini { animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <h1>촬영 · 마무리 · v10</h1>
+    <p>촬영: 방금 찍은 사진이 주인공, 사진마다 점수(F~A+), 실패한 사진은 제외 폴더로. 디더링·자오선 반전·초점 다시 맞추기·구름 멈춤은 N.I.N.A.가 자동으로 하고 AA는 보여 줍니다. 마무리: 플랫(수동 패널) → 플랫 다크·다크 → 장비 정리 → 오늘 밤 요약. 촬영에 들어가면 적색 테마로 바뀝니다. 모의 시안이라 장비는 움직이지 않습니다.</p>
+  </header>
+  <div class="controls">
+    <button class="ctl" id="replay" type="button">처음부터</button>
+    <span class="lbl">장면</span><span id="jump"></span>
+  </div>
+  <div class="controls">
+    <span class="lbl" style="margin-left:0">촬영 중 일</span>
+    <button class="ctl" id="evFlip" type="button">자오선 반전</button>
+    <button class="ctl" id="evFocus" type="button">초점 다시 (기온)</button>
+    <button class="ctl" id="evCloud" type="button">구름</button>
+    <button class="ctl" id="evBad" type="button">다음 사진 실패 (별 흐름)</button>
+    <button class="ctl" id="evLow" type="button">대상이 낮아짐 (끝)</button>
+    <span class="lbl">테마</span>
+    <button class="ctl" data-t="dark" type="button" aria-pressed="true">어둡게</button>
+    <button class="ctl" data-t="light" type="button" aria-pressed="false">밝게</button>
+    <button class="ctl" data-t="night" type="button" aria-pressed="false">촬영</button>
+  </div>
+  <div class="frame"><div class="app" id="app" data-t="dark">
+    <div class="bar"><span class="brand">AA</span><span class="ver">v0.0.38</span><span class="prof"><span class="ava"></span>별보는사람</span>
+      <span class="devs"><span class="dev"><span class="dot"></span>WandererBox</span><span class="dev"><span class="dot"></span>On-Step</span><span class="dev"><span class="dot"></span>Pleiades68</span><span class="dev"><span class="dot"></span>X-T5</span><span class="dev"><span class="dot"></span>Oasis Focuser</span><span class="dev"><span class="dot"></span>PHD2</span></span>
+      <span class="site">위도 37.82° · 경도 127.14°</span><time class="clock" id="clock">21:12</time></div>
+    <div class="body">
+      <div class="screen" id="screen"></div>
+      <nav class="rail" id="rail" aria-label="촬영 진행"></nav>
+    </div>
+  </div></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var app = document.getElementById('app');
+  var $ = function (id) { return document.getElementById(id); };
+  var CHECK = '<svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
+  var WARN = '<svg class="i" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>';
+  function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  var timers = [], ivals = [];
+  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+  function every(fn, ms) { var h = setInterval(fn, ms); ivals.push(h); return h; }
+  function clearAll() { timers.forEach(clearTimeout); ivals.forEach(clearInterval); timers = []; ivals = []; }
+
+  // ── 상태 ──
+  var STAGES = ['연결', '점검', '장비 준비', '대상', '촬영', '마무리'];
+  var RIG = ['극축 정렬', '캘리브레이션', '초점'];
+  var TARGET = ['계획', '이동', '센터링', '초점 확인', '가이딩', '시험 사진'];
+  var preplanned = false, tempChanged = false, hfrBad = false;
+  var stage = 4, taskAt = 0;
+  var CANDIDATES = {
+    'M31': { name: 'M31 안드로메다', sub: '안드로메다자리 은하', alt: '19:36–05:02', top: '00:16 · 87°', moon: '99°', size: '화면 가로의 약 61%', shots: 182, k: 2.2 },
+    'M33': { name: 'M33 삼각형자리 은하', sub: '삼각형자리 은하', alt: '20:05–04:48', top: '00:41 · 69°', moon: '88°', size: '화면 가로의 약 27%', shots: 168, k: 1.2 },
+    'NGC 7000': { name: 'NGC 7000 북아메리카 성운', sub: '백조자리 성운', alt: '19:36–02:10', top: '20:28 · 84°', moon: '112°', size: '화면을 넘침 (일부만)', shots: 132, k: 3.4 }
+  };
+  var target = null, compose = '가운데';
+
+  // ── 진행 표시: 처음 한 번만 만들고 이후엔 상태만 바꿔 부드럽게 넘어간다 ──
+  // 점(단계·작업)마다 위(in)·아래(out) 반쪽 선이 있고, 진행 위치까지 초록으로 채운다.
+  // 앞으로 갈 때는 지난 점에서 다음 점까지 반쪽씩 차례로 채워 선이 한쪽 끝부터 자라게 하고,
+  // 단계를 넘을 때는 새 단계 점에 닿은 뒤 작업 묶음을 접고 펴서 이어 그린다.
+  var NODES = [], GROUPS = {}, railAt = null, railT = [];
+  var REDUCE = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function groupOf(i) { return i === 2 ? RIG : i === 3 ? TARGET : i === 5 ? WRAP : null; }
+  function buildRail() {
+    var h = '<ol class="track">';
+    STAGES.forEach(function (s, i) {
+      h += '<li class="node stage"' + (i === STAGES.length - 1 ? ' data-last' : '') + '><i class="ln in"><b></b></i><i class="ln out"><b></b></i><span class="sname">' + s + '</span><span class="sdot">' + CHECK + '</span></li>';
+      var g = groupOf(i);
+      if (g) h += '<li class="grp" data-g="' + i + '"><ol class="items">' + g.map(function (t) { return '<li class="node item"><i class="ln in"><b></b></i><i class="ln out"><b></b></i><span class="iname">' + t + '</span><span class="idot"></span></li>'; }).join('') + '</ol></li>';
+    });
+    $('rail').innerHTML = h + '</ol><div class="railEnd"></div>';
+    var si = -1, j = 0;
+    $('rail').querySelectorAll('.node').forEach(function (el) {
+      if (el.classList.contains('stage')) { si++; j = -1; } else j++;
+      NODES.push({ el: el, s: si, j: j, inL: el.querySelector('.ln.in'), outL: el.querySelector('.ln.out') });
+    });
+    $('rail').querySelectorAll('.grp').forEach(function (g) { GROUPS[g.dataset.g] = g; });
+  }
+  function nodeAt(st, tk) {
+    if (st >= STAGES.length) { for (var q = NODES.length - 1; q >= 0; q--) if (NODES[q].j < 0) return q; }
+    var g = groupOf(st), j = g ? Math.min(Math.max(tk, 0), g.length - 1) : -1;
+    for (var k = 0; k < NODES.length; k++) if (NODES[k].s === st && NODES[k].j === j) return k;
+    return 0;
+  }
+  // tk에 .5를 더해 주면 그 작업까지 완료이고 진행 중인 작업은 없다 (선이 다음 점으로 흘러가는 동안)
+  function applyStates(st, tk) {
+    railEnd(st);
+    NODES.forEach(function (n) {
+      var v = n.j < 0 ? (n.s < st ? 'done' : n.s === st ? 'now' : 'todo')
+        : n.s < st ? 'done' : n.s > st ? 'todo' : n.j < tk ? 'done' : n.j === tk ? 'now' : 'todo';
+      if (n.el.dataset.s !== v) n.el.dataset.s = v;
+    });
+    Object.keys(GROUPS).forEach(function (k) {
+      var g = GROUPS[k];
+      if (+k === st && !g.hasAttribute('data-open')) {
+        g.setAttribute('data-open', ''); g.style.height = g.firstElementChild.offsetHeight + 'px';
+        setTimeout(function () { if (g.hasAttribute('data-open')) g.setAttribute('data-settled', ''); }, REDUCE ? 0 : 480);
+      } else if (+k !== st && g.hasAttribute('data-open')) { g.removeAttribute('data-open'); g.removeAttribute('data-settled'); g.style.height = '0px'; }
+    });
+  }
+  function setLine(l, on, delay, dur) {
+    l.style.setProperty('--dl', delay + 'ms'); l.style.setProperty('--dur', dur + 'ms');
+    if (on) l.setAttribute('data-f', ''); else l.removeAttribute('data-f');
+  }
+  function fillTo(p) { NODES.forEach(function (n, k) { setLine(n.inL, k <= p, 0, 0); setLine(n.outL, k < p, 0, 0); }); }
+  function railEnd(st) {
+    var h = (st === 2 || st === 3 ? '<button type="button">' + (st === 2 ? '준비 중단' : '대상 중단') + '</button>' : st === 4 && S && S.mode !== 'end' ? '<button type="button" id="endShoot">촬영 중단</button>' : '') +
+      // AA 종료: 마지막 요약 화면(가운데에 AA 종료 버튼)에서는 숨김, 그 전에는 확인 창
+      (st < STAGES.length ? '<button type="button" class="exit" id="quitApp">AA 종료</button>' : '');
+    var e = $('rail').querySelector('.railEnd'); if (e.innerHTML !== h) e.innerHTML = h;
+    var b = e.querySelector('#endShoot'); if (b) b.onclick = function () { if (S && S.mode !== 'end' && S.mode !== 'finish') endAsk(); };
+    var q = e.querySelector('#quitApp'); if (q) q.onclick = function () { askQuit(STAGES[st]); };
+  }
+  function askQuit(name) {
+    var d = document.createElement('div');
+    d.className = 'confirm';
+    d.innerHTML = '<div class="box" role="dialog" aria-modal="true"><p>' + esc(name) + ' 진행을 종료하고 AA를 종료합니다.</p><div><button type="button" class="ok">종료</button><button type="button" class="no">취소</button></div></div>';
+    app.appendChild(d);
+    var close = function () { d.remove(); };
+    d.querySelector('.no').onclick = close;
+    d.querySelector('.ok').onclick = function () { close(); };
+    d.onclick = function (ev) { if (ev.target === d) close(); };
+    d.querySelector('.no').focus();
+  }
+  function rail() {
+    if (!NODES.length) buildRail();
+    var to = { s: stage, t: taskAt, p: nodeAt(stage, taskAt) }, from = railAt;
+    if (from && from.s === to.s && from.p === to.p && from.t === to.t) return;
+    railT.forEach(clearTimeout); railT = []; railAt = to;
+    function at(ms, fn) { if (ms <= 0) fn(); else railT.push(setTimeout(fn, ms)); }
+    if (!from || REDUCE) { applyStates(to.s, to.t); fillTo(to.p); return; }
+    var open = from.s, t = 0, k, n, m;
+    function vis(x) { return x.j < 0 || x.s === open; }
+    function line(l, on, x, d) { var v = vis(x); setLine(l, on, v ? t : 0, v ? d : 0); if (v) t += d; }
+    if (to.p > from.p) {
+      var d = Math.max(110, Math.min(240, 1500 / (2 * (to.p - from.p))));
+      applyStates(from.s, NODES[from.p].j < 0 ? -1 : NODES[from.p].j + .5);   // 지금 작업 완료 → 선이 출발
+      for (k = from.p; k < to.p; k++) {
+        n = NODES[k]; m = NODES[k + 1];
+        line(n.outL, true, n, d);
+        line(m.inL, true, m, d);
+        if (m.j < 0 && m.s !== open) {           // 새 단계 점에 닿음 → 작업 묶음을 바꾸고 이어 그린다
+          at(t, applyStates.bind(null, m.s, -1));
+          open = m.s; t += 420;
+        } else if (k + 1 === to.p) at(t, applyStates.bind(null, to.s, to.t));
+        else if (m.j >= 0) at(t, applyStates.bind(null, m.s, m.j + .5));
+      }
+    } else {
+      // 뒤로 (다른 대상·다시 하기): 선을 아래에서 위로 빠르게 거둔 뒤 상태를 맞춘다
+      if (from.s === to.s) applyStates(to.s, to.t - .5);
+      for (k = from.p; k > to.p; k--) {
+        n = NODES[k]; m = NODES[k - 1];
+        line(n.inL, false, n, 70);
+        line(m.outL, false, m, 70);
+      }
+      at(t, applyStates.bind(null, to.s, to.t));
+    }
+  }
+
+  // ── 하늘 화면 그리기 ──
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  var VW = 1770, VH = 1156, FX = 885, FY = 470;
+  function stars(n, seed, dim, k) { var r = rng(seed), s = ''; for (var i = 0; i < n; i++) { var m = r(); var rad = (m > .985 ? 3.4 : m > .93 ? 2.1 : m > .7 ? 1.4 : .9) * (k || 1); s += '<circle class="star" cx="' + (r() * VW).toFixed(1) + '" cy="' + (r() * VH).toFixed(1) + '" r="' + rad.toFixed(2) + '" opacity="' + ((dim || 1) * (.35 + m * .65)).toFixed(2) + '"/>'; } return s; }
+  function galaxy(cx, cy, k) { return '<g transform="translate(' + cx + ' ' + cy + ') rotate(-38) scale(' + k + ')" opacity=".9"><ellipse rx="150" ry="42" class="star" opacity=".07"/><ellipse rx="105" ry="28" class="star" opacity=".11"/><ellipse rx="60" ry="16" class="star" opacity=".2"/><ellipse rx="22" ry="8" class="star" opacity=".55"/></g>'; }
+  function nebula(cx, cy) { return '<g opacity=".5"><ellipse cx="' + cx + '" cy="' + cy + '" rx="360" ry="240" class="star" opacity=".05"/><ellipse cx="' + (cx - 60) + '" cy="' + (cy + 30) + '" rx="220" ry="150" class="star" opacity=".07"/><ellipse cx="' + (cx + 90) + '" cy="' + (cy - 60) + '" rx="150" ry="90" class="star" opacity=".08"/></g>'; }
+  function sky(inner) { return '<div class="view"><svg viewBox="0 0 ' + VW + ' ' + VH + '" preserveAspectRatio="xMidYMid slice">' + inner + '</svg></div><div class="scrim"></div>'; }
+
+  // ── 하늘 위 화면 (장비 준비·대상 묶음): 안내 + 중앙 정보 ──
+  function overlay(o) {
+    var acts = o.buttons || [];
+    var prim = acts.filter(function (b) { return b.primary; })[0] || null;
+    var rest = acts.filter(function (b) { return b !== prim; });
+    var sk = o.status ? (o.status.k === 'busy' ? '<span class="mini"></span>' : o.status.k === 'ok' ? CHECK : o.status.k === 'warn' ? WARN : '') : '';
+    var quietOnly = !prim && rest.length;
+    return '<section class="guide"><div class="gtitle"><span>' + esc(o.task) + '</span><i>—</i><h2>' + esc(o.title) + '</h2></div><p class="gtext">' + esc(o.text || '') + '</p></section>' +
+      '<section class="center"><div class="readout">' + (o.readout || '') + '</div>' +
+      '<p class="status"' + (o.status ? ' data-k="' + o.status.k + '"' : '') + '>' + sk + '<span>' + esc(o.status ? o.status.t : '') + '</span></p>' +
+      (quietOnly ? '<div class="actions only">' + rest.map(function (b, i) { return '<button type="button" class="quiet" data-b="' + (i + 1) + '">' + esc(b.label) + '</button>'; }).join('') + '</div></section>' + (o.extra || '') : '') + (quietOnly ? '' :
+      '<div class="actions" data-empty="' + (prim ? 0 : 1) + '">' + (prim ? '<button type="button" class="primary" data-b="0">' + esc(prim.label) + '</button>' : '') +
+      '<div class="secondary">' + rest.map(function (b, i) { return '<button type="button" class="quiet" data-b="' + (i + 1) + '">' + esc(b.label) + '</button>'; }).join('') + '</div></div></section>' + (o.extra || ''));
+  }
+  var lastKey = '';
+  // 장면(작업)이 바뀔 때만 페이드. 같은 작업 안에서 값이 바뀌면 그대로 다시 그린다 (깜빡이지 않게)
+  function show(html, sky1, o) {
+    app.dataset.sky = sky1 ? '1' : '0';
+    var key = stage + ':' + (o ? o.task : 'plan');
+    $('screen').innerHTML = '<div class="' + (key !== lastKey ? 'fade' : '') + '" style="position:absolute;inset:0">' + html + '</div>';
+    lastKey = key;
+    rail();
+    if (NODES.length) railEnd(stage);
+    if (o && o.buttons) {
+      var prim = o.buttons.filter(function (b) { return b.primary; })[0] || null;
+      var rest = o.buttons.filter(function (b) { return b !== prim; });
+      var list = [prim].concat(rest);
+      $('screen').querySelectorAll('[data-b]').forEach(function (el) { el.onclick = function () { list[+el.dataset.b].onClick(); }; });
+    }
+  }
+  function metric(big, cap, k) { return '<strong' + (k ? ' data-k="' + k + '"' : '') + '>' + esc(big) + '</strong><span>' + esc(cap) + '</span>'; }
+
+  // ───────── 촬영 (v10) ─────────
+  // 시퀀스는 N.I.N.A.가 돌린다 (디더링·자오선 반전·재초점도 N.I.N.A.). AA는 이벤트를 받아 보여 주고, 사진마다 점수를 매겨 실패한 사진은 제외 폴더로.
+  // 시안 시간: 실제 180초 노출을 4초쯤으로 줄여 보여 준다
+  var EXP = 180, STEP = 9, SPARK = 48;
+  var S = null, nightTargets = [];
+  var theme0 = null;
+  function setTheme(t) { app.dataset.t = t; document.querySelectorAll('.controls [data-t]').forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.t === t)); }); }
+  function hm(sec) { var m = Math.round(sec / 60), h = Math.floor(m / 60); return h && !(m % 60) ? h + '시간' : (h ? h + '시간 ' : '') + (m % 60) + '분'; }
+  // 등급: 그날 밤 초점 때 별 크기(2.1)와 가이딩 오차 기준 (실제 장비로 기준값을 다듬는다)
+  function letter(h, gd) { var r = h / 2.1; return r <= 1.05 && gd <= .6 ? 'A+' : r <= 1.15 ? 'A' : r <= 1.3 ? 'B' : 'C'; }
+  function newShoot() {
+    var r = rng(7), i;
+    S = { n: 47, total: 182, t: 0, guide: [], hfr: [], frames: [], excluded: 2, flipIn: 14 * 60, mode: 'shoot', note: null, forceBad: false, low: false, seed: 300, last: null };
+    for (i = 0; i < SPARK; i++) { S.guide.push(.5 + r() * .22); }
+    for (i = 0; i < 20; i++) { S.hfr.push(2.12 + r() * .16); }
+    [['A', 2.18], ['A', 2.24], ['B', 2.5], ['A', 2.16], ['F', 0], ['A', 2.26], ['A', 2.19], ['A+', 2.11]].forEach(function (g, k) {
+      S.frames.push({ n: 40 + k, g: g[0], h: g[1], gd: .6, why: g[0] === 'F' ? '별이 흘렀어요 · 제외 폴더로' : '별 크기 ' + g[1].toFixed(1) + ' · 별 둥긂 · 가이딩 0.6″' });
+    });
+    S.last = S.frames[S.frames.length - 1];
+    if (nightTargets.indexOf(target) < 0) nightTargets.push(target);
+  }
+  function spark(arr, lo, hi, n) {
+    var d = '', w = 300, h = 58;
+    arr.slice(-n).forEach(function (v, i, a) { var x = i * w / (n - 1) + (n - a.length) * w / (n - 1); var y = 2 + h - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo) * h; d += (i ? 'L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1); });
+    return '<svg viewBox="0 0 300 62"><line class="gl" x1="0" y1="61" x2="300" y2="61"/><path class="gp" d="' + d + '"/></svg>';
+  }
+  function photo(bad) {
+    var c = CANDIDATES[target], r = rng(99), s = '';
+    if (bad) {
+      // 실패한 사진: 별이 한쪽으로 흐름
+      for (var i = 0; i < 700; i++) { var m = r(); s += '<ellipse class="star" cx="' + (r() * VW).toFixed(1) + '" cy="' + (r() * VH).toFixed(1) + '" rx="' + (m > .93 ? 9 : 5) + '" ry="' + (m > .93 ? 2.2 : 1.1) + '" transform="rotate(24)" opacity="' + (.3 + m * .6).toFixed(2) + '"/>'; }
+      return s + (target === 'NGC 7000' ? nebula(FX, FY) : galaxy(FX, FY, c.k));
+    }
+    return stars(900, 99, 1, 1.1) + (target === 'NGC 7000' ? nebula(FX, FY) : galaxy(FX, FY, c.k));
+  }
+  function scoreCard() {
+    var f = S.last, t = tally();
+    return '<div class="score"><span class="g"' + (f.g === 'F' ? ' data-x' : '') + '>' + f.g + '</span>' +
+      '<ul class="tally" aria-label="등급별 누적 장수">' + GRADES.map(function (g) {
+        return '<li' + (g === 'F' ? ' data-x' : '') + (g === f.g ? ' data-now' : '') + '><b tabindex="0" data-tip="' + TIPS[g] + '">' + g + '</b><span>' + t[g] + '장</span></li>';
+      }).join('') + '</ul></div>';
+  }
+  // 등급별 누적 장수: 이 시안이 보여 주는 최근 사진 앞(1~39번)은 정해 둔 분포 + 그 뒤는 실제로 찍힌 것
+  var GRADES = ['A+', 'A', 'B', 'C', 'F'];
+  var BASE = { 'A+': 5, 'A': 18, 'B': 10, 'C': 4, 'F': 1 };
+  var TIPS = {
+    'A+': 'A+ · 가장 좋음: 별 크기가 초점 맞출 때와 거의 같고(5% 안), 별이 둥글고, 가이딩 오차가 작아요.',
+    'A': 'A · 좋음: 별 크기가 초점 때보다 15% 안으로 커졌고 별이 둥글어요.',
+    'B': 'B · 괜찮음: 별 크기가 초점 때보다 30% 안으로 커졌거나 별이 조금 길쭉해요. 스태킹에 그대로 써요.',
+    'C': 'C · 아쉬움: 별 크기가 초점 때보다 30% 넘게 커졌거나 배경이 밝아요. 쓸 수는 있지만 결과를 조금 떨어뜨릴 수 있어요.',
+    'F': 'F · 실패: 별이 흘렀거나(바람·케이블 걸림), 구름으로 별이 크게 줄었거나, 잡광이 들어왔어요. 이 사진은 제외 폴더로 따로 옮겨요.'
+  };
+  function tally() {
+    var t = {};
+    GRADES.forEach(function (g) { t[g] = BASE[g]; });
+    S.frames.forEach(function (f) { t[f.g]++; });
+    return t;
+  }
+  function gauges() {
+    var gd = S.guide[S.guide.length - 1], h = S.hfr[S.hfr.length - 1], pct = Math.min(100, S.n / S.total * 100);
+    var flip = S.flipIn > 0 ? '자오선 반전 23:41 (' + Math.max(1, Math.ceil(S.flipIn / 60)) + '분 뒤, 자동)' : '자오선 반전 마침';
+    return '<div class="gauges">' +
+      '<div class="gauge">' + spark(S.guide, 0, 1.6, SPARK) + '<b>' + gd.toFixed(1) + '″</b><span>가이딩 오차 · 충분해요</span></div>' +
+      '<div class="prog"><strong>' + S.n + ' <small>/ ' + S.total + '장</small></strong><span class="exp">' + expText() + '</span><div class="meter"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
+      '<span>누적 ' + hm(S.n * EXP) + ' · 끝 예상 05:02 · ' + flip + '</span></div>' +
+      '<div class="gauge">' + spark(S.hfr, 1.6, 3.2, 20) + '<b>' + h.toFixed(1) + '</b><span>별 크기(HFR) · 초점 때 2.1</span></div></div>';
+  }
+  function expText() {
+    if (!S) return '';
+    if (S.mode === 'dither') return '디더링 · 가이딩 안정 기다리는 중';
+    if (S.mode === 'shoot' || S.mode === 'ask') return '노출 중 · ' + Math.round(S.t) + ' / ' + EXP + '초 · ISO 800';
+    return '촬영 멈춤';
+  }
+  function shootGuide() {
+    var c = CANDIDATES[target];
+    return { task: '촬영', title: c.name + ' 촬영 중', text: '계획대로 ' + EXP + '초씩 찍고 있어요. 사진마다 점수를 매겨 실패한 사진은 제외 폴더로 옮겨요. 자오선 반전·디더링·초점 다시 맞추기는 자동이에요.' };
+  }
+  function renderShoot() {
+    var o = shootGuide();
+    o.readout = gauges();
+    var left = Math.max(0, EXP - S.t);
+    o.status = S.note;
+    o.extra = scoreCard();
+    show(sky(photo(S.last.g === 'F')) + overlay(o), true, o);
+  }
+  function note(k, t, ms) { S.note = { k: k, t: t }; later(function () { S.note = null; }, ms || 2600); }
+  function frameDone() {
+    var r = rng(S.seed++), h = 2.1 + r() * .3, gd = S.guide[S.guide.length - 1];
+    S.n++; S.t = 0;
+    var bad = S.forceBad; S.forceBad = false;
+    var f = bad ? { n: S.n, g: 'F', h: 0, gd: gd, why: '' } : { n: S.n, g: letter(h, gd), h: h, gd: gd, why: '별 크기 ' + h.toFixed(1) + ' · 별 둥긂 · 가이딩 ' + gd.toFixed(1) + '″' };
+    S.frames.push(f); S.last = f;
+    if (!bad) S.hfr.push(h);
+    if (bad) { S.excluded++; note('warn', S.n + '번 사진: 별이 흘렀어요 (바람·케이블 걸림 등) · 제외 폴더로 옮겼어요', 3200); }
+    if (S.low) { endScene('low'); return; }
+    if (S.n % 3 === 0 && !bad) { S.mode = 'dither'; later(function () { if (S.mode === 'dither') S.mode = 'shoot'; }, 1400); }
+  }
+  function tick() {
+    if (S.mode === 'shoot') {
+      S.t += STEP;
+      S.guide.push(.48 + rng(S.seed + S.t)() * .24);
+      if (S.t >= EXP) frameDone();
+    }
+    if (S.mode === 'shoot' || S.mode === 'dither') {
+      S.flipIn -= STEP;
+      if (S.flipIn <= 0 && S.flipIn > -STEP) { flipScene(); return; }
+      if (S.mode === 'shoot' || S.mode === 'dither') renderShoot();
+    }
+  }
+  function shootScene() {
+    clearAll(); stage = 4; taskAt = 0;
+    target = target || 'M31';
+    if (app.dataset.t !== 'night') { theme0 = app.dataset.t; setTheme('night'); } // 촬영에 들어가면 적색 테마로
+    newShoot();
+    renderShoot();
+    every(tick, 200);
+  }
+  function ensureShoot() { if (!S || stage !== 4 || S.mode === 'end') shootScene(); }
+
+  // 자오선 반전: N.I.N.A.가 자동으로 (찍던 사진을 마친 뒤 반전 → 다시 센터링 → 가이딩 재시작)
+  function flipScene() {
+    ensureShoot();
+    S.mode = 'flip'; S.flipIn = -1;
+    var steps = ['반전', '다시 센터링', '가이딩 재시작'], at = 0;
+    function draw() {
+      var o = { task: '촬영', title: '자오선 반전 중이에요', text: '대상이 자오선을 지나 N.I.N.A.가 적도의를 반대편으로 돌리고 있어요. 다시 가운데로 맞추고 가이딩을 켠 뒤 이어서 찍어요. 찍은 사진은 그대로예요.' };
+      o.readout = '<div class="seq">' + steps.map(function (s, k) { var st = k < at ? 'done' : k === at ? 'now' : 'todo'; return '<span data-s="' + st + '">' + (st === 'done' ? CHECK : '') + s + '</span>'; }).join('') + '</div>' +
+        '<span style="margin-top:14px">반전 뒤 사진은 180° 돌아가 찍혀요 · 스태킹 때 별 위치로 맞춰져요</span>';
+      o.status = { k: 'busy', t: '촬영을 잠시 멈췄어요 · ' + (at + 1) + ' / 3' };
+      o.extra = scoreCard();
+      show(sky('<g opacity=".3">' + photo(false) + '</g>') + overlay(o), true, o);
+    }
+    draw();
+    var h = every(function () {
+      at++;
+      if (at >= steps.length) { clearInterval(h); S.mode = 'shoot'; S.t = 0; note('ok', '자오선 반전을 마쳤어요 · 다시 찍어요', 2600); renderShoot(); return; }
+      draw();
+    }, 1500);
+  }
+  // 구름: 가이드 별을 잃으면 N.I.N.A.가 멈추고, 돌아오면 이어서
+  function cloudScene() {
+    ensureShoot();
+    S.mode = 'cloud';
+    var sec = 0;
+    function draw(back) {
+      var o = back ? { task: '촬영', title: '별이 돌아왔어요', text: '가이딩을 다시 켜고 이어서 찍어요. 구름이 지나간 사진은 점수를 보고 제외 폴더로 옮겼어요.' }
+        : { task: '촬영', title: '구름이 지나가고 있어요', text: '가이드 별을 잃어 촬영을 잠시 멈췄어요. 별이 돌아오면 자동으로 이어서 찍어요. 그동안 찍은 사진은 그대로예요.' };
+      o.readout = gauges();
+      o.status = back ? { k: 'ok', t: '다시 찍어요' } : { k: 'warn', t: '멈춤 · 별이 돌아오기를 기다리는 중 · ' + sec + '분째' };
+      o.extra = scoreCard();
+      var clouds = '<defs><filter id="cl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70"/></filter></defs><g opacity=".16" filter="url(#cl)"><ellipse class="star" cx="500" cy="420" rx="520" ry="200"/><ellipse class="star" cx="1150" cy="560" rx="620" ry="240"/><ellipse class="star" cx="820" cy="300" rx="400" ry="150"/></g>';
+      show(sky('<g opacity="' + (back ? 1 : .35) + '">' + photo(false) + '</g>' + (back ? '' : clouds)) + overlay(o), true, o);
+    }
+    draw(false);
+    var h = every(function () {
+      sec++;
+      if (sec >= 5) {
+        clearInterval(h); S.excluded++; S.frames.push({ n: ++S.n, g: 'F', h: 0, gd: 2.4, why: '구름 · 별이 적어요 · 제외 폴더로' }); S.last = S.frames[S.frames.length - 1];
+        draw(true); later(function () { S.mode = 'shoot'; S.t = 0; }, 1800); return;
+      }
+      draw(false);
+    }, 700);
+  }
+  // 초점 다시 맞추기: 기온·별 크기를 보고 N.I.N.A.가 자동으로 (찍던 사진을 마친 뒤)
+  function refocusScene() {
+    ensureShoot();
+    S.mode = 'focus';
+    var POS = [11760, 11910, 12060, 12210, 12360, 12510, 12660, 12810, 12960], best = 12410, n = 0;
+    var X0 = 520, X1 = 1250, Y0 = 640, Y1 = 330;
+    function px(p) { return X0 + (X1 - X0) * (p - POS[0]) / (POS[8] - POS[0]); }
+    function hf(p) { return 2.05 + Math.pow((p - best) / 300, 2) * .55; }
+    function py(h) { return Y0 - (Y0 - Y1) * (Math.min(h, 6.5) - 1.5) / 5; }
+    function draw() {
+      var s = '<g opacity=".25">' + photo(false) + '</g><line class="grid" x1="' + X0 + '" y1="' + Y0 + '" x2="' + X1 + '" y2="' + Y0 + '"/>';
+      for (var i = 0; i < n; i++) s += '<circle cx="' + px(POS[i]) + '" cy="' + py(hf(POS[i])) + '" r="7" class="' + (i === n - 1 ? 'accFill' : 'star') + '"/>';
+      var o = { task: '촬영', title: '초점을 다시 맞추고 있어요', text: '초점을 맞춘 뒤 기온이 2.1°C 내려갔어요. 찍던 사진을 마치고 자동으로 다시 맞춘 뒤 이어서 찍어요.' };
+      o.readout = n ? metric(hf(POS[n - 1]).toFixed(1), '별 크기 (HFR) · 이번 지점') : metric('2.1°C', '초점 맞춘 뒤 기온 변화 · 기준 2°C', 'warn');
+      o.status = { k: 'busy', t: '자동초점 중입니다 · ' + n + ' / 9 지점' };
+      o.extra = scoreCard();
+      show(sky(s) + overlay(o), true, o);
+    }
+    draw();
+    var h = every(function () {
+      n++;
+      if (n > 9) { clearInterval(h); S.mode = 'shoot'; S.t = 0; S.hfr.push(2.1); note('ok', '초점을 다시 맞췄어요 · 별 크기 2.1 · 위치 12,410', 2800); renderShoot(); return; }
+      draw();
+    }, 320);
+  }
+  // 지금 찍는 사진은 끝까지 찍고 멈춘다 (끝내고 마무리 · 끝내고 다른 대상 공통)
+  function finishThen(title, text, then) {
+    S.mode = 'finish';
+    var left = Math.max(20, EXP - S.t);
+    function draw() {
+      var o = { task: '촬영', title: title, text: text };
+      o.readout = gauges();
+      o.status = left > 0 ? { k: 'busy', t: '지금 사진을 마치는 중 · ' + left + '초 남음' } : { k: 'busy', t: '가이딩을 멈추고 확인하는 중입니다' };
+      o.extra = scoreCard();
+      show(sky(photo(S.last.g === 'F')) + overlay(o), true, o);
+    }
+    draw();
+    var done = false;
+    var h = every(function () {
+      left = Math.max(0, left - 15);
+      if (left === 0 && !done) { done = true; S.n++; S.frames.push({ n: S.n, g: 'A', h: 2.18, gd: .6, why: '별 크기 2.2 · 별 둥긂 · 가이딩 0.6″' }); S.last = S.frames[S.frames.length - 1]; draw(); later(function () { clearInterval(h); then(); }, 1100); return; }
+      if (!done) draw();
+    }, 200);
+  }
+  // 다른 대상은 전용 기능이 아니라 "촬영을 끝내고 대상 단계로" (2026-10-07 사용자 결정)
+  function backToTarget() {
+    clearAll(); stage = 3; taskAt = 0; S.mode = 'end';
+    if (theme0) { setTheme(theme0); theme0 = null; } // 촬영 전 테마로
+    show('<div class="backto"><div><h2>대상 · 계획</h2>v9의 계획 화면으로 돌아왔어요. ' + esc(CANDIDATES[target].name) + '에서 찍은 ' + S.n + '장은 그 대상 폴더에 그대로 있어요.<br>대상을 고르면 이동 → 센터링 → … → 시험 사진 → 촬영으로 다시 이어져요.<br><button type="button" class="ctl" id="againShoot">M33으로 다시 촬영 (시안)</button></div></div>', false);
+    $('againShoot').onclick = function () { target = 'M33'; shootScene(); };
+  }
+  function endAsk() {
+    ensureShoot();
+    S.mode = 'ask';
+    var o = { task: '촬영', title: '촬영을 중단할까요?', text: '지금 찍는 사진은 끝까지 찍고 멈춰요. 오늘 밤을 마무리하거나, 다른 대상을 고르러 대상 단계로 돌아갈 수 있어요. 장비 준비는 그대로 써요.' };
+    o.readout = gauges(); o.status = null; o.extra = scoreCard();
+    o.buttons = [{ label: '끝내고 마무리하기', primary: true, onClick: function () { finishThen('촬영을 끝내는 중이에요', '지금 사진까지 찍고 가이딩을 멈춰요.', function () { endScene('user'); }); } },
+      { label: '다른 대상으로 변경', onClick: function () { finishThen('촬영을 끝내는 중이에요', '지금 사진까지 찍고 가이딩을 멈춰요. 그다음 대상 단계(계획)로 돌아가요.', backToTarget); } },
+      { label: '계속 찍기', onClick: function () { S.mode = 'shoot'; renderShoot(); } }];
+    show(sky(photo(S.last.g === 'F')) + overlay(o), true, o);
+  }
+  // 촬영 끝: 끝 조건(대상이 낮아짐·새벽) 또는 사용자. 결과를 보여 주고 주 버튼이 곧 마무리의 첫 작업
+  function endScene(why) {
+    clearAll(); stage = 4; taskAt = 0;
+    if (!S) newShoot();
+    S.mode = 'end';
+    var c = CANDIDATES[target];
+    var o = { task: '촬영', title: '촬영을 마쳤어요',
+      text: (why === 'done' ? '계획한 ' + S.total + '장을 다 찍었어요. ' : why === 'low' ? target + '이 30° 아래로 내려가 계획대로 끝냈어요. ' : why === 'dawn' ? '새벽 박명이 시작돼 끝냈어요. ' : '') + '가이딩을 멈췄어요. 이제 보정 프레임(플랫·다크)을 찍고 장비를 정리해요. 아직 밤이 남았으면 다른 대상을 찍어도 돼요.' };
+    o.readout = metric((S.n - S.excluded) + '장', c.name + ' · 찍은 ' + S.n + '장 중 제외 ' + S.excluded + '장(제외 폴더) · 누적 ' + hm((S.n - S.excluded) * EXP), 'ok');
+    o.status = { k: 'ok', t: '가이딩을 멈췄어요' };
+    o.buttons = [{ label: '플랫 찍으러 가기', primary: true, onClick: flatScene }, { label: '다른 대상으로 변경', onClick: backToTarget }];
+    o.extra = scoreCard();
+    show(sky(photo(false)) + overlay(o), true, o);
+  }
+
+  // ───────── 마무리 (v10): 플랫 → (뚜껑) → 플랫 다크·다크 → 장비 정리 → 요약 ─────────
+  var WRAP = ['플랫', '다크', '장비 정리'];
+  var darkTotal = 20, skipped = false;
+  function flatScene() {
+    clearAll(); stage = 5; taskAt = 0; skipped = false; darkTotal = 20;
+    if (!S) { target = target || 'M31'; newShoot(); }
+    var o = { task: '플랫', title: '망원경을 위로 보내고 있어요', text: '플랫 패널을 씌우기 쉽게 망원경을 하늘 위쪽으로 돌려요. 초점과 카메라 방향은 촬영 때 그대로 둬요.' };
+    o.readout = metric('30장', '플랫 · 밝기에 맞춰 노출은 AA가 정해요'); o.status = { k: 'busy', t: '적도의가 움직이는 중입니다' };
+    show(sky(stars(260, 5, .3)) + overlay(o), true, o);
+    later(function () {
+      var a = { task: '플랫', title: '플랫 패널을 씌우고 켜 주세요', text: '망원경이 위를 보고 있어요. 패널을 망원경 앞에 씌우고 켠 뒤 눌러 주세요. 초점이나 카메라 방향이 바뀌면 플랫이 맞지 않으니 건드리지 마세요.' };
+      a.readout = metric('30장', '플랫 · 밝기에 맞춰 노출은 AA가 정해요'); a.status = { k: 'ok', t: '적도의가 위를 보고 있어요' };
+      a.buttons = [{ label: '씌우고 켰어요', primary: true, onClick: flatShoot }, { label: '보정 프레임 건너뛰기', onClick: function () { skipped = true; packScene(); } }];
+      show(sky(stars(260, 5, .3)) + overlay(a), true, a);
+    }, 1600);
+  }
+  function flatShoot() {
+    clearAll(); stage = 5; taskAt = 0;
+    var k = 0;
+    function draw(phase) {
+      var o = { task: '플랫', title: phase === 'find' ? '밝기에 맞는 노출을 찾고 있어요' : '플랫을 찍고 있어요', text: '패널 빛으로 망원경·센서의 먼지와 주변 어두움을 기록해요. 스태킹 때 이걸로 사진의 얼룩을 지워요.' };
+      o.readout = phase === 'find' ? metric('46%', '평균 밝기 · 목표 50% 근처') : metric(k + ' / 30장', '플랫 · 노출 0.8초 · 평균 밝기 50%');
+      o.status = { k: 'busy', t: phase === 'find' ? '노출을 바꿔 가며 밝기를 재는 중입니다' : '플랫 촬영 중입니다' };
+      show('<div class="flatv"></div>' + overlay(o), true, o);
+    }
+    draw('find');
+    later(function () {
+      var h = every(function () {
+        k++;
+        if (k >= 30) { clearInterval(h); capAsk(); return; }
+        draw('shoot');
+      }, 70);
+    }, 1300);
+  }
+  // 플랫 끝 = 다크의 시작 질문 (따로 "플랫 끝" 화면을 두지 않는다)
+  function capAsk() {
+    clearAll(); stage = 5; taskAt = 1;
+    var o = { task: '다크', title: '패널을 끄고 렌즈 뚜껑을 덮어 주세요', text: '플랫은 다 찍었어요. 빛이 들지 않게 덮으면 플랫 다크와 다크를 이어서 찍어요. 그동안 적도의는 홈으로 보내요. 다크를 찍는 동안 다른 짐을 정리하셔도 돼요.' };
+    // 다크 장수: 기본 20, 5장씩 5~40. 끝 시간이 남은 밤에 따라 달라서 시작 전에 바꿀 수 있게 (2026-10-07 사용자 결정)
+    o.readout = '<div class="stepper"><button type="button" data-d="-5" aria-label="5장 줄이기"' + (darkTotal <= 5 ? ' disabled' : '') + '>' + CHEV_L + '</button>' +
+      '<strong>' + darkTotal + '<small>장</small></strong><button type="button" data-d="5" aria-label="5장 늘리기"' + (darkTotal >= 40 ? ' disabled' : '') + '>' + CHEV_R + '</button></div>' +
+      '<span>다크 · 오늘 찍은 사진과 같은 ' + EXP + '초 · ISO 800 × ' + darkTotal + '장 ≈ ' + hm(darkTotal * EXP) + ' (플랫 다크 30장은 약 1분)</span>';
+    o.status = { k: 'ok', t: '플랫 30장을 찍었어요 · 노출 0.8초 · "플랫" 폴더' };
+    o.buttons = [{ label: '덮었어요', primary: true, onClick: darkScene }, { label: '다크 건너뛰기', onClick: packScene }];
+    show('<div class="flatv" style="opacity:.35"></div>' + overlay(o), true, o);
+    $('screen').querySelectorAll('.stepper button').forEach(function (b) {
+      b.onclick = function () { darkTotal = Math.max(5, Math.min(40, darkTotal + +b.dataset.d)); capAsk(); };
+    });
+  }
+  var CHEV_L = '<svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>', CHEV_R = '<svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>';
+  function darkScene() {
+    clearAll(); stage = 5; taskAt = 1;
+    var fd = 0, d = 0, homed = false;
+    function draw() {
+      var o = { task: '다크', title: fd < 30 ? '플랫 다크를 찍고 있어요' : '다크를 찍고 있어요',
+        text: fd < 30 ? '플랫과 같은 노출로 빛 없이 찍어 센서 자체의 신호를 기록해요.' : '촬영과 같은 노출·ISO로 빛 없이 찍어 센서의 열 잡음을 기록해요. 촬영 직후라 센서 온도가 비슷해 잘 맞아요.' };
+      var left = (darkTotal - d) * EXP;
+      o.readout = fd < 30 ? metric(fd + ' / 30장', '플랫 다크 · 노출 0.8초') : metric(d + ' / ' + darkTotal + '장', '다크 · ' + EXP + '초 · ISO 800 · 남은 시간 약 ' + hm(left) + ' (시안은 빠르게)');
+      o.status = { k: 'busy', t: (homed ? '적도의는 홈에 두었어요 · ' : '적도의를 홈으로 보내는 중 · ') + '다크 촬영 중에는 다른 짐을 정리하셔도 돼요' };
+      // 서둘러 떠나야 할 때: 지금까지 찍은 다크만 쓴다
+      o.buttons = fd >= 30 && d > 0 ? [{ label: '여기까지만 찍기 (' + d + '장)', onClick: function () { clearInterval(h); darkTotal = d; packScene(); } }] : [];
+      show(sky(stars(40, 3, .35, .5)) + overlay(o), true, o);
+    }
+    draw();
+    later(function () { homed = true; }, 2200);
+    var h = every(function () {
+      if (fd < 30) fd = Math.min(30, fd + 3); else d++;
+      if (d >= darkTotal) { clearInterval(h); packScene(); return; }
+      draw();
+    }, 260);
+  }
+  // 장비 정리: 할 일이 없으니 묻지 않고 차례로
+  function packScene() {
+    clearAll(); stage = 5; taskAt = 2;
+    var steps = ['적도의 홈 · 추적 끔', '장비 연결 끊기', 'N.I.N.A.·PHD2 닫기'], at = 0;
+    function draw() {
+      var o = { task: '장비 정리', title: '장비를 정리하고 있어요', text: '적도의는 홈에 두고 추적을 껐어요. 장비 연결을 끊고 프로그램을 닫아요. 전원은 이 다음에 끄시면 돼요.' };
+      o.readout = '<div class="seq">' + steps.map(function (s, k) { var st = k < at ? 'done' : k === at ? 'now' : 'todo'; return '<span data-s="' + st + '">' + (st === 'done' ? CHECK : '') + s + '</span>'; }).join('') + '</div>';
+      o.status = { k: 'busy', t: (at + 1) + ' / 3' };
+      show(sky(stars(120, 5, .25)) + overlay(o), true, o);
+    }
+    draw();
+    var h = every(function () { at++; if (at >= steps.length) { clearInterval(h); summaryScene(); return; } draw(); }, 800);
+  }
+  function summaryScene() {
+    clearAll(); stage = STAGES.length; taskAt = 0; // 모든 단계 끝: 작업 묶음을 접고 마무리까지 체크
+    if (!S) { target = target || 'M31'; newShoot(); }
+    var rows = '<span class="hd">대상</span><span class="hd">쓸 사진</span><span class="hd">누적</span><span class="hd">제외 폴더</span>';
+    nightTargets.forEach(function (t) {
+      var n = t === target ? S.n - S.excluded : 41, ex = t === target ? S.excluded : 3;
+      rows += '<b>' + esc(CANDIDATES[t].name) + '</b><b>' + n + '장</b><b>' + hm(n * EXP) + '</b><span>' + ex + '장</span>';
+    });
+    rows += skipped ? '<span>보정 프레임</span><span>건너뜀</span><span></span><span></span>'
+      : '<span>플랫 · 플랫 다크 · 다크</span><b>30 · 30 · ' + darkTotal + '장</b><span>노출 0.8초 · 180초</span><span></span>';
+    var o = { task: '마무리', title: '오늘 밤 촬영을 마쳤어요', text: '찍은 사진과 보정 프레임은 오늘 밤 폴더에 대상별로 정리했어요. 제외 폴더의 사진은 스태킹에 넣지 않으면 돼요. 장비 전원을 끄셔도 돼요.' };
+    o.readout = '<div class="nsum">' + rows + '</div><span style="margin-top:10px">D:\\Astro\\2026-10-07 · 점수 ' + GRADES.map(function (g) { return g + ' ' + tally()[g]; }).join(' · ') + '</span>';
+    o.status = { k: 'ok', t: '적도의는 홈, 장비 연결은 끊었어요' };
+    o.buttons = [{ label: 'AA 종료', primary: true, onClick: function () {} }, { label: '폴더 열기', onClick: function () {} }];
+    show(sky(stars(160, 5, .3)) + overlay(o), true, o);
+    var c = $('screen').querySelector('.center'); if (c) c.classList.add('tall');
+  }
+
+  // ── 시작·조작 ──
+  var SCENES = [['촬영', shootScene], ['자오선 반전', flipScene], ['구름', cloudScene], ['초점 다시', refocusScene], ['촬영 중단', endAsk],
+    ['계획 장수 다 찍음', function () { ensureShoot(); S.n = S.total; endScene('done'); }], ['대상 낮아져 끝', function () { endScene('low'); }], ['플랫', flatScene], ['다크', function () { if (!S) newShoot(); capAsk(); }], ['장비 정리', function () { if (!S) newShoot(); packScene(); }], ['오늘 밤 요약', summaryScene]];
+  $('jump').innerHTML = SCENES.map(function (s, i) { return '<button class="ctl" type="button" data-j="' + i + '">' + s[0] + '</button>'; }).join(' ');
+  document.querySelectorAll('[data-j]').forEach(function (b) { b.onclick = function () { SCENES[+b.dataset.j][1](); }; });
+  $('replay').onclick = function () { S = null; nightTargets = []; target = 'M31'; shootScene(); };
+  $('evFlip').onclick = function () { ensureShoot(); if (S.mode === 'shoot' || S.mode === 'dither') flipScene(); };
+  $('evFocus').onclick = function () { ensureShoot(); if (S.mode === 'shoot' || S.mode === 'dither') refocusScene(); };
+  $('evCloud').onclick = function () { ensureShoot(); if (S.mode === 'shoot' || S.mode === 'dither') cloudScene(); };
+  $('evBad').onclick = function () { ensureShoot(); S.forceBad = true; };
+  $('evLow').onclick = function () { ensureShoot(); S.low = true; note('warn', target + '이 곧 30° 아래로 내려가요 · 이 사진을 마치면 끝내요', 6000); };
+  document.querySelectorAll('.controls [data-t]').forEach(function (b) {
+    b.onclick = function () { app.dataset.t = b.dataset.t; theme0 = null; document.querySelectorAll('.controls [data-t]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); }); };
+  });
+  function fit() { app.style.setProperty('--s', document.querySelector('.frame').clientWidth / 1920); }
+  fit(); if (window.ResizeObserver) new ResizeObserver(fit).observe(document.body); else window.addEventListener('resize', fit);
+  target = 'M31';
+  shootScene();
+})();
+</script>
+</body>
+</html>

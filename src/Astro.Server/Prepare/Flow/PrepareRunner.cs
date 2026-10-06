@@ -27,6 +27,14 @@ public sealed record RunnerSetup(string Group, IReadOnlyDictionary<string, strin
     }, new PrepAction("start", "촬영 시작", true));
 
     /// <summary>한 묶음에 일곱 작업 (재구성 전 순서 — 러너 시험용)</summary>
+    /// <summary>마무리 묶음: 플랫 · 다크 · 장비 정리 (계획 없이, 그날 밤). 마지막 작업이 끝나면 끝 버튼 없이 요약으로</summary>
+    public static readonly RunnerSetup Wrap = new("wrap", new Dictionary<string, string[]>
+    {
+        ["flat"] = [],
+        ["dark"] = [],
+        ["pack"] = [],
+    }, new PrepAction("flow:summary", "오늘 밤 요약", true));
+
     public static readonly RunnerSetup Single = new("all", new Dictionary<string, string[]>
     {
         ["polar"] = ["calibration", "slew", "focus", "center", "guiding", "test"],
@@ -345,6 +353,14 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 _ = AutoNextAsync(cur);
                 return;
             }
+            if (done.AutoNext)
+            {
+                // 묻지 않는 마지막 작업 (마무리의 장비 정리): 끝 버튼 없이 묶음 끝 → 화면이 다음(요약)으로
+                cur.Actions = [];
+                _ready = true;
+                Changed();
+                return;
+            }
             var primary = next is null ? _setup.Finish : new PrepAction("next", next.StartLabel, true);
             cur.Actions = [primary, .. done.Extra ?? []];
             Changed();
@@ -623,6 +639,9 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         "slew" => typeof(SlewResult),
         "focus" => typeof(FocusResult),
         "focuscheck" => typeof(FocusCheckResult),
+        "flat" => typeof(Tasks.Wrap.FlatResult),
+        "dark" => typeof(Tasks.Wrap.DarkResult),
+        "pack" => typeof(Tasks.Wrap.PackResult),
         "center" => typeof(CenterResult),
         "guiding" => typeof(GuidingResult),
         "test" => typeof(TestShotResult),

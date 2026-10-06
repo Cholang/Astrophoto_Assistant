@@ -33,6 +33,7 @@ const FAULTS: Record<string, [string, string][]> = {
   center: [['center.solve', '솔빙'], ['center.hfr', '센터링 사진 별 커짐 (다음 초점 확인)']],
   focuscheck: [['focus.stars', '다시 맞출 때 별 없음']],
   guiding: [['guiding.star', '가이드 별'], ['guiding.calibration', '보정값 불일치']],
+  flat: [['wrap.bright', '패널 너무 밝음']],
   test: [['test.expose', '노출'], ['test.download', '내려받기'], ['test.bright', '배경 밝음']],
 }
 
@@ -82,10 +83,11 @@ export default function PrepareScreen({
         }))
       : undefined
   useRailExtra({
-    stage: group === 'rig' ? '장비 준비' : '대상',
+    stage: group === 'rig' ? '장비 준비' : group === 'wrap' ? '마무리' : '대상',
     sky: true,
     items: group === 'target' ? [PLAN_ITEM, ...(items ?? [])] : items,
-    action: { label: group === 'rig' ? '준비 중단' : '대상 중단', onClick: () => prepareAbort(group) },
+    // 마무리에는 중단 버튼을 두지 않는다 (건너뛰기는 화면 버튼으로)
+    action: group === 'wrap' ? undefined : { label: group === 'rig' ? '준비 중단' : '대상 중단', onClick: () => prepareAbort(group) },
   })
 
   useEffect(() => {

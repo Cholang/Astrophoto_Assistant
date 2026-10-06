@@ -20,6 +20,8 @@ public sealed class PrepareFlow
     };
 
     public static readonly string[] RigTaskIds = ["polar", "calibration", "focus"];
+    /// <summary>마무리 묶음 (DESIGN.md "마무리")</summary>
+    public static readonly string[] WrapTaskIds = ["flat", "dark", "pack"];
 
     private readonly Lock _gate = new();
     private PrepResults _results = new();
@@ -27,13 +29,15 @@ public sealed class PrepareFlow
 
     public PrepareRunner Rig { get; }
     public PrepareRunner Target { get; }
+    public PrepareRunner Wrap { get; }
 
     public PrepareFlow(IEnumerable<IPrepTask> tasks, ILogger<PrepareRunner> log, bool simulated, TimeSpan? autoNextDelay = null)
     {
         var all = tasks.ToList();
         var delay = autoNextDelay ?? TimeSpan.FromSeconds(1.8);
         Rig = new PrepareRunner(all.Where(t => RigTaskIds.Contains(t.Id)), log, RunnerSetup.Rig) { Simulated = simulated, AutoNextDelay = delay };
-        Target = new PrepareRunner(all.Where(t => !RigTaskIds.Contains(t.Id)), log, RunnerSetup.Target) { Simulated = simulated, AutoNextDelay = delay };
+        Target = new PrepareRunner(all.Where(t => !RigTaskIds.Contains(t.Id) && !WrapTaskIds.Contains(t.Id)), log, RunnerSetup.Target) { Simulated = simulated, AutoNextDelay = delay };
+        Wrap = new PrepareRunner(all.Where(t => WrapTaskIds.Contains(t.Id)), log, RunnerSetup.Wrap) { Simulated = simulated, AutoNextDelay = delay };
 
         // 장비 준비 작업이 돌기 전: 대상 묶음이 장비를 쓰고 있으면 멈춰 두고 영향받는 작업을 다시 확인 필요로
         Rig.BeforeRun = id => Target.SuspendAsync(CrossDependents.GetValueOrDefault(id, []), "장비 준비를 다시 하는 중이에요", handoff: "rig");
@@ -73,10 +77,14 @@ public sealed class PrepareFlow
         return null;
     }
 
+    /// <summary>마무리 시작 (그날 밤 하나 — 같은 밤이면 하던 곳에서 그대로). 촬영이 끝난 뒤</summary>
+    public void StartWrap(PrepContext ctx, DateOnly evening) => Wrap.Start(ctx, $"wrap:{evening:yyyy-MM-dd}");
+
     public PrepareRunner? Runner(string group) => group switch
     {
         "rig" => Rig,
         "target" => Target,
+        "wrap" => Wrap,
         _ => null,
     };
 }

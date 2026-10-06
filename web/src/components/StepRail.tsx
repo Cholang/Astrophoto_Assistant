@@ -1,6 +1,8 @@
 import { Check, LogOut } from 'lucide-react'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { closeApp, inDesktop } from '../host'
+import { PRODUCT } from '../product'
+import ConfirmDialog from './ConfirmDialog'
 import styles from './StepRail.module.css'
 
 /** 촬영 단계 (DESIGN.md "진행 표시", "단계 재구성" 2026-10-07). 연결 = 설치 확인·엔진 켜기·장비 연결 */
@@ -22,6 +24,10 @@ export interface RailExtra {
   action?: { label: string; onClick: () => void }
   /** 화면이 하늘 화면(장비 준비·대상)이면 진행 표시도 하늘 위에 얹는다 */
   sky?: boolean
+  /** 화면 가운데에 종료 버튼이 있으면(마지막 요약) 아래 종료 버튼을 숨긴다 — 같은 버튼이 두 곳에 보이지 않게 */
+  hideExit?: boolean
+  /** 모든 단계 끝 (오늘 밤 요약): 마지막 단계까지 완료로, 작업 묶음은 접는다 */
+  complete?: boolean
 }
 
 const RailContext = createContext<(extra: RailExtra | null) => void>(() => {})
@@ -34,7 +40,7 @@ export function RailProvider({ children, onChange }: { children: ReactNode; onCh
 /** 화면에서: 지금 단계의 작업 목록·버튼을 진행 표시에 보낸다 (화면을 떠나면 지움) */
 export function useRailExtra(extra: RailExtra | null) {
   const set = useContext(RailContext)
-  const key = (extra?.stage ?? '') + JSON.stringify(extra?.items ?? null) + (extra?.action?.label ?? '') + (extra?.sky ? 'sky' : '')
+  const key = (extra?.stage ?? '') + JSON.stringify(extra?.items ?? null) + (extra?.action?.label ?? '') + (extra?.sky ? 'sky' : '') + (extra?.hideExit ? 'noexit' : '') + (extra?.complete ? 'complete' : '')
   useEffect(() => {
     set(extra)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,13 +86,15 @@ function progressKey(stage: number, items: RailItem[] | undefined) {
 
 /**
  * 진행 표시: 화면 오른쪽 세로 열 (2026-10-05 사용자 결정, 시안 v8·v9). 단계 → (지금 단계의) 작업.
- * 작업은 제목만(결과·세부 과정 없음). 지금 작업만 보이고, 나머지는 마우스를 올리거나 키보드 초점일 때 보인다. 맨 아래 화면 버튼(준비 중단)·앱 끄기.
+ * 작업은 제목만(결과·세부 과정 없음). 지금 작업만 보이고, 나머지는 마우스를 올리거나 키보드 초점일 때 보인다. 맨 아래 화면 버튼(준비 중단)·AA 종료(진행 중이면 확인 창, 마지막 요약 화면에서는 숨김).
  * 화면이 바뀌어도 같은 자리·같은 너비. 단계·작업이 바뀌면 상태만 바꿔 부드럽게 넘어간다.
  */
 export default function StepRail({ current, extra: given }: { current: Stage; extra?: RailExtra | null }) {
-  const now = STAGES.indexOf(current)
   const extra = given?.stage === current ? given : null
+  // 모든 단계가 끝났으면 "지금 단계"는 마지막 다음 (마무리까지 체크, 펼친 묶음 없음)
+  const now = extra?.complete ? STAGES.length : STAGES.indexOf(current)
   const [open, setOpen] = useState<string | null>(null)
+  const [quitting, setQuitting] = useState(false)
 
   // 단계마다 마지막으로 받은 작업 목록: 지난 단계의 묶음을 접는 동안, 돌아왔을 때 보이게
   const known = useRef<Record<number, RailItem[]>>({})
@@ -104,7 +112,7 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
     groups[i]?.forEach((item) => nodes.push({ key: `${i}:${item.id}`, stage: i, item }))
   })
   const nodesKey = nodes.map((n) => n.key).join('|')
-  const target = progressKey(now, groups[now] ?? undefined)
+  const target = now >= STAGES.length ? `${STAGES.length - 1}` : progressKey(now, groups[now] ?? undefined)
 
   // 보이는 상태: 켜진 단계(묶음이 펼쳐진 단계)와 선이 닿은 점. 선 채움은 목표까지 한 번에 정하고 반쪽마다 기다림을 준다
   const [shown, setShown] = useState({ stage: now, at: target })
@@ -292,14 +300,24 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
             {extra.action.label}
           </button>
         )}
-        {/* 앱 끄기: 전체화면이라 창 닫기 버튼이 없어서 둔다 (데스크톱 창에서만) */}
-        {inDesktop() && (
-          <button type="button" className={styles.exit} onClick={closeApp} aria-label="앱 끄기" title="앱 끄기">
+        {/* AA 종료: 전체화면이라 창 닫기 버튼이 없어서 둔다 (데스크톱 창에서만). 진행 중이면 한 번 묻는다 (2026-10-07 사용자 결정) */}
+        {inDesktop() && !extra?.hideExit && (
+          <button type="button" className={styles.exit} onClick={() => setQuitting(true)}>
             <LogOut strokeWidth={2} aria-hidden="true" />
-            <span>앱 끄기</span>
+            <span>{PRODUCT.name} 종료</span>
           </button>
         )}
       </div>
+      <ConfirmDialog
+        open={quitting}
+        message={`${current} 진행을 종료하고 ${PRODUCT.reul} 종료합니다.`}
+        confirmLabel="종료"
+        onConfirm={() => {
+          setQuitting(false)
+          closeApp()
+        }}
+        onCancel={() => setQuitting(false)}
+      />
     </nav>
   )
 }

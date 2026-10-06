@@ -11,6 +11,8 @@ import EquipmentScreen, { type EquipmentDone } from './screens/EquipmentScreen'
 import NewProfileScreen from './screens/NewProfileScreen'
 import PlanScreen from './screens/PlanScreen'
 import PrepareScreen from './screens/PrepareScreen'
+import ShootScreen from './screens/ShootScreen'
+import SummaryScreen from './screens/SummaryScreen'
 import { prepareState, type PrepGroup } from './prepare'
 import PreflightScreen from './screens/PreflightScreen'
 import ProfileScreen from './screens/ProfileScreen'
@@ -25,7 +27,7 @@ import styles from './App.module.css'
 // flow.mmd ① 시작 · 연결:
 // 부팅 로고 → 프로필 선택 (없으면 새 프로필 만들기) → 0단계 설치 확인 → 1단계 엔진 켜기 → 장비 연결
 // → 출발 전 점검 → 장비 준비(rig) → 대상(계획 → target) → (다음: 촬영). DESIGN.md "단계 재구성" (2026-10-07)
-type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'site' | 'preflight' | 'rig' | 'plan' | 'target' | 'shoot'
+type Phase = 'boot' | 'profiles' | 'newProfile' | 'check' | 'engine' | 'equipment' | 'site' | 'preflight' | 'rig' | 'plan' | 'target' | 'shoot' | 'wrap' | 'summary'
 
 /** 화면 → 하단 단계 레일의 단계. 부팅·프로필 화면에는 레일이 없다 (DESIGN.md 2장) */
 const STAGE_OF: Partial<Record<Phase, Stage>> = {
@@ -38,13 +40,15 @@ const STAGE_OF: Partial<Record<Phase, Stage>> = {
   plan: '대상',
   target: '대상',
   shoot: '촬영',
+  wrap: '마무리',
+  summary: '마무리',
 }
 
 /** N.I.N.A.가 켜져 있어야 하는 화면 (1단계 엔진 켜기 이후). 여기서 N.I.N.A.가 꺼지면 알린다 */
-const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'rig', 'plan', 'target', 'shoot']
+const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'rig', 'plan', 'target', 'shoot', 'wrap']
 
 /** 상태 줄에 관측지를 보여 주는 화면 (장비 연결 이후). 연필은 장비 연결·관측지 고르기 화면에서는 숨긴다 */
-const SITE_SHOWN: Phase[] = ['equipment', 'site', 'preflight', 'rig', 'plan', 'target', 'shoot']
+const SITE_SHOWN: Phase[] = ['equipment', 'site', 'preflight', 'rig', 'plan', 'target', 'shoot', 'wrap', 'summary']
 const SITE_EDITABLE: Phase[] = ['preflight', 'rig', 'plan', 'target']
 
 /** 상단 상태 줄의 지금 단계 이름 */
@@ -56,6 +60,8 @@ const LABEL_OF: Partial<Record<Phase, string>> = {
   plan: '대상 · 계획',
   target: '대상',
   shoot: '촬영',
+  wrap: '마무리',
+  summary: '오늘 밤 요약',
 }
 
 /** 화면 전환 페이드 한쪽 시간. App.module.css의 .screen transition과 같은 값 */
@@ -227,6 +233,22 @@ export default function App() {
   const toPlan = useCallback(() => fadeTo('plan'), [fadeTo])
   const toTarget = useCallback(() => fadeTo('target'), [fadeTo])
   const toShoot = useCallback(() => fadeTo('shoot'), [fadeTo])
+  const toWrap = useCallback(() => fadeTo('wrap'), [fadeTo])
+  const toSummary = useCallback(() => fadeTo('summary'), [fadeTo])
+
+  // 촬영에 들어가면 적색 테마로 (DESIGN.md 7-3, 2026-10-07). 다른 대상으로 돌아가면(계획) 원래 테마로, 마무리·요약은 그대로
+  const themeBefore = useRef<typeof theme | null>(null)
+  useEffect(() => {
+    if (phase === 'shoot' && theme !== 'night') {
+      themeBefore.current = theme
+      setTheme('night')
+    } else if (phase === 'plan' && themeBefore.current) {
+      setTheme(themeBefore.current)
+      themeBefore.current = null
+    }
+    // 테마를 직접 바꾸면 그 선택을 따른다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
   // 장비 준비가 끝나면 대상으로: 대상이 장비 준비 작업을 다시 하자고 해 멈춰 둔 것이면 그 대상을 이어서, 아니면 계획부터
   const rigDone = useCallback(async () => {
     const target = await prepareState('target')
@@ -322,12 +344,9 @@ export default function App() {
         {phase === 'rig' && <PrepareScreen key="rig" group="rig" onDone={() => void rigDone()} />}
         {phase === 'plan' && <PlanScreen onContinue={toTarget} />}
         {phase === 'target' && <PrepareScreen key="target" group="target" onDone={toShoot} onReplan={toPlan} onHandoff={handoff} />}
-        {phase === 'shoot' && (
-          <main className={styles.placeholder}>
-            <h1>촬영</h1>
-            <p>본촬영·종료 화면은 다음에 만들 차례입니다 (W7).</p>
-          </main>
-        )}
+        {phase === 'shoot' && <ShootScreen onWrap={toWrap} onRetarget={toPlan} />}
+        {phase === 'wrap' && <PrepareScreen key="wrap" group="wrap" onDone={toSummary} />}
+        {phase === 'summary' && <SummaryScreen />}
       </div>
       </RailProvider>
       </ScreenReady.Provider>

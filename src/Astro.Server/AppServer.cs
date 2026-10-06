@@ -173,10 +173,49 @@ public static class AppServer
 
         MapPlan(api.MapGroup("/plan"));
         MapPrepare(api.MapGroup("/prepare"));
+        MapShoot(api.MapGroup("/shoot"), api.MapGroup("/night"));
         MapProfiles(api.MapGroup("/profiles"));
 
         app.MapFallbackToFile("index.html");
         return app;
+    }
+
+    /// <summary>촬영 (DESIGN.md "촬영") · 오늘 밤 요약 (마무리 끝)</summary>
+    private static void MapShoot(RouteGroupBuilder shoot, RouteGroupBuilder night)
+    {
+        // 대상 묶음이 끝난 상황으로 촬영 시작 (찍는 중이면 그대로 — 화면 재접속)
+        shoot.MapPost("/start", (Prepare.PrepareStarter starter, Shoot.ShootSession session) =>
+            starter.StartShoot(session) is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(session.View()));
+        shoot.MapGet("/state", (Shoot.ShootSession session) => session.View());
+        shoot.MapGet("/watch", (Shoot.ShootSession session, CancellationToken ct) =>
+            TypedResults.ServerSentEvents(session.WatchAsync(ct), eventType: "state"));
+        // "촬영 중단": 지금 사진까지 찍고 멈춘다 (그 뒤 마무리 / 다른 대상은 화면이 고름)
+        shoot.MapPost("/stop", (Shoot.ShootSession session) =>
+            session.Stop() is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+
+        // 오늘 밤 요약: 대상별 촬영 + 보정 프레임 + 장비 정리 (그날 밤 결과 기록에서)
+        night.MapGet("/summary", (Prepare.Flow.PrepareFlow flow) =>
+        {
+            var r = flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now));
+            var targets = r.Get<Shoot.NightShootResult>()?.Targets ?? [];
+            var tally = Shoot.ShotGrader.Letters.ToDictionary(l => l, l => targets.Sum(t => t.Tally.GetValueOrDefault(l)));
+            var folder = targets.Select(t => t.Folder).FirstOrDefault(f => f is not null);
+            return Results.Ok(new
+            {
+                targets, tally, folder,
+                flat = r.Get<Prepare.Tasks.Wrap.FlatResult>(),
+                dark = r.Get<Prepare.Tasks.Wrap.DarkResult>(),
+                pack = r.Get<Prepare.Tasks.Wrap.PackResult>(),
+            });
+        });
+        night.MapPost("/open-folder", (Prepare.Flow.PrepareFlow flow) =>
+        {
+            var r = flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now));
+            var folder = r.Get<Shoot.NightShootResult>()?.Targets.Select(t => t.Folder).FirstOrDefault(f => f is not null && Directory.Exists(f));
+            if (folder is null) return Results.NotFound(new { error = "오늘 밤 사진 폴더를 찾지 못했습니다." });
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+            return Results.NoContent();
+        });
     }
 
     private static void MapPrepare(RouteGroupBuilder prepare)
@@ -184,6 +223,9 @@ public static class AppServer
         // 묶음 두 개 (DESIGN.md "단계 재구성"): rig = 장비 준비(계획 없이, 그날 밤), target = 대상(확정 계획 하나). 같은 것이면 하던 곳에서 그대로
         prepare.MapPost("/rig/start", async (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow, CancellationToken ct) =>
             await starter.StartRigAsync(ct) is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(flow.Rig.View()));
+        // 마무리 (플랫 · 다크 · 장비 정리 — 촬영이 끝난 뒤, 그날 밤 하나)
+        prepare.MapPost("/wrap/start", async (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow, CancellationToken ct) =>
+            await starter.StartWrapAsync(ct) is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(flow.Wrap.View()));
         prepare.MapPost("/target/start", (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow) =>
             starter.StartTarget() is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(flow.Target.View()));
         prepare.MapGet("/{group}/state", (string group, Prepare.Flow.PrepareFlow flow) =>

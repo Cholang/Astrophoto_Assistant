@@ -28,6 +28,9 @@ public sealed class SimFaults
         "center.solve", "center.hfr",
         "guiding.star", "guiding.calibration",
         "test.expose", "test.download", "test.bright",
+        "shoot.trail", "shoot.cloud", "shoot.temp", "shoot.flip", "shoot.low",
+        "shoot.light", "shoot.wind", "shoot.dew", "shoot.mount", "shoot.guider",
+        "wrap.bright",
         "stop.fail",
     ];
 

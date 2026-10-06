@@ -84,3 +84,41 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* 촬영·요약의 큰 숫자 + 설명 (중앙 정보 측정값 칸에 화면이 직접 그릴 때) */
+.metricPlain {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.metricPlain strong {
+  font-size: 34px;
+  font-weight: 650;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.metricPlain strong[data-tone='Ok'] { color: var(--pass); }
+
+.metricPlain span {
+  font-size: 16px;
+  color: var(--sky-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 오늘 밤 요약 표 */
+.nightTable {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 6px 40px;
+  font-size: 19px;
+  text-align: left;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+
+.nightTable b { font-weight: 650; }
+.nightTable span { color: var(--sky-muted); font-size: 16px; }
+.nightTable .hd { color: var(--sky-muted); font-size: 14px; }

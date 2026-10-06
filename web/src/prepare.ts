@@ -2,7 +2,7 @@
 // 묶음 두 개 (DESIGN.md "단계 재구성"): rig = 장비 준비(극축 정렬 · 캘리브레이션 · 초점), target = 대상(이동 · 센터링 · 초점 확인 · 가이딩 · 시험 사진)
 // 화면 영역 이름(DESIGN.md "촬영 준비"): 안내(guide) · 중앙 정보(center: 측정값 → 상태 줄 → 버튼) · 하늘 화면(live) · 진행 표시(tasks)
 
-export type PrepGroup = 'rig' | 'target'
+export type PrepGroup = 'rig' | 'target' | 'wrap'
 
 export type PrepTaskStatus = 'Pending' | 'Running' | 'Waiting' | 'Done' | 'Failed' | 'Skipped' | 'NeedsRecheck'
 export type Tone = 'None' | 'Busy' | 'Ok' | 'Warn' | 'Fail'
@@ -55,7 +55,7 @@ export function watchPrepare(group: PrepGroup, onState: (v: PrepView) => void, o
       if (closed) return
       if (!r.ok) {
         const body = (await r.json().catch(() => null)) as { error?: string } | null
-        onError(body?.error ?? (group === 'rig' ? '장비 준비를 시작하지 못했습니다.' : '대상 단계를 시작하지 못했습니다.'))
+        onError(body?.error ?? (group === 'rig' ? '장비 준비를 시작하지 못했습니다.' : group === 'wrap' ? '마무리를 시작하지 못했습니다.' : '대상 단계를 시작하지 못했습니다.'))
         return
       }
       onState((await r.json()) as PrepView)

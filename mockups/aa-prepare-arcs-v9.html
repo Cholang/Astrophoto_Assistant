@@ -56,7 +56,7 @@ body { margin: 0; background: var(--page-bg); color: var(--page-text); font-fami
 .rail { position: relative; z-index: 2; flex: none; width: var(--rail-w); display: flex; flex-direction: column; padding: 34px 22px 24px 12px; color: var(--muted); background: var(--bg); }
 .app[data-sky="1"]:not([data-t="light"]) .rail { background: transparent; }
 .rail ol { list-style: none; margin: 0; padding: 0; }
-.track { margin: auto 0; }
+.rail > .track { margin: auto 0; } /* .rail ol보다 강하게 — 세로 가운데 (앱 StepRail과 같게) */
 /* 점마다 위·아래 반쪽 선을 가진다: 묶음이 접히고 펴져도 선이 이어지고, 초록 채움이 반쪽씩 차례로 흘러간다 */
 .node { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
 .node.stage { min-height: 28px; padding: 11px 0; }

@@ -102,10 +102,12 @@ public sealed class NinaRig(NinaApiClient nina)
     /// 한 장 찍고 결과를 받는다. solve = 플레이트 솔빙, save = 디스크에 저장(image-history에 남음).
     /// "Capture started"를 받은 뒤 결과가 올 때까지 기다린다(X-T5 1초 노출 ≈ 25초).
     /// </summary>
-    public async Task<Shot> CaptureAsync(double seconds, bool solve, bool save, Action<int>? remaining, CancellationToken ct, int? gain = null)
+    /// imageType = LIGHT · FLAT · DARK · DARKFLAT · SNAPSHOT (없으면 저장할 때 LIGHT, 아니면 SNAPSHOT)
+    public async Task<Shot> CaptureAsync(double seconds, bool solve, bool save, Action<int>? remaining, CancellationToken ct, int? gain = null, string? imageType = null)
     {
         var started = DateTimeOffset.Now;
-        var q = $"equipment/camera/capture?duration={seconds.ToString(Inv)}&solve={(solve ? "true" : "false")}&save={(save ? "true" : "false")}&imageType={(save ? "LIGHT" : "SNAPSHOT")}" + (gain is { } g ? $"&gain={g}" : "");
+        var type = imageType ?? (save ? "LIGHT" : "SNAPSHOT");
+        var q = $"equipment/camera/capture?duration={seconds.ToString(Inv)}&solve={(solve ? "true" : "false")}&save={(save ? "true" : "false")}&imageType={type}" + (gain is { } g ? $"&gain={g}" : "");
         var start = await nina.RequestAsync(q, Short, ct);
         if (!start.Ok || start.Text != "Capture started")
             return new Shot(false, false, start.Error ?? start.Text ?? "카메라가 응답하지 않습니다", null, started);
@@ -211,6 +213,46 @@ public sealed class NinaRig(NinaApiClient nina)
     {
         var r = await nina.RequestAsync("equipment/focuser/last-af", Short, ct);
         return r.Ok && r.Response is { ValueKind: JsonValueKind.Object } a ? a : null;
+    }
+
+    // ── 촬영·마무리 (2026-10-07 — 실기 미확인: 장비가 돌아오면 확인) ─────────
+
+    /// <summary>적도의 홈으로 (Go Home — Set Home은 절대 쓰지 않는다). AtHome이 될 때까지, 시간 초과면 false</summary>
+    public async Task<bool> HomeAsync(CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("equipment/mount/home", Short, ct);
+        if (!r.Ok) return false;
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(4);
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(2000, ct);
+            if (await MountAsync(ct) is { AtHome: true }) return true;
+        }
+        return false;
+    }
+
+    /// <summary>자오선 반전 (N.I.N.A. mount/flip). 끝나고 멈출 때까지</summary>
+    public async Task<bool> FlipAsync(CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("equipment/mount/flip", Long, ct);
+        if (!r.Ok) return false;
+        return await ConfirmStillAsync(ct);
+    }
+
+    /// <summary>장비 연결 (가이더를 다시 잡을 때 등)</summary>
+    public async Task<bool> ConnectAsync(string device, CancellationToken ct) =>
+        (await nina.RequestAsync($"equipment/{device}/connect", Long, ct)).Ok;
+
+    /// <summary>장비 연결 끊기 (camera · mount · focuser · guider · filterwheel · switch · flatdevice · rotator)</summary>
+    public async Task<bool> DisconnectAsync(string device, CancellationToken ct) =>
+        (await nina.RequestAsync($"equipment/{device}/disconnect", Short, ct)).Ok;
+
+    /// <summary>카메라 비트 수 (플랫 밝기 % 계산). 모르면 null</summary>
+    public async Task<int?> CameraBitDepthAsync(CancellationToken ct)
+    {
+        if ((await nina.RequestAsync("equipment/camera/info", Short, ct)).Response is not { ValueKind: JsonValueKind.Object } c) return null;
+        var b = Num(c, "BitDepth");
+        return double.IsFinite(b) && b > 0 ? (int)b : null;
     }
 
     // ── 가이딩 (N.I.N.A. 명령 — 시퀀스의 디더링·반전이 상태를 알도록, DESIGN.md ⑥) ─────────
