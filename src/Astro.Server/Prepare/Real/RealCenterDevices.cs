@@ -17,7 +17,7 @@ public sealed class RealCenterDevices(NinaRig rig, LiveImages live) : ICenterDev
     {
         var shot = await rig.CaptureAsync(exposureSeconds, solve: true, save: false, null, ct);
         if (!shot.Ok || shot.Result is not { } res) return new CenterAttempt(false, 0, null);
-        if (res.TryGetProperty("Image", out var img) && img.GetString() is { Length: > 0 } b64) live.Set("photo", Convert.FromBase64String(b64), "image/jpeg");
+        if (res.TryGetProperty("Image", out var img) && img.ValueKind == JsonValueKind.String && img.GetBytesFromBase64() is { Length: > 0 } jpg) live.Set("photo", jpg, "image/jpeg"); // 중간 문자열 없이 바로 바이트로
         if (!res.TryGetProperty("PlateSolveResult", out var ps) || ps.ValueKind != JsonValueKind.Object || !NinaRig.Bool(ps, "Success"))
             return new CenterAttempt(false, 0, null);
         var c = ps.GetProperty("Coordinates");

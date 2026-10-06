@@ -15,6 +15,8 @@ public sealed class Phd2Client(ILogger<Phd2Client> log) : IAsyncDisposable
     public static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(10);
 
     private readonly SemaphoreSlim _connectGate = new(1, 1);
+    // 보내기는 한 번에 하나 — 촬영 감시·디더링·상태 조회가 겹쳐도 명령 줄이 섞이지 않게 (NetworkStream은 동시 쓰기를 보장하지 않음)
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly Lock _gate = new();
     private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = [];
     private readonly List<Channel<JsonElement>> _subscribers = [];
@@ -40,7 +42,9 @@ public sealed class Phd2Client(ILogger<Phd2Client> log) : IAsyncDisposable
         var line = JsonSerializer.Serialize(@params is null ? new { method, id } : (object)new { method, @params, id }) + "\r\n";
         try
         {
-            await _stream!.WriteAsync(Encoding.UTF8.GetBytes(line), ct);
+            await _writeGate.WaitAsync(ct);
+            try { await _stream!.WriteAsync(Encoding.UTF8.GetBytes(line), ct); }
+            finally { _writeGate.Release(); }
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(timeout ?? CallTimeout);
             var reply = await tcs.Task.WaitAsync(cts.Token);

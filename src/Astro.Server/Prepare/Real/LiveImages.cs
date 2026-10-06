@@ -52,9 +52,16 @@ public static class WindowCapture
     {
         if (!OperatingSystem.IsWindows()) return null;
         nint hwnd = 0;
-        foreach (var p in Process.GetProcessesByName(processName))
-            using (p)
+        var all = Process.GetProcessesByName(processName);
+        try
+        {
+            foreach (var p in all)
                 if (p.MainWindowHandle != 0) { hwnd = p.MainWindowHandle; break; }
+        }
+        finally
+        {
+            foreach (var p in all) p.Dispose(); // 찾은 뒤 남은 것까지 (break로 건너뛴 핸들이 새지 않게)
+        }
         if (hwnd == 0 || IsIconic(hwnd)) return null;
         // 화면 배율(DPI)이 있으면 창 크기를 실제 픽셀로 받아야 창 전체가 잡힌다 (2026-10-06 실기: 왼쪽 위만 확대돼 나옴)
         var oldDpi = SetThreadDpiAwarenessContext(-4); // PER_MONITOR_AWARE_V2

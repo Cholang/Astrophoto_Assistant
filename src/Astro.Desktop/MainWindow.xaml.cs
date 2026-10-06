@@ -140,12 +140,29 @@ public partial class MainWindow : Window
         catch (UnauthorizedAccessException) { }
     }
 
+    /// <summary>
+    /// 창 닫기: 내부 서버를 끝까지 멈춘 뒤에 닫는다. async void라 await에서 창이 먼저 닫히고 프로세스가 끝나
+    /// 서버의 정리(N.I.N.A. 감시 등 백그라운드 작업 종료·기록)가 잘릴 수 있었다 → 닫기를 한 번 미루고, 멈춘 뒤 다시 닫는다
+    /// </summary>
+    private bool _stopping, _stopped;
+
     private async void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        if (_stopped) return;
+        if (_stopping) { e.Cancel = true; return; } // 멈추는 중에 다시 누름
         if (_server is null) return;
+        e.Cancel = true;
+        _stopping = true;
         var server = _server;
         _server = null;
-        await server.StopAsync();
-        await server.DisposeAsync();
+        try
+        {
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(10)); // 멈추지 않아도 창은 닫히게
+            await server.StopAsync(limit.Token);
+            await server.DisposeAsync();
+        }
+        catch (Exception) { /* 닫는 중 — 더 할 수 있는 일이 없다 */ }
+        _stopped = true;
+        Close();
     }
 }

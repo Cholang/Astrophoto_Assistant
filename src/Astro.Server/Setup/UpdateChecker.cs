@@ -195,10 +195,45 @@ public sealed class UpdateChecker(IHttpClientFactory http, IOptions<NinaOptions>
         if (!File.Exists(exe)) return null;
         var stamp = File.GetLastWriteTimeUtc(exe);
         if (_phd2 is { } c && c.Stamp == stamp) return c.Version;
-        var text = Encoding.Unicode.GetString(File.ReadAllBytes(exe));
-        var m = Regex.Match(text, @"PHD2 Guiding (\d+\.\d+\.\d+)");
-        _phd2 = (stamp, m.Success ? m.Groups[1].Value : null);
-        return _phd2.Value.Version;
+        string? version;
+        try { version = FindUtf16Version(exe, "PHD2 Guiding "); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { version = null; }
+        _phd2 = (stamp, version);
+        return version;
+    }
+
+    /// <summary>
+    /// 파일에서 UTF-16 글자 prefix 바로 뒤의 버전(숫자·점)을 찾는다. 파일 전체를 문자열로 만들지 않고 1MB씩 읽는다
+    /// (조각 경계에 걸쳐도 찾도록 앞 조각 끝을 조금 남겨 둠). 버전 형식은 a.b.c
+    /// </summary>
+    internal static string? FindUtf16Version(string path, string prefix)
+    {
+        var pattern = Encoding.Unicode.GetBytes(prefix);
+        const int Tail = 64; // 버전 글자(최대 32자)를 읽을 여유
+        var buffer = new byte[(1 << 20) + pattern.Length + Tail];
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 16);
+        var kept = 0;
+        while (true)
+        {
+            var read = fs.Read(buffer, kept, buffer.Length - kept);
+            var len = kept + read;
+            var span = buffer.AsSpan(0, len);
+            for (var from = 0; ;)
+            {
+                var i = span[from..].IndexOf(pattern);
+                if (i < 0) break;
+                i += from;
+                var start = i + pattern.Length;
+                if (start + Tail > len && read > 0) break; // 뒤 글자가 아직 다 안 읽힘 → 다음 조각에서
+                var chars = Encoding.Unicode.GetString(span[start..Math.Min(len, start + Tail)]);
+                if (Regex.Match(chars, @"^\d+\.\d+\.\d+") is { Success: true } m) return m.Value;
+                from = i + 1;
+            }
+            if (read == 0) return null;
+            // 끝부분을 남겨 다음 조각과 이어 찾는다
+            kept = Math.Min(len, pattern.Length + Tail);
+            span[(len - kept)..].CopyTo(buffer);
+        }
     }
 
     // ── 도우미 ─────────

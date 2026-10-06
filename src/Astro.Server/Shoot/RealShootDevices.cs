@@ -22,7 +22,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         var started = DateTimeOffset.Now;
         var shot = await rig.CaptureAsync(seconds, solve: false, save: true, left => elapsed(seconds - left), ct, gain: iso, imageType: "LIGHT");
         if (!shot.Ok || shot.Result is not { } res) return new FrameShot(false, shot.Problem, null, null);
-        if (res.TryGetProperty("Image", out var img) && img.GetString() is { Length: > 0 } b64) live.Set("shoot", Convert.FromBase64String(b64), "image/jpeg");
+        if (res.TryGetProperty("Image", out var img) && img.ValueKind == JsonValueKind.String && img.GetBytesFromBase64() is { Length: > 0 } jpg) live.Set("shoot", jpg, "image/jpeg"); // 중간 문자열 없이 바로 바이트로
         // 이번 촬영 뒤에 저장된 기록인지 확인 (CX-SHOOT-04) — 저장 기록이 늦게 갱신될 수 있어 잠깐 다시 본다.
         // 확인 못 하면 실패: 이전 사진의 통계로 평가하거나 이전 파일을 옮기지 않는다
         (DateTimeOffset Date, string File, double Hfr, int Stars)? saved = null;

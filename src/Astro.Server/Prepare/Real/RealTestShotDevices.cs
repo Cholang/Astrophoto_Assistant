@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Astro.Server.Prepare.Tasks.TestShot;
 
 namespace Astro.Server.Prepare.Real;
@@ -25,7 +26,7 @@ public sealed class RealTestShotDevices(NinaRig rig, LiveImages live) : ITestSho
     {
         if (_shot is not { Ok: true, Result: { } res } shot || shot.At < since) return null;
         if (await rig.LastStatsAsync(ct) is not { } s || s.Max <= 0) return null; // 전부 0 = JPEG 설정 등으로 사진 데이터가 빔
-        if (res.TryGetProperty("Image", out var img) && img.GetString() is { Length: > 0 } b64) live.Set("test", Convert.FromBase64String(b64), "image/jpeg");
+        if (res.TryGetProperty("Image", out var img) && img.ValueKind == JsonValueKind.String && img.GetBytesFromBase64() is { Length: > 0 } jpg) live.Set("test", jpg, "image/jpeg"); // 중간 문자열 없이 바로 바이트로
         var saved = await rig.LastSavedAsync(ct);
         var file = saved is { } f && f.Date >= since ? f.File : "";
         var rms = await rig.GuideRmsArcsecAsync(ct) ?? 0;

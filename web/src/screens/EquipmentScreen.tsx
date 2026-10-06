@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, RotateCw } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import DeviceIcon from '../components/DeviceIcon'
 import ScopeList from '../components/ScopeList'
 import JarvisRing from '../components/JarvisRing'
@@ -305,10 +305,14 @@ function EquipmentGraph({
   }
 
   // ── 자리 계산 ─────────
-  const connectGeo = connectLayout(items, box.w, box.h)
+  // 자리 계산(200번 섞어 보기·밀어내기)은 장비 목록·크기가 바뀔 때만 — 고르기·마우스 올리기 같은 다른 변화로 다시 계산하지 않게. seed로 정해져 결과는 같다
+  const connectGeo = useMemo(() => connectLayout(items, box.w, box.h), [items, box.w, box.h])
   // 0~10 가로 자리는 창 너비 기준이되, 그래프 너비의 1.25배까지만 (울트라와이드에서 그래프 밖으로 나가 가장자리에 한 줄로 몰리지 않게).
   // 그래프는 창 가운데에 있으므로 노트북 크기 창에서는 예전(frac × 창 너비 − 그래프 왼쪽)과 같은 자리
-  const editGeo = editLayout(items, box.w, box.h, (frac) => box.w / 2 + (frac - 0.5) * Math.min(box.vw, box.w / 0.8))
+  const editGeo = useMemo(
+    () => editLayout(items, box.w, box.h, (frac) => box.w / 2 + (frac - 0.5) * Math.min(box.vw, box.w / 0.8)),
+    [items, box.w, box.h, box.vw],
+  )
   const geo = mode === 'edit' ? editGeo : connectGeo
   const centerOf = connectGeo
 
