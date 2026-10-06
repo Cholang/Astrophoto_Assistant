@@ -343,6 +343,42 @@ public class ShootAndWrapTests
         await flow.Target.Until(v => v.Current?.TaskId == "slew" && v.Handoff is null, "이동부터");
     }
 
+    // ── 디더링 안정화 실패 (2026-10-06 시뮬레이터 확인 · 사용자 결정) ─────────
+
+    [Fact]
+    public async Task 디더링_안정화가_연속_3번_실패하면_멈추고_안정되면_자동으로_이어서_찍는다()
+    {
+        var r = NewShoot(12);
+        r.Faults.Arm("shoot.unstable");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal("done", v.Ended);
+        Assert.Equal(12, v.Good);
+        Assert.Contains(ShootMode.Paused, r.Session.ModeHistory);
+        Assert.True(r.Ctx.Results.Get<NightShootResult>()!.Targets.Single().PausedMinutes!.ContainsKey("unstable"));
+    }
+
+    [Fact]
+    public async Task 가이딩_불안정이_오래가면_그대로_찍을지_묻고_답하면_이어서_찍는다()
+    {
+        var r = NewShoot(12);
+        r.Faults.Arm("shoot.unstablelong");
+        Assert.NotNull(r.Session.Answer("shoot")); // 묻기 전에는 답을 받지 않는다
+        r.Session.Start(r.Ctx);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (r.Session.View().Ask != "unstable")
+        {
+            Assert.True(DateTime.UtcNow < deadline, "질문이 나오지 않음");
+            await r.Session.NextChangeAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        Assert.Equal("unstable", r.Session.View().Pause);
+        Assert.Null(r.Session.Answer("shoot"));
+        var v = await UntilEnded(r.Session);
+        Assert.Equal("done", v.Ended);
+        Assert.Equal(12, v.Good);
+        Assert.Null(v.Ask);
+    }
+
     // ── 마무리 ─────────
 
     private static (PrepareFlow Flow, Harness.Sim Sim, PrepResults Results) WrapNight(int exposure = 180)

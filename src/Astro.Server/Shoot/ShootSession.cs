@@ -20,9 +20,9 @@ public sealed record ShootView(
     int FlipStep, DateTimeOffset? FlipAt, int? FlipInMinutes, IReadOnlyList<double> Guide, IReadOnlyList<double> Hfr, double FocusHfr,
     double PixelScale, string? LastGrade, IReadOnlyDictionary<string, int> Tally, IReadOnlyDictionary<string, string> Criteria,
     StatusLine? Note, IReadOnlyList<object>? FocusPoints, string? Ended, DateTimeOffset? EndAt, string? PhotoUrl, DateTimeOffset? PhotoAt,
-    int Version, bool Simulated, string? Pause = null, int PausedSeconds = 0, int GuideExposureMs = 0, bool GuideStopped = true);
+    int Version, bool Simulated, string? Pause = null, int PausedSeconds = 0, int GuideExposureMs = 0, bool GuideStopped = true, string? Ask = null);
 
-/// <summary>Paused = 가이드 별을 잃어 멈춤 (원인은 ShootView.Pause: light · cloud · jump · guider)</summary>
+/// <summary>Paused = 가이드 별을 잃어 멈춤 (원인은 ShootView.Pause: light · cloud · jump · guider · unstable)</summary>
 public enum ShootMode { Idle, Shoot, Dither, Flip, Focus, Paused, Finishing, Ended }
 
 /// <summary>
@@ -75,6 +75,13 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private long _seenSteps;
     private int _polling;
     private readonly List<string> _notMoved = [];
+    // 디더링 안정화 실패 (2026-10-06 사용자 결정): 연속 3번이면 멈추고 안정되면 자동 재개, 15분 넘게 안 되면 "그대로 찍을까요?"
+    private int _ditherFails;
+    private string? _ask, _answer;
+    private bool _unstableAccepted;
+    private DateTimeOffset _lowHfdWarned;
+    public const int UnstableAfter = 3;
+    public static readonly TimeSpan UnstableHold = TimeSpan.FromMinutes(1), UnstableAsk = TimeSpan.FromMinutes(15);
 
     public static readonly int[] GuideExposuresMs = [1000, 1500, 2000, 2500, 3000, 3500, 4000];
     public static readonly TimeSpan LightWait = TimeSpan.FromMinutes(2), CloudWait = TimeSpan.FromMinutes(30), RecenterAfter = TimeSpan.FromMinutes(10);
@@ -104,7 +111,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             flipAt is { } fa && c is not null ? Math.Max(1, (int)Math.Ceiling((fa - c.Now()).TotalMinutes)) : null, _guide.ToArray(), _hfr.ToArray(), _focusHfr,
             c?.MainPixelScaleArcsec ?? 0, _lastGrade, new Dictionary<string, int>(_tally), ShotGrader.Criteria, _note, _focusPoints?.ToArray(),
             _ended, endAt, devices.PhotoUrl, _photoAt, _version, mode.Simulate,
-            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs, _guideStopped);
+            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs, _guideStopped, _ask);
     }
 
     public async IAsyncEnumerable<ShootView> WatchAsync([EnumeratorCancellation] CancellationToken ct)
@@ -178,6 +185,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _pause = null; _pausedMinutes.Clear(); _snrSamples.Clear(); _hfdSamples.Clear(); _snrBaseline = _hfdBaseline = 0;
             _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _lastDegrade.Clear(); _windWarned = false;
             _guideStopped = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
+            _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _lowHfdWarned = DateTimeOffset.MinValue;
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
             _mode = ShootMode.Shoot;
             Changed();
@@ -225,6 +233,29 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             Changed();
         }
         return null;
+    }
+
+    /// <summary>화면의 질문에 답한다 (unstable: shoot = 그대로 찍기 · wait = 더 기다리기). 묻고 있지 않으면 이유</summary>
+    public string? Answer(string choice)
+    {
+        lock (_gate)
+        {
+            if (_ask is null) return "지금은 묻고 있는 것이 없습니다.";
+            if (choice is not ("shoot" or "wait")) return "알 수 없는 답입니다.";
+            _answer = choice;
+            Changed();
+        }
+        return null;
+    }
+
+    private string? TakeAnswer()
+    {
+        lock (_gate)
+        {
+            var a = _answer;
+            _answer = null;
+            return a;
+        }
     }
 
     private bool _flipped;
@@ -338,8 +369,14 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 if (_hasGuider && !grade.Excluded && _good % DitherEvery == 0 && !_stopRequested)
                 {
                     Set(() => _mode = ShootMode.Dither);
-                    await devices.DitherAsync(ct);
+                    var settled = await devices.DitherAsync(ct);
                     Set(() => _mode = ShootMode.Shoot);
+                    _ditherFails = settled ? 0 : _ditherFails + 1;
+                    if (!settled && _ditherFails >= UnstableAfter && !_unstableAccepted)
+                    {
+                        if (!await WaitUnstableAsync(ctx, ct)) return;
+                    }
+                    else if (!settled) Note("디더링 뒤 가이딩이 다 안정되지 않았어요 · 그대로 찍고 흐른 사진은 등급으로 걸러요", Tone.Warn);
                 }
             }
         }
@@ -353,6 +390,57 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     }
 
     private readonly List<double> _hfrRecent = [];
+
+    /// <summary>
+    /// 디더링 안정화가 연속으로 실패: 촬영을 멈추고 가이드 오차가 기준 안에 1분 머물면 자동으로 이어서 찍는다.
+    /// 15분이 지나면 "그대로 찍을까요?"(기준이 너무 엄격해 밤새 멈추지 않게). 그 사이 별을 잃으면 원인별 대응으로. 촬영을 이어 가면 true
+    /// </summary>
+    private async Task<bool> WaitUnstableAsync(PrepContext ctx, CancellationToken ct)
+    {
+        Pause("unstable", "가이딩이 불안정해 촬영을 멈췄어요 · 안정되면 이어서 찍어요");
+        var since = DateTimeOffset.Now;
+        var hold = mode.Simulate ? TimeSpan.FromMilliseconds(500) : UnstableHold;
+        var askAfter = mode.Simulate ? TimeSpan.FromSeconds(2) : UnstableAsk;
+        while (true)
+        {
+            if (_stopRequested) { Set(() => _ask = null); Resume(null); return true; } // 끝은 바깥 고리가
+            switch (TakeAnswer())
+            {
+                case "shoot":
+                    _unstableAccepted = true; // 이 대상에서는 다시 멈추지 않는다 (흐른 사진은 등급으로)
+                    _ditherFails = 0;
+                    Set(() => _ask = null);
+                    Resume("가이딩이 불안정한 채로 이어서 찍어요 · 흐른 사진은 등급으로 걸러요");
+                    return true;
+                case "wait":
+                    since = DateTimeOffset.Now;
+                    Set(() => _ask = null);
+                    break;
+            }
+            var lost = await CheckGuideAsync(ct);
+            if (lost.IsLost())
+            {
+                _ditherFails = 0;
+                Set(() => _ask = null);
+                Resume(null);
+                return await HandleLossAsync(ctx, lost, ct);
+            }
+            if (await devices.WaitSettledAsync(hold, hold + (mode.Simulate ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(30)), ct))
+            {
+                _ditherFails = 0;
+                Set(() => _ask = null);
+                Resume("가이딩이 안정됐어요 · 이어서 찍어요");
+                return true;
+            }
+            var waited = DateTimeOffset.Now - _pausedSince;
+            Set(() =>
+            {
+                if (_ask is null && DateTimeOffset.Now - since > askAfter) _ask = "unstable";
+                _note = new StatusLine($"멈춤 · 가이딩이 안정되기를 기다리는 중 · {(int)waited.TotalMinutes}분째", Tone.Warn);
+                _noteUntil = DateTimeOffset.MaxValue;
+            });
+        }
+    }
 
     // ── 가이드 별 지켜보기 (docs/SHOOT_IMPLEMENTATION.md "B. 가이딩 중 가이드 별을 잃었을 때") ─────────
 
@@ -378,6 +466,12 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             // 처음 안정된 가이딩 20걸음의 중앙값이 그날 기준
             if (_snrBaseline <= 0) { _snrSamples.AddRange(raw.Snr.TakeLast(fresh)); if (_snrSamples.Count >= 20) _snrBaseline = _snrSamples.Order().ElementAt(_snrSamples.Count / 2); }
             if (_hfdBaseline <= 0 && raw.Hfd.Count > 0) { _hfdSamples.AddRange(raw.Hfd.TakeLast(Math.Min(fresh, raw.Hfd.Count))); if (_hfdSamples.Count >= 20) _hfdBaseline = _hfdSamples.Order().ElementAt(_hfdSamples.Count / 2); }
+        }
+        // 별을 자주 놓치는데 그 대부분이 "HFD가 낮음"이면 핫픽셀·너무 작은 별 (10분에 한 번 알림)
+        if (raw.LowHfdRecent >= 10 && DateTimeOffset.Now - _lowHfdWarned > TimeSpan.FromMinutes(10))
+        {
+            _lowHfdWarned = DateTimeOffset.Now;
+            Note("가이드 별을 자주 놓쳐요 (별이 너무 작거나 핫픽셀) · PHD2의 다크 라이브러리·별 고르기를 확인해 주세요", Tone.Warn, 15);
         }
         var loss = GuideWatch.Classify(new GuideSignals(raw, _mainStarsRatio, _mainMeanRatio, _snrBaseline, _hfdBaseline));
         if (loss is GuideLoss.Dew or GuideLoss.GuideFocus or GuideLoss.Faint or GuideLoss.Cloud && raw.Guiding) await DegradeAsync(loss, ct);

@@ -5,7 +5,7 @@ import PrepGuide from '../components/PrepGuide'
 import { FlipSteps, ShootGauges, ShootGrades } from '../components/ShootPanels'
 import { useRailExtra } from '../components/StepRail'
 import type { CurrentView, PrepAction, Tone } from '../prepare'
-import { recheckShootStop, stopShoot, watchShoot, type ShootView } from '../shoot'
+import { answerShoot, recheckShootStop, stopShoot, watchShoot, type ShootView } from '../shoot'
 import styles from './PrepareScreen.module.css'
 
 /**
@@ -37,6 +37,7 @@ const PAUSE: Record<string, [string, string]> = {
   cloud: ['구름이 지나가고 있어요', '가이드 별을 잃어 촬영을 잠시 멈췄어요. 별이 돌아오면 자동으로 이어서 찍고, 오래 멈췄으면 다시 가운데로 맞춰요. 30분 넘게 돌아오지 않으면 멈추고 알려 드려요.'],
   jump: ['별이 갑자기 움직였어요', '바람이나 케이블 걸림으로 적도의가 흔들린 것 같아요. 가이드 별을 다시 고르고 이어서 찍어요.'],
   guider: ['가이드 카메라 연결이 끊겼어요', 'PHD2 가이드 카메라를 다시 연결하고 있어요. 두 번 해도 안 되면 촬영을 멈추고 알려 드려요.'],
+  unstable: ['가이딩이 불안정해요', '디더링 뒤 가이딩이 세 번 연속 자리를 잡지 못해 촬영을 잠시 멈췄어요. 가이드 오차가 1분 동안 기준 안에 머물면 자동으로 이어서 찍어요. 바람·케이블 걸림·가이드 초점을 확인해 주세요.'],
 }
 
 /** [임시] 모의 실패 (모의 장비일 때만) — 서버 SimFaults.Known */
@@ -54,6 +55,8 @@ const FAULTS: [string, string][] = [
   ['shoot.flipfail', '반전 실패'],
   ['shoot.stopfail', '끝날 때 가이딩 정지 확인 실패'],
   ['shoot.abortfail', '노출 멈춤 실패'],
+  ['shoot.unstable', '가이딩 불안정 (곧 안정)'],
+  ['shoot.unstablelong', '가이딩 불안정 (오래)'],
 ]
 
 export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void; onRetarget: () => void }) {
@@ -147,6 +150,13 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
         <span>별 크기 (HFR) · 이번 지점 · 자동초점 {view.focusPoints?.length ?? 0} / 9</span>
       </div>
     )
+  } else if (view.mode === 'Paused' && view.ask === 'unstable') {
+    title = '가이딩이 15분 넘게 안정되지 않아요'
+    text = '그대로 찍으면 별이 흐른 사진은 등급을 보고 제외 폴더로 옮기고, 이 대상에서는 다시 멈추지 않아요. 더 기다리면 15분 뒤에 다시 물어봐요.'
+    actions = [
+      { id: 'ask-shoot', label: '그대로 찍기', primary: true },
+      { id: 'ask-wait', label: '더 기다리기', primary: false },
+    ]
   } else if (view.mode === 'Paused') {
     ;[title, text] = PAUSE[view.pause ?? 'cloud'] ?? PAUSE.cloud
   } else if (ended && !stopped) {
@@ -176,6 +186,7 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
   const act = async (id: string) => {
     if (id === 'continue') return setAsking(false)
     if (id === 'recheck') return setActError(await recheckShootStop())
+    if (id === 'ask-shoot' || id === 'ask-wait') return setActError(await answerShoot(id === 'ask-shoot' ? 'shoot' : 'wait'))
     if (ended) return id === 'wrap' ? onWrap() : onRetarget()
     void stop(id as Then)
   }

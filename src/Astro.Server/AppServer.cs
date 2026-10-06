@@ -202,6 +202,9 @@ public static class AppServer
         // 끝났는데 가이딩 정지를 확인하지 못했을 때 "장비 상태 다시 확인"
         shoot.MapPost("/recheck-stop", async (Shoot.ShootSession session) =>
             await session.RecheckStopAsync() is { } problem ? Results.Conflict(new { error = problem }) : Results.NoContent());
+        // 촬영 중 질문에 답하기 (가이딩 불안정이 오래가면: shoot = 그대로 찍기 · wait = 더 기다리기)
+        shoot.MapPost("/answer", (ShootAnswer body, Shoot.ShootSession session) =>
+            session.Answer(body.Choice) is { } problem ? Results.Conflict(new { error = problem }) : Results.NoContent());
 
         // 오늘 밤 요약: 대상별 촬영 + 보정 프레임 + 장비 정리 (그날 밤 결과 기록에서)
         night.MapGet("/summary", (Prepare.Flow.PrepareFlow flow) =>
@@ -330,6 +333,8 @@ public static class AppServer
     private sealed record RigSelect(string Kind, string? DeviceId, string? Name);
 
     private sealed record UpdateDismiss(string Id, string Version);
+
+    private sealed record ShootAnswer(string Choice);
 
     private static void MapProfiles(RouteGroupBuilder profiles)
     {

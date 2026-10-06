@@ -35,8 +35,10 @@ public interface IShootDevices
     Task<bool> ResumeGuidingAsync(CancellationToken ct);
     /// <summary>가이딩을 멈추고 멈춘 것을 확인한다 — PHD2가 Stopped·Looping일 때만 true (LostLock·조회 실패는 멈춤이 아님, CX-SHOOT-01)</summary>
     Task<bool> StopGuidingAsync(CancellationToken ct);
-    /// <summary>디더링하고 가이딩이 안정될 때까지</summary>
+    /// <summary>디더링하고 가이딩이 안정될 때까지. PHD2 안정화가 시간 초과면 최대 30초 더 지켜보고(기준 안에 10초 머물면 성공), 그래도 안 되면 false</summary>
     Task<bool> DitherAsync(CancellationToken ct);
+    /// <summary>가이드 오차가 기준(1.5픽셀) 안에 hold 동안 계속 머물면 true. 별을 잃은 프레임은 처음부터 다시. timeout까지 안 되면 false</summary>
+    Task<bool> WaitSettledAsync(TimeSpan hold, TimeSpan timeout, CancellationToken ct);
     /// <summary>자오선 반전: 0 반전 → 1 다시 센터링 → 2 가이딩 재시작. 단계가 바뀔 때마다 알린다. 단계별 결과를 따로 (CX-SHOOT-02).
     /// 가이더 없는 구성(ctx.HasGuider=false)이면 PHD2 명령 없이 반전·센터링만 (CX-APP-R3)</summary>
     Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct);

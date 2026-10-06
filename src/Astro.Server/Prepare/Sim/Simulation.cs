@@ -30,7 +30,7 @@ public sealed class SimFaults
         "test.expose", "test.download", "test.bright",
         "shoot.trail", "shoot.cloud", "shoot.temp", "shoot.flip", "shoot.low",
         "shoot.light", "shoot.wind", "shoot.dew", "shoot.mount", "shoot.guider",
-        "shoot.stopfail", "shoot.flipfail", "shoot.abortfail", "shoot.reselectfail", "shoot.movefail", "wrap.tracking", "wrap.home", "wrap.dark",
+        "shoot.stopfail", "shoot.flipfail", "shoot.abortfail", "shoot.reselectfail", "shoot.movefail", "shoot.unstable", "shoot.unstablelong", "wrap.tracking", "wrap.home", "wrap.dark",
         "wrap.bright",
         "stop.fail",
     ];

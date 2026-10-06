@@ -8,7 +8,25 @@
 
 ---
 
-## 2026-10-07 · [Claude] Codex 리뷰 16절 반영 (CX-APP-R1~R5, 최적화 1~5)
+## 2026-10-06 · [Claude] 시뮬레이터로 미리 확인한 실장비 코드 고치기 (저장 경로·반전·별 잃은 프레임·다크플랫·디더링 안정화)
+
+**요청**: 실장비 없이 N.I.N.A.·PHD2 시뮬레이터로 실장비 연결 전에 확인할 수 있는 것을 확인하고, 찾은 문제 1~5와 6(디더링 안정화 실패: 30초 더 → 그대로 찍고 등급으로 → 연속 3번이면 멈추고 안정되면 자동 재개, 15분 넘으면 묻기 — 제미나이 의견 반영, 사용자 결정)을 고치기
+
+**변경**
+- `NinaRig`: `LastSavedAsync`가 전체 경로(`FindSavedFileAsync`·`ImageFolderAsync` — image-history는 이름만 줌), `MountState.Pier`, `FlipAsync`는 SideOfPier가 바뀐 뒤 `WaitStillAsync`(이미 pierEast면 성공)
+- `RealWrapDevices.CaptureAsync`: DARKFLAT은 DARK로 찍고 `DARKFLAT` 폴더로 (API는 DARKFLAT을 SNAPSHOT 폴더에 저장)
+- `RealShootDevices`: StarLost는 SNR·HFD 평균에서 빼고 `GuideRaw.LostRecent`·`LowHfdRecent`(ErrorCode 4)로 따로, `DitherAsync` 시간 초과면 `WaitSettledAsync`(10초 안정, 최대 30초)
+- `ShootSession`: 디더링 실패 연속 3번 → `WaitUnstableAsync`(멈춤 원인 unstable, 1분 안정되면 재개, 15분 → `ShootView.Ask`), `Answer`(shoot·wait), "HFD가 낮음"이 잦으면 알림. `POST /api/shoot/answer`
+- 화면: `ShootScreen` 멈춤 안내 unstable·"그대로 찍기 / 더 기다리기", `shoot.ts` `answerShoot`, 모의 실패 shoot.unstable·shoot.unstablelong
+- 캘리브레이션 경고(5)는 이미 `RealCalibrationDevices`가 Alert를 모아 보여 줌 — 변경 없음
+
+**확인**: 서버 테스트 104 통과·1 건너뜀(디더링 불안정 자동 재개·질문 2개 추가, 두 번 연속). 실장비 코드를 시뮬레이터에 붙인 `Real/SimulatorRigTests`(AA_SIM=1) 4개 통과 — 저장 경로, DARKFLAT 폴더, 반전(14초 뒤 끝), PHD2 디더링(13초 안정). lint 오류 0, 웹·데스크톱 빌드. 확인 못 함: 별 잃은 프레임 따로 세기는 이번 시뮬레이터 별이 밝아 잃은 프레임이 없었음(코드·단위 확인만), 불안정 질문 화면은 눈으로 안 봄, 자동초점·솔빙(시뮬레이터 카메라 별 사진 설정이 N.I.N.A. 화면에만 있음)
+
+**남은 것**: 실장비 확인(남반구·OnStep의 SideOfPier 규약), 안정화 기준값(1.5픽셀·10초)은 실제 하늘로, AA 전체를 실장비 모드로 시뮬레이터에 붙여 끝까지
+
+---
+
+## 2026-10-07 · d3fb05c [Claude] Codex 리뷰 16절 반영 (CX-APP-R1~R5, 최적화 1~5)
 
 **요청**: Codex 16절(재리뷰·앱 전체 검토) 검토 — R1~R5 모두 동의, 최적화 1~5 반영, 6(AI 입력량)·7(구조 분리)은 측정·실장비 확인 뒤. R4의 예기치 않은 N.I.N.A. 종료는 "촬영 중이면 대상 단계를 이동부터 다시, 마무리 중이면 마무리로" (사용자 동의)
 

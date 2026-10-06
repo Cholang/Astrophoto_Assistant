@@ -93,6 +93,13 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
                         if (name != "GuideStep" && name != "StarLost") continue;
                         lock (_gate)
                         {
+                            // 별을 잃은 프레임은 SNR·HFD가 0 → 평균에 넣지 않고 오류 종류만 센다 (2026-10-06 시뮬레이터 확인)
+                            if (name == "StarLost")
+                            {
+                                PushCode(e.TryGetProperty("ErrorCode", out var code) && code.TryGetInt32(out var c) && c != 0 ? c : -1);
+                                continue;
+                            }
+                            PushCode(0);
                             _steps++;
                             if (e.TryGetProperty("SNR", out var snr) && snr.TryGetDouble(out var s)) Push(_snr, s);
                             if (e.TryGetProperty("HFD", out var hfd) && hfd.TryGetDouble(out var h)) Push(_hfd, h);
@@ -117,6 +124,17 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         if (xs.Count > 60) xs.RemoveAt(0);
     }
 
+    // 최근 프레임 결과: 0 = 별을 잡음, 그 밖 = StarLost의 ErrorCode (4 = HFD가 낮음, 모르면 −1)
+    private readonly List<int> _codes = [];
+    private const int CodeWindow = 30;
+    public const int LowHfdCode = 4;
+
+    private void PushCode(int code)
+    {
+        _codes.Add(code);
+        if (_codes.Count > CodeWindow) _codes.RemoveAt(0);
+    }
+
     public async Task<GuideRaw> GuideRawAsync(CancellationToken ct)
     {
         EnsureListening(ct);
@@ -129,7 +147,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
             return new GuideRaw(connected, state == "Guiding", mount?.Tracking ?? true, _snr.ToArray(), _hfd.ToArray(),
                 _jump.Count > 0 ? _jump.TakeLast(3).Max() : null,
                 null, // 이슬 여유: WandererBox 기온·습도 읽기는 아직 (docs/SHOOT_IMPLEMENTATION.md 확인 목록)
-                _steps);
+                _steps, _codes.Count(c => c != 0), _codes.Count(c => c == LowHfdCode));
     }
 
     public async Task<bool> SetGuideExposureAsync(int ms, CancellationToken ct)
@@ -218,13 +236,39 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
             using var ev = await phd2.SubscribeAsync(ct);
             await phd2.CallAsync("dither", new { amount = 5, raOnly = false, settle = new { pixels = 1.5, time = 10, timeout = 90 } }, ct);
             var done = await ev.WaitAsync(["SettleDone"], TimeSpan.FromSeconds(120), ct);
-            return done is { } d && (!d.TryGetProperty("Status", out var s) || s.GetInt32() == 0);
+            if (done is { } d && (!d.TryGetProperty("Status", out var s) || s.GetInt32() == 0)) return true;
         }
         catch (Phd2Exception e)
         {
             log.LogWarning("디더링 실패: {Message}", e.Message);
             return false;
         }
+        // 안정화 시간 초과: 별을 잃은 프레임 하나에도 PHD2의 안정 시간이 0으로 돌아간다(2026-10-06 시뮬레이터 확인) → 30초 더 직접 지켜본다
+        return await WaitSettledAsync(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30), ct);
+    }
+
+    public const double SettlePixels = 1.5;
+
+    public async Task<bool> WaitSettledAsync(TimeSpan hold, TimeSpan timeout, CancellationToken ct)
+    {
+        try
+        {
+            using var ev = await phd2.SubscribeAsync(ct);
+            var deadline = DateTime.UtcNow + timeout;
+            DateTime? since = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (await ev.WaitAsync(["GuideStep", "StarLost"], deadline - DateTime.UtcNow, ct) is not { } e) break;
+                var ok = Phd2Events.Name(e) == "GuideStep"
+                    && e.TryGetProperty("RADistanceRaw", out var ra) && e.TryGetProperty("DECDistanceRaw", out var de)
+                    && Math.Sqrt(ra.GetDouble() * ra.GetDouble() + de.GetDouble() * de.GetDouble()) <= SettlePixels;
+                if (!ok) { since = null; continue; }
+                since ??= DateTime.UtcNow;
+                if (DateTime.UtcNow - since >= hold) return true;
+            }
+        }
+        catch (Phd2Exception e) { log.LogWarning("가이딩 안정 확인 실패: {Message}", e.Message); }
+        return false;
     }
 
     public async Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)

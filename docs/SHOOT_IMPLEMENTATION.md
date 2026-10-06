@@ -24,6 +24,21 @@
 7. 플랫: 위쪽 이동(항성시·위도−10°), 카메라 비트 수(X-T5 14비트 — N.I.N.A. 평균이 16비트로 늘려 오는지), 노출 찾기, `imageType=FLAT/DARKFLAT/DARK` 저장 폴더
 8. 장비 정리: `equipment/{종류}/disconnect` 순서, N.I.N.A.·PHD2 창 닫기(저장 확인 창이 뜨면 열린 채로 남음 — 요약에 표시)
 
+**시뮬레이터로 확인 (2026-10-06, N.I.N.A. AstroAssistant 프로필 + Simulator Camera·Telescope Simulator for .NET·ASCOM Simulator Focuser, PHD2 "AA-Simulator" 프로필)** — 고칠 것은 ❗
+- 저장: `capture?save=true` 결과를 받은 직후 `image-history`에 바로 생기고 파일도 잠겨 있지 않음(바로 옮길 수 있음). 폴더는 N.I.N.A. 이미지 경로 아래 `날짜\종류\`. ❗ `image-history`의 `Filename`은 **파일 이름만**(경로 없음) → `MoveToExcluded`가 늘 실패함. N.I.N.A. 이미지 경로(프로필 `ImageFileSettings.FilePath`)에서 찾아야 함
+- ❗ `imageType`은 LIGHT·FLAT·DARK·BIAS만 폴더가 나뉨. DARKFLAT(·"DARK FLAT")은 SNAPSHOT 폴더로 감 → 다크플랫은 DARK(플랫 노출)로 저장하거나 따로 옮겨야 함
+- 반전: `mount/flip`은 바로 "Flipping"으로 답하고 적도의는 2~5초 뒤 움직이기 시작, 약 14초에 끝(pierWest → pierEast). 반전이 필요 없는 쪽이면 "Flipping"이라 답하고 아무 일도 없음, 이벤트 기록에도 안 남음. ❗ `NinaRig.FlipAsync`의 `ConfirmStillAsync`는 움직이기 전에 "멈춤"으로 끝남 → SideOfPier가 바뀐 것(또는 Slewing을 본 뒤 멈춤)으로 확인해야 함
+- `guider/start`: PHD2가 LostLock이어도 약 6초 만에 "Guiding started" — PHD2가 멈추고 별을 새로 골라 가이딩, 안정 5프레임
+- PHD2 `stop_capture`는 LostLock에서도 바로 멈춤(GuidingStopped)
+- 디더링: LostLock에서도 받음. `GuidingDithered` → `Settling`… → `SettleDone`. ❗ 별을 잃은 프레임이 하나라도 있으면 안정 시간이 0으로 돌아가 시간 초과(Status 1)가 쉽게 남. 지금 `ShootSession`은 실패해도 그냥 다음 장
+- ❗ 시뮬레이터 별이 "HFD가 낮음"(StarLost ErrorCode 4)으로 프레임 절반가량 거부됨(핫픽셀·너무 작은 별에서 나는 오류). 지금 AA는 StarLost의 SNR 0·HFD 0을 평균에 넣음 → 구름·약해짐으로 잘못 보거나 가이드 초점 밀림을 놓칠 수 있음. StarLost는 평균에서 빼고 ErrorCode별로 따로 세야 함. 이런 동안 PHD2 앱 상태는 계속 "LostLock"
+- `flip_calibration`: 가이딩 중·멈춤 모두 됨, RA 각도만 180° (DEC 그대로), `CalibrationDataFlipped` 이벤트. ASCOM 적도의면 PHD2가 방향을 알아 스스로 뒤집으므로 AA는 부르지 않는다(지금 코드 그대로)
+- 캘리브레이션 끝에 "가이드 단계가 적어 정확도 의문" `Alert`가 옴 — AA는 Alert를 보지 않음
+- 연결 해제: 장비마다 0.1~0.3초 "Disconnected". 연결 안 된 장비도 같은 답 → 답만으로 확인 불가. N.I.N.A.에서 가이더를 끊어도 PHD2의 장비 연결은 그대로
+- 못 함: 자동초점·솔빙(시뮬레이터 카메라를 별 사진 방식으로 바꾸는 설정이 N.I.N.A. 화면에만 있음), N.I.N.A.·PHD2 창 닫기(사용 중인 프로그램이라 안 닫음)
+- **❗ 모두 반영 (같은 날)**: 전체 경로 찾기(`NinaRig.FindSavedFileAsync`), 다크플랫은 DARK로 찍고 `DARKFLAT` 폴더로, 반전은 SideOfPier가 바뀐 뒤 멈출 때까지(`NinaRig.FlipAsync`·`WaitStillAsync`), StarLost는 평균에서 빼고 따로 셈(`GuideRaw.LostRecent`·`LowHfdRecent`), 디더링 안정화 실패는 30초 더 지켜보고(`WaitSettledAsync`) 연속 3번이면 멈춤 → 1분 안정되면 자동 재개, 15분 넘으면 "그대로 찍을까요?"(사용자 결정). 시뮬레이터 확인: `tests/Astro.Server.Tests/Real/SimulatorRigTests.cs`(AA_SIM=1) — 반전 14초 뒤 끝으로 판단, 디더링 13초 안정
+- N.I.N.A. 반전은 대상으로 다시 이동하는 것: 대상이 아직 자오선 동쪽이면 같은 쪽이라 아무 일도 없다. 적도의가 알려 주는 좌표(현재 시점)는 보낸 좌표(J2000)와 약 0.02시간 다름
+
 ## 설계: 적정 노출 찾기 · 가이딩 중 별 잃음 대응 (2026-10-07)
 
 **진행**: B(별 잃음)는 구현 — `Shoot/GuideWatch.cs`(원인 가르기, 순수 함수), `ShootSession`(찍기 전·찍는 동안 지켜보기, 원인별 대응, 원인별 멈춘 시간 기록), 장비 `GuideRawAsync`(PHD2 GuideStep·StarLost 이벤트의 SNR·HFD·튐 + N.I.N.A. 가이더 연결·적도의 추적). 아직: 이슬 여유(WandererBox 기온·습도)·열선 제어(지금은 알림만). A(노출)는 가이딩 중 노출 올리고 내리기만 구현, 시작 사다리·기억·SharpCap은 아직.

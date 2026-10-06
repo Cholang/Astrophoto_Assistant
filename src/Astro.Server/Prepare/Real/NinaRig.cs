@@ -19,7 +19,8 @@ public sealed class NinaRig(NinaApiClient nina)
     private static readonly TimeSpan Long = TimeSpan.FromMinutes(3);
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    public sealed record MountState(bool Connected, bool Slewing, bool Tracking, bool AtHome, double RaDeg, double DecDeg, double SiderealHours, Site Site);
+    /// <summary>Pier = ASCOM SideOfPier ("pierEast" · "pierWest" · "pierUnknown")</summary>
+    public sealed record MountState(bool Connected, bool Slewing, bool Tracking, bool AtHome, double RaDeg, double DecDeg, double SiderealHours, Site Site, string Pier = "pierUnknown");
 
     public async Task<MountState?> MountAsync(CancellationToken ct)
     {
@@ -27,7 +28,24 @@ public sealed class NinaRig(NinaApiClient nina)
         if (!r.Ok || r.Response is not { ValueKind: JsonValueKind.Object } m) return null;
         var c = m.GetProperty("Coordinates");
         return new MountState(Bool(m, "Connected"), Bool(m, "Slewing"), Bool(m, "TrackingEnabled"), Bool(m, "AtHome"),
-            Num(c, "RADegrees"), Num(c, "Dec"), Num(m, "SiderealTime"), new Site(Num(m, "SiteLatitude"), Num(m, "SiteLongitude")));
+            Num(c, "RADegrees"), Num(c, "Dec"), Num(m, "SiderealTime"), new Site(Num(m, "SiteLatitude"), Num(m, "SiteLongitude")),
+            m.TryGetProperty("SideOfPier", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() ?? "pierUnknown" : "pierUnknown");
+    }
+
+    /// <summary>움직임이 멈출 때까지 (이동 중 아님 + 좌표가 연속 두 번 같음). timeout까지 안 멈추면 false</summary>
+    public async Task<bool> WaitStillAsync(TimeSpan timeout, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        (double, double)? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            var m = await MountAsync(ct);
+            if (m is null) return false;
+            if (!m.Slewing && last is { } l && Math.Abs(l.Item1 - m.RaDeg) < 0.005 && Math.Abs(l.Item2 - m.DecDeg) < 0.005) return true;
+            last = (m.RaDeg, m.DecDeg);
+            await Task.Delay(1200, ct);
+        }
+        return false;
     }
 
     /// <summary>이동을 시작한다 (기다리지 않음). 실패면 이유</summary>
@@ -143,14 +161,44 @@ public sealed class NinaRig(NinaApiClient nina)
             : null;
     }
 
-    /// <summary>가장 최근에 저장된 사진 기록 (save=true로 찍은 것). 없으면 null</summary>
+    /// <summary>
+    /// 가장 최근에 저장된 사진 기록 (save=true로 찍은 것). 없으면 null.
+    /// File은 디스크의 전체 경로 — image-history의 Filename은 이름만이라(2026-10-06 시뮬레이터 확인) N.I.N.A. 이미지 폴더에서 찾는다. 못 찾으면 이름만
+    /// </summary>
     public async Task<(DateTimeOffset Date, string File, double Hfr, int Stars)?> LastSavedAsync(CancellationToken ct)
     {
         var r = await nina.RequestAsync("image-history?all=true", Short, ct);
         if (!r.Ok || r.Response is not { ValueKind: JsonValueKind.Array } list || list.GetArrayLength() == 0) return null;
         var e = list[list.GetArrayLength() - 1];
         var date = e.TryGetProperty("Date", out var d) && DateTimeOffset.TryParse(d.GetString(), Inv, DateTimeStyles.AssumeLocal, out var dt) ? dt : DateTimeOffset.MinValue;
-        return (date, e.TryGetProperty("Filename", out var f) ? f.GetString() ?? "" : "", Num(e, "HFR"), (int)Num(e, "Stars"));
+        var name = e.TryGetProperty("Filename", out var f) ? f.GetString() ?? "" : "";
+        return (date, name.Length > 0 ? await FindSavedFileAsync(name, ct) ?? name : name, Num(e, "HFR"), (int)Num(e, "Stars"));
+    }
+
+    /// <summary>N.I.N.A. 프로필의 이미지 폴더(ImageFileSettings.FilePath). 모르면 null</summary>
+    public async Task<string?> ImageFolderAsync(CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("profile/show?active=true", Short, ct);
+        return r.Ok && r.Response is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("ImageFileSettings", out var s)
+            && s.TryGetProperty("FilePath", out var fp) && fp.GetString() is { Length: > 0 } dir ? dir : null;
+    }
+
+    /// <summary>
+    /// 저장된 사진의 전체 경로: 이미지 폴더 아래(파일 이름 규칙 $$DATEMINUS12$$\$$IMAGETYPE$$\… 등) 최근에 바뀐 하위 폴더 3개와 폴더 바로 아래에서 찾는다.
+    /// 같은 이름이 여럿이면 가장 최근 것
+    /// </summary>
+    public async Task<string?> FindSavedFileAsync(string name, CancellationToken ct)
+    {
+        if (Path.IsPathRooted(name)) return File.Exists(name) ? name : null;
+        if (await ImageFolderAsync(ct) is not { } root || !Directory.Exists(root)) return null;
+        try
+        {
+            var places = new DirectoryInfo(root).EnumerateDirectories().OrderByDescending(x => x.LastWriteTimeUtc).Take(3)
+                .SelectMany(x => x.EnumerateFiles(name, SearchOption.AllDirectories))
+                .Concat(new DirectoryInfo(root).EnumerateFiles(name, SearchOption.TopDirectoryOnly));
+            return places.OrderByDescending(x => x.LastWriteTimeUtc).FirstOrDefault()?.FullName;
+        }
+        catch (Exception x) when (x is IOException or UnauthorizedAccessException) { return null; }
     }
 
     public async Task<bool> CameraExposingAsync(CancellationToken ct) =>
@@ -231,12 +279,29 @@ public sealed class NinaRig(NinaApiClient nina)
         return false;
     }
 
-    /// <summary>자오선 반전 (N.I.N.A. mount/flip). 끝나고 멈출 때까지</summary>
+    /// <summary>
+    /// 자오선 반전 (N.I.N.A. mount/flip). 끝나고 멈출 때까지.
+    /// 2026-10-06 시뮬레이터 확인: flip은 곧바로 "Flipping"으로 답하고 적도의는 2~5초 뒤에 움직이기 시작(약 14초에 끝, pierWest → pierEast).
+    /// 반전이 필요 없는 쪽이면 같은 답만 하고 아무 일도 없다 → 적도의 방향(SideOfPier)이 바뀐 것으로 확인한다.
+    /// 자오선 서쪽을 보는 정상 자세는 pierEast(ASCOM 규약 — 시뮬레이터도 자오선을 지난 대상으로 가면 pierEast)라 이미 그쪽이면 반전할 것이 없음.
+    /// 방향을 모르는 적도의(pierUnknown)는 움직이기 시작한 것(Slewing)을 본 뒤 멈춤으로 확인
+    /// </summary>
     public async Task<bool> FlipAsync(CancellationToken ct)
     {
+        if (await MountAsync(ct) is not { } before) return false;
+        if (before.Pier == "pierEast") return true; // 이미 반전된 쪽
         var r = await nina.RequestAsync("equipment/mount/flip", Long, ct);
         if (!r.Ok) return false;
-        return await ConfirmStillAsync(ct);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        var moved = false;
+        while (!moved && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(1000, ct);
+            if (await MountAsync(ct) is not { } m) return false;
+            moved = before.Pier == "pierUnknown" ? m.Slewing : m.Pier != before.Pier;
+        }
+        if (!moved) return false; // 60초 안에 방향이 바뀌지 않음
+        return await WaitStillAsync(TimeSpan.FromMinutes(4), ct);
     }
 
     /// <summary>장비 연결 (가이더를 다시 잡을 때 등)</summary>

@@ -108,7 +108,31 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     public async Task<bool> StopGuidingAsync(CancellationToken ct) { await sim.Delay(200, ct); Calls.Add("stop"); return !faults.Take("stop.fail") && !faults.Take("shoot.stopfail"); }
     public Task<bool> MountTrackingAsync(CancellationToken ct) => Task.FromResult(!_mountStopped && !faults.Take("shoot.mount"));
     public void EndSession() { }
-    public async Task<bool> DitherAsync(CancellationToken ct) { await sim.Delay(1200, ct); return true; }
+    // 가이딩 불안정: shoot.unstable = 디더링 안정화가 연속 실패하고 잠시 뒤(몇 번 지켜본 뒤) 안정됨, shoot.unstablelong = 사용자가 답할 때까지 안정되지 않음
+    private int _unstableDithers, _unstableChecks;
+    private bool _unstableLong;
+
+    public async Task<bool> DitherAsync(CancellationToken ct)
+    {
+        await sim.Delay(1200, ct);
+        if (faults.Take("shoot.unstable")) { _unstableDithers = 3; _unstableChecks = 2; }
+        if (faults.Take("shoot.unstablelong")) { _unstableDithers = 3; _unstableLong = true; }
+        if (_unstableDithers <= 0) return true;
+        _unstableDithers--;
+        return false;
+    }
+
+    public async Task<bool> WaitSettledAsync(TimeSpan hold, TimeSpan timeout, CancellationToken ct)
+    {
+        await sim.Delay(300, ct);
+        if (_unstableLong) return false;
+        if (_unstableChecks <= 0) return true;
+        _unstableChecks--;
+        return false;
+    }
+
+    /// <summary>[테스트] 오래 불안정한 상태를 끝낸다</summary>
+    public void EndUnstable() => _unstableLong = false;
 
     public async Task<FlipOutcome> FlipAsync(PrepContext ctx, Action<int> step, CancellationToken ct)
     {

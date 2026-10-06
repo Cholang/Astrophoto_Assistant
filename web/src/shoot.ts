@@ -36,12 +36,14 @@ export interface ShootView {
   photoAt: string | null
   version: number
   simulated: boolean
-  /** 가이드 별을 잃어 멈춘 원인: light · cloud · jump · guider (멈추지 않았으면 null) */
+  /** 멈춘 원인: light · cloud · jump · guider(가이드 별을 잃음) · unstable(디더링 뒤 가이딩이 안정되지 않음). 멈추지 않았으면 null */
   pause: string | null
   pausedSeconds: number
   guideExposureMs: number
   /** 끝날 때 가이딩 정지를 확인했는가 — false면 마무리·다른 대상으로 못 감 (CX-SHOOT-01) */
   guideStopped: boolean
+  /** 촬영 중 질문: unstable = 가이딩 불안정이 15분 넘게 이어짐 → 그대로 찍을까요? (없으면 null) */
+  ask: string | null
 }
 
 /** 촬영을 시작하고(찍는 중이면 이어서) 상태가 바뀔 때마다 onState. 끝내려면 돌려준 함수를 부른다 */
@@ -86,6 +88,18 @@ export async function recheckShootStop(): Promise<string | null> {
     if (r.ok) return null
     const body = (await r.json().catch(() => null)) as { error?: string } | null
     return body?.error ?? '가이딩이 멈췄는지 확인하지 못했습니다.'
+  } catch {
+    return '내부 서버에 연결하지 못했습니다.'
+  }
+}
+
+/** 촬영 중 질문에 답한다 (unstable: shoot = 그대로 찍기 · wait = 더 기다리기). 받을 수 없으면 이유 */
+export async function answerShoot(choice: 'shoot' | 'wait'): Promise<string | null> {
+  try {
+    const r = await fetch('/api/shoot/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice }) })
+    if (r.ok) return null
+    const body = (await r.json().catch(() => null)) as { error?: string } | null
+    return body?.error ?? '답을 보내지 못했습니다.'
   } catch {
     return '내부 서버에 연결하지 못했습니다.'
   }

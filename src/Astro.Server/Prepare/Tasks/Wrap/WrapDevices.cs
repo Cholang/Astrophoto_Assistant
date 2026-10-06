@@ -85,8 +85,33 @@ public sealed class RealWrapDevices(NinaRig rig, Engine.NinaWatcher watcher, ILo
         return new FlatExposure(false, s, 0, Problem: "밝기가 목표에 맞지 않습니다");
     }
 
-    public async Task<bool> CaptureAsync(string imageType, double seconds, int iso, CancellationToken ct) =>
-        (await rig.CaptureAsync(seconds, solve: false, save: true, null, ct, gain: iso, imageType: imageType)).Ok; // gain = ISO (X-T5)
+    /// <summary>
+    /// 한 장 찍어 저장 (gain = ISO, X-T5). N.I.N.A. API의 imageType은 LIGHT·FLAT·DARK·BIAS만 폴더가 나뉘고 DARKFLAT은 SNAPSHOT 폴더로 간다
+    /// (2026-10-06 시뮬레이터 확인) → 다크플랫은 DARK로 찍고 같은 날짜 폴더의 DARKFLAT 폴더로 옮긴다. 못 옮기면 DARK 폴더에 남김(찍기는 성공)
+    /// </summary>
+    public async Task<bool> CaptureAsync(string imageType, double seconds, int iso, CancellationToken ct)
+    {
+        var darkFlat = imageType == "DARKFLAT";
+        var started = DateTimeOffset.Now;
+        if (!(await rig.CaptureAsync(seconds, solve: false, save: true, null, ct, gain: iso, imageType: darkFlat ? "DARK" : imageType)).Ok) return false;
+        if (darkFlat) await MoveToDarkFlatAsync(started, ct);
+        return true;
+    }
+
+    private async Task MoveToDarkFlatAsync(DateTimeOffset started, CancellationToken ct)
+    {
+        try
+        {
+            if (await rig.LastSavedAsync(ct) is not { } s || s.Date < started || !Path.IsPathRooted(s.File)) { log.LogWarning("다크플랫 파일을 찾지 못해 DARK 폴더에 둠"); return; }
+            // …\날짜\DARK\파일 → …\날짜\DARKFLAT\파일 (이름 규칙이 종류 폴더가 아니면 같은 폴더 아래 DARKFLAT)
+            var dir = Path.GetDirectoryName(s.File) ?? "";
+            var to = string.Equals(Path.GetFileName(dir), "DARK", StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(Path.GetDirectoryName(dir) ?? dir, "DARKFLAT") : Path.Combine(dir, "DARKFLAT");
+            Directory.CreateDirectory(to);
+            File.Move(s.File, Path.Combine(to, Path.GetFileName(s.File)), overwrite: false);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log.LogWarning(e, "다크플랫을 DARKFLAT 폴더로 옮기지 못해 DARK 폴더에 둠"); }
+    }
 
     public Task<bool> HomeAsync(CancellationToken ct) => rig.HomeAsync(ct);
     public Task<bool> TrackingOffAsync(CancellationToken ct) => rig.SetTrackingAsync(false, ct);
