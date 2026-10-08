@@ -94,7 +94,7 @@ public sealed class PrepContext(
     /// <summary>주 카메라 한 픽셀이 담는 하늘 크기(″) — 가이딩 판정 기준</summary>
     public double MainPixelScaleArcsec { get; } = mainPixelScaleArcsec;
     /// <summary>가이더를 쓰는가 — 그날 밤 가이딩을 건너뛰었으면(GuiderSkipped) false</summary>
-    public bool HasGuider => hasGuider && results.Get<GuiderSkipped>() is null;
+    public bool HasGuider => hasGuider && Results.Get<GuiderSkipped>() is null;
     public bool HasFocuser { get; } = hasFocuser;
     public PrepResults Results { get; } = results;
     public MountLock Mount { get; } = mount;

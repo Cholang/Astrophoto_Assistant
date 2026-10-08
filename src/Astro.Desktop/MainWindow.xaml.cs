@@ -87,6 +87,7 @@ public partial class MainWindow : Window
                     // 화면 아래 단계 레일의 "앱 끄기" (전체화면이라 창 닫기 버튼이 없다)
                     if (type == "close")
                     {
+                        _closeConfirmed = true; // 화면이 확인했다 (또는 묻지 않아도 되는 화면)
                         Close();
                         return;
                     }
@@ -146,8 +147,17 @@ public partial class MainWindow : Window
     /// </summary>
     private bool _stopping, _stopped;
 
+    // 창의 × 버튼·Alt+F4: 진행 중이면 화면에 "종료할까요?"를 띄운다 (2026-10-08 사용자 결정). 화면이 답("close")하면 닫는다
+    private bool _closeConfirmed;
+
     private async void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        if (!_closeConfirmed && !_stopping && !_stopped && Web.CoreWebView2 is { } web)
+        {
+            e.Cancel = true;
+            web.PostWebMessageAsJson("{\"type\":\"confirm-close\"}");
+            return;
+        }
         if (_stopped) return;
         if (_stopping) { e.Cancel = true; return; } // 멈추는 중에 다시 누름
         if (_server is null) return;

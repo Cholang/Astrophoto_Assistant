@@ -1,6 +1,6 @@
 import { Check, LogOut } from 'lucide-react'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { closeApp, inDesktop } from '../host'
+import { closeApp, inDesktop, onCloseRequest } from '../host'
 import { PRODUCT } from '../product'
 import ConfirmDialog from './ConfirmDialog'
 import styles from './StepRail.module.css'
@@ -95,6 +95,13 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
   const now = extra?.complete ? STAGES.length : STAGES.indexOf(current)
   const [open, setOpen] = useState<string | null>(null)
   const [quitting, setQuitting] = useState(false)
+  // 창의 × 버튼도 "AA 종료"와 같은 확인 (진행 중일 때만 — 요약 화면은 바로 닫음)
+  const confirmOnClose = !extra?.hideExit
+  useEffect(() => {
+    if (!confirmOnClose) return
+    onCloseRequest(() => setQuitting(true))
+    return () => onCloseRequest(null)
+  }, [confirmOnClose])
 
   // 단계마다 마지막으로 받은 작업 목록: 지난 단계의 묶음을 접는 동안, 돌아왔을 때 보이게
   const known = useRef<Record<number, RailItem[]>>({})

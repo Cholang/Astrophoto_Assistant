@@ -258,6 +258,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             else
             {
                 if (connectedNow) await nina.DisconnectAsync(kind, ct);
+                await WaitListedAsync(kind, d.Id, ct);
                 connected = await nina.ConnectAsync(kind, d.Id, ct) && await nina.IsConnectedAsync(kind, ct);
             }
             if (connected) live.Set(kind, d.Id);
@@ -283,6 +284,21 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     }
 
     /// <summary>PHD2 주소는 N.I.N.A. 프로필의 가이더 설정에서(없으면 localhost:4400), 비교할 적도의 이름은 N.I.N.A.가 연결한 적도의</summary>
+    /// <summary>
+    /// N.I.N.A.가 그 장비를 장비 목록에 올릴 때까지 기다린다 (최대 30초). N.I.N.A.를 막 켰을 때는 몇 초 동안 장비 목록을 만드는 중이라
+    /// connect?to=가 "목록에 없음"(Sequence contains no matching element)으로 실패한다 (2026-10-08 실기: 켜고 9초 뒤 전원 허브 연결 실패, 목록은 11초 뒤 완성).
+    /// 끝내 안 나타나면 그냥 연결을 시도해 원래 오류를 보인다
+    /// </summary>
+    private async Task WaitListedAsync(string kind, string id, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            if ((await nina.ListDevicesAsync(kind, ct)).Any(x => x.Id == id)) return;
+            await Task.Delay(1500, ct);
+        }
+    }
+
     private async Task<Phd2Check.Problem?> CheckPhd2Async(CancellationToken ct)
     {
         var host = "localhost";
