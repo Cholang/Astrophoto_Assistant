@@ -83,16 +83,20 @@ const ITEMS: Item[] = [
       </>
     ),
   },
+  // 포커서 0점 (2026-10-09 사용자 결정 — 이슬 방지 열선 자리. 열선은 전원 허브 자동에 맡김):
+  // 포커서를 다시 달면 기어가 맞물리며 노브가 조금 돌아가므로, 노브를 0에 맞춰 달고 AA가 장비 준비의 초점 작업에서 0점을 잡는다
   {
-    title: '이슬 방지 열선',
-    question: '망원경 끝과 가이드 망원경에 열선을 감고 허브에 연결했나요?',
-    tag: '제안 항목',
+    title: '포커서 0점',
+    question: '포커서를 달 때 초점 노브를 끝까지 넣어 0에 맞췄나요?',
     pic: (
       <>
-        <rect x="8" y="24" width="40" height="16" rx="3" />
-        <path className={styles.acc} d="M34 22v20M40 22v20" />
-        <path d="M37 42c0 6 6 6 6 12" />
-        <path d="M52 16c2 2-2 4 0 6M58 16c2 2-2 4 0 6" />
+        <rect x="6" y="24" width="30" height="16" rx="3" />
+        <rect x="36" y="27" width="12" height="10" rx="1.5" />
+        <circle cx="42" cy="46" r="5" />
+        <path d="M42 41v-4" />
+        <path className={styles.acc} d="M58 32h-8" />
+        <path className={styles.acc} d="M53 28l-4 4 4 4" />
+        <path className={styles.acc} d="M54 14v8" />
       </>
     ),
   },

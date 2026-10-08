@@ -59,6 +59,7 @@ public static class PrepareSetup
         s.AddSingleton<IPrepTask, PolarTask>();
         s.AddSingleton<IPrepTask, CalibrationTask>();
         s.AddSingleton<IPrepTask, FocusTask>();
+        s.AddSingleton<FocuserZeroRequest>();
         s.AddSingleton<IPrepTask, SlewTask>();
         s.AddSingleton<IPrepTask, CenterTask>();
         s.AddSingleton<IPrepTask, FocusCheckTask>();

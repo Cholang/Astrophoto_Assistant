@@ -8,7 +8,20 @@
 
 ---
 
-## 2026-10-09 · [Claude] 극 찾기 실패 안내를 조준부터
+## 2026-10-09 · [Claude] 장비 연결 중 종료하면 연결 끊고 닫기, 포커서 0점
+
+**요청**: ① 장비 연결 중에 AA를 끄면 연결을 바로 멈추고 끊긴 것을 확인한 뒤 종료 (실기: AA가 꺼진 뒤 N.I.N.A.가 "스위치 연결됨") ② 포커서를 다시 달면 기어가 맞물리며 노브가 돌아감 → 출발 전 점검의 이슬 방지 열선 타일을 "포커서 0점"으로 바꾸고, AA가 0점을 잡기
+
+**변경**
+- `EquipmentConnector.AbortAsync`(연결 취소 → 이번에 시도한 장비를 허브 맨 나중으로 끊기 → 3초 동안 끊긴 채인지, 늦게 붙으면 다시 끊기, 장비마다 최대 30초), `POST /api/equipment/abort`. `StepRail` 종료 확인이 abort 뒤에 닫고, 못 끊은 장비가 있으면 알리고 "그래도 종료". `ConfirmDialog`에 `busy`
+- `OasisSdk.SetZero`(드라이버와 함께 설치된 OasisFocuser64.dll — Scan·Open·SetZeroPosition·GetStatus, ASCOM·N.I.N.A.에는 0점 명령이 없음), `RealFocusDevices.ZeroIfRequestedAsync`(N.I.N.A. 포커서 끊기 → 0점 → 다시 연결 → 위치 0 확인), `FocuserZeroRequest`, `POST /api/prepare/focuser-zero`(점검을 마치면). `FocusTask.ZeroAsync` — 잡으면 지난 초점 기억을 버림, 실패면 다시 시도·직접 했음·0점 없이, Oasis가 아니면 직접 하라고 묻기
+- `PreflightScreen` 타일 교체, DESIGN.md 점검 항목
+
+**확인**: 서버 테스트 146 통과·1 건너뜀(0점 성공·실패 후 다시 시도·지원 안 됨 3개 추가), lint·웹·데스크톱 빌드. Oasis SDK를 64비트에서 불러 버전(2.0.2)·장치 찾기(1개) 확인 — 실제 0점 잡기는 하지 않음. 확인 못 함: 실장비에서 연결 중 종료, N.I.N.A.가 포커서를 끊은 뒤 SDK로 열리는지·0점 뒤 N.I.N.A. 위치가 0인지
+
+---
+
+## 2026-10-09 · 06332fb [Claude] 극 찾기 실패 안내를 조준부터
 
 **요청**: SharpCap이 위치를 못 찾은 원인이 조준(북극에서 너무 멀리 향함)이었음 — 실패하면 망원경을 북극 쪽으로 더 가깝게 향하게 하라고 보여 주기
 

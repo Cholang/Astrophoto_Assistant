@@ -237,6 +237,14 @@ public sealed class NinaRig(NinaApiClient nina)
         return new FocuserState(Bool(f, "Connected"), (int)Num(f, "Position"), Bool(f, "IsMoving"), double.IsFinite(t) ? t : null);
     }
 
+    /// <summary>포커서 이름·드라이버 Id (Oasis인지 볼 때). 모르면 null</summary>
+    public async Task<string?> FocuserNameAsync(CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("equipment/focuser/info", Short, ct);
+        if (!r.Ok || r.Response is not { ValueKind: JsonValueKind.Object } f) return null;
+        return string.Join(" ", new[] { "Name", "DisplayName", "DeviceId" }.Select(k => f.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null).Where(x => x is not null));
+    }
+
     public async Task<string?> MoveFocuserAsync(int position, CancellationToken ct)
     {
         var r = await nina.RequestAsync($"equipment/focuser/move?position={position}", Short, ct);

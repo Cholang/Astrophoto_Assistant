@@ -95,6 +95,18 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
   const now = extra?.complete ? STAGES.length : STAGES.indexOf(current)
   const [open, setOpen] = useState<string | null>(null)
   const [quitting, setQuitting] = useState(false)
+  // 종료 확인 뒤: 장비 연결 중이면 멈추고 끊는 중(busy), 끊지 못한 장비가 있으면 그 안내(notOff)
+  const [closing, setClosing] = useState<{ busy: boolean; notOff: string[] } | null>(null)
+  const quit = async () => {
+    if (closing && !closing.busy) return closeApp() // 끊지 못한 장비가 있어도 "그래도 종료"
+    setClosing({ busy: true, notOff: [] })
+    const notOff = await fetch('/api/equipment/abort', { method: 'POST' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ notDisconnected: string[] }>) : null))
+      .then((b) => b?.notDisconnected ?? [])
+      .catch(() => [] as string[])
+    if (notOff.length === 0) return closeApp()
+    setClosing({ busy: false, notOff })
+  }
   // 창의 × 버튼도 "AA 종료"와 같은 확인 (진행 중일 때만 — 요약 화면은 바로 닫음)
   const confirmOnClose = !extra?.hideExit
   useEffect(() => {
@@ -326,13 +338,20 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
       </div>
       <ConfirmDialog
         open={quitting}
-        message={`${current} 진행을 종료하고 ${PRODUCT.reul} 종료합니다.`}
-        confirmLabel="종료"
-        onConfirm={() => {
+        message={
+          closing?.busy
+            ? '장비 연결을 멈추고 연결을 끊는 중입니다…'
+            : closing
+              ? `${closing.notOff.join(', ')} 연결을 끊지 못했습니다. N.I.N.A.에서 직접 끊어 주세요.`
+              : `${current} 진행을 종료하고 ${PRODUCT.reul} 종료합니다.`
+        }
+        confirmLabel={closing && !closing.busy ? '그래도 종료' : '종료'}
+        busy={closing?.busy}
+        onConfirm={() => void quit()}
+        onCancel={() => {
           setQuitting(false)
-          closeApp()
+          setClosing(null)
         }}
-        onCancel={() => setQuitting(false)}
       />
     </nav>
   )

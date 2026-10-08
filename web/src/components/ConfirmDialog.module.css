@@ -56,3 +56,9 @@
   outline: none;
   box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--focus);
 }
+
+/* 확인한 일을 하는 중: 버튼을 잠근다 */
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}

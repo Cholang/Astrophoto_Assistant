@@ -17,6 +17,27 @@ public interface IFocusDevices
     Task<int?> CoarseSearchAsync(int min, int max, int from, Action<int> visiting, CancellationToken ct);
     Task<bool> StopAsync(CancellationToken ct);
     Task<FocusEndState> ReadEndStateAsync(CancellationToken ct);
+
+    /// <summary>
+    /// 출발 전 점검의 "포커서 0점"을 확인했으면 지금 위치를 0으로 정한다 (2026-10-09 사용자 결정 — 포커서를 다시 달면 기어가 맞물리며 노브가 조금 돌아감).
+    /// 요청이 없으면 None. 모의 장비는 하지 않는다
+    /// </summary>
+    Task<FocuserZero> ZeroIfRequestedAsync(CancellationToken ct) => Task.FromResult(FocuserZero.None);
+    bool ZeroRequested => false;
+    /// <summary>0점 요청을 거둔다 (사용자가 직접 했거나 건너뜀)</summary>
+    void DropZeroRequest() { }
+}
+
+/// <summary>0점 잡기 결과. Unsupported = AA가 0점을 잡을 수 없는 포커서 (드라이버 설정 창에서 직접)</summary>
+public sealed record FocuserZero(bool Requested, bool Done, bool Unsupported = false, string? Problem = null)
+{
+    public static readonly FocuserZero None = new(false, false);
+}
+
+/// <summary>출발 전 점검에서 "포커서 0점"을 확인했다는 표시 — 다음 초점 작업이 0점을 잡는다. 이어서 하기는 점검을 건너뛰므로 잡지 않는다</summary>
+public sealed class FocuserZeroRequest
+{
+    public volatile bool Pending;
 }
 
 /// <summary>포커서 이동 결과. Stalled = 제조사 멈춤 감지(끝에 닿음)</summary>
@@ -45,6 +66,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
         var ctx = run.Context;
         if (!ctx.HasFocuser) return await ManualAsync(run, "자동초점 장치가 없습니다. 초점을 손으로 맞춘 뒤 눌러 주세요.", ct);
         run.Live("focus-curve", data: new { points = Array.Empty<object>(), last = ctx.Memory.LastFocus?.Position });
+        if (devices.ZeroRequested) await ZeroAsync(run, ct);
 
         while (true)
         {
@@ -114,6 +136,34 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
             return new Completed(new FocusResult(false, af.BestPosition, af.Hfr, temp, ctx.Now()), $"좋아요 · HFR {af.Hfr:F1} · 위치 {af.BestPosition:N0}",
                 "좋아요", "곡선이 깔끔해요. 가장 좋은 위치를 이번 기온과 함께 기억했어요. 이것으로 장비 준비가 끝났고, 오늘 밤 대상을 바꿔도 그대로 씁니다.",
                 [new("redo:focus", "다시 자동초점")]);
+        }
+    }
+
+    /// <summary>포커서 0점 (점검에서 확인한 경우만). 잡으면 지난 초점 위치 기억은 기준이 달라져 버린다</summary>
+    private async Task ZeroAsync(ITaskRun run, CancellationToken ct)
+    {
+        while (true)
+        {
+            run.SubStep(0);
+            run.Status("포커서 0점을 잡는 중입니다 · N.I.N.A. 포커서 연결을 잠시 끊습니다");
+            var z = await devices.ZeroIfRequestedAsync(ct);
+            if (!z.Requested) { run.Status(null); return; }
+            run.Context.Memory.LastFocus = null;
+            if (z.Done) { run.Status("포커서 0점을 잡았습니다", Tone.Ok); return; }
+            if (z.Unsupported)
+            {
+                run.Guide("포커서 0점", "이 포커서는 AA가 0점을 잡을 수 없습니다. 포커서 드라이버 설정 창(N.I.N.A. 포커서 톱니바퀴)에서 Set Zero를 누른 뒤 눌러 주세요.");
+                run.Status(null);
+                await run.AskAsync([new("zero-done", "0점을 잡았어요", true), new("zero-skip", "0점 없이 진행")], ct);
+                devices.DropZeroRequest();
+                return;
+            }
+            run.Guide("포커서 0점을 잡지 못했습니다", "다시 시도하거나, Oasis 설정 창(N.I.N.A. 포커서 톱니바퀴)에서 Set Zero를 직접 누른 뒤 진행해 주세요.");
+            run.Status(z.Problem ?? "포커서 0점을 잡지 못했습니다", Tone.Fail);
+            var c = await run.AskAsync([new("retry", "다시 시도", true), new("zero-done", "직접 0점을 잡았어요"), new("zero-skip", "0점 없이 진행")], ct);
+            if (c == "retry") continue;
+            devices.DropZeroRequest();
+            return;
         }
     }
 

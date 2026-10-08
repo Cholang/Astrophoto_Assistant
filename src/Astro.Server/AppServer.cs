@@ -130,6 +130,15 @@ public static class AppServer
         api.MapGet("/equipment/plan", (EquipmentConnector connector, CancellationToken ct) => connector.PlanAsync(ct));
         api.MapGet("/equipment/connect", (EquipmentConnector connector, CancellationToken ct) =>
             TypedResults.ServerSentEvents(connector.RunAsync(ct), eventType: "check"));
+        // 출발 전 점검을 마침 ("포커서 0점" 확인) → 다음 초점 작업이 포커서 0점을 잡는다
+        api.MapPost("/prepare/focuser-zero", (Prepare.Tasks.Focus.FocuserZeroRequest zero) =>
+        {
+            zero.Pending = true;
+            return Results.NoContent();
+        });
+        // 종료 전: 장비 연결 중이면 멈추고 이번에 연결하던 장비를 끊은 것을 확인 (끊지 못한 장비 이름 목록 — 비면 정상)
+        api.MapPost("/equipment/abort", async (EquipmentConnector connector, CancellationToken ct) =>
+            Results.Ok(new { notDisconnected = await connector.AbortAsync(ct) }));
         // 장비 연결이 모의인가 — 화면의 [임시] 모의 전용 버튼을 실장비에서 숨기려고
         api.MapGet("/equipment/simulated", (IOptions<EquipmentOptions> eq) => Results.Ok(new { simulated = eq.Value.Simulate }));
         // simulateFail=true: [임시] 화면 설계용 실패 만들기 (Equipment:Simulate가 켜져 있을 때만 동작)

@@ -117,6 +117,59 @@ public class TaskIsolationTests
         Assert.True(Assert.IsType<FocusResult>(done.Result).Manual);
     }
 
+    /// <summary>모의 포커서 + 0점 결과를 차례로 돌려주는 장비 (점검에서 "포커서 0점"을 확인한 경우)</summary>
+    private sealed class ZeroFocus(IFocusDevices inner, params FocuserZero[] results) : IFocusDevices
+    {
+        private readonly Queue<FocuserZero> _results = new(results);
+        public bool Dropped;
+        public int Tries;
+        public bool ZeroRequested => !Dropped && _results.Count > 0;
+        public void DropZeroRequest() => Dropped = true;
+        public Task<FocuserZero> ZeroIfRequestedAsync(CancellationToken ct) { Tries++; return Task.FromResult(_results.Dequeue()); }
+        public Task<(int Min, int Max)> LimitsAsync(CancellationToken ct) => inner.LimitsAsync(ct);
+        public Task<int> PositionAsync(CancellationToken ct) => inner.PositionAsync(ct);
+        public Task<double?> TemperatureAsync(CancellationToken ct) => inner.TemperatureAsync(ct);
+        public Task<FocuserMove> MoveAsync(int position, CancellationToken ct) => inner.MoveAsync(position, ct);
+        public Task<AutofocusRun> AutofocusAsync(Action<int, double> point, CancellationToken ct) => inner.AutofocusAsync(point, ct);
+        public Task<int?> CoarseSearchAsync(int min, int max, int from, Action<int> visiting, CancellationToken ct) => inner.CoarseSearchAsync(min, max, from, visiting, ct);
+        public Task<bool> StopAsync(CancellationToken ct) => inner.StopAsync(ct);
+        public Task<FocusEndState> ReadEndStateAsync(CancellationToken ct) => inner.ReadEndStateAsync(ct);
+    }
+
+    [Fact]
+    public async Task 초점_0점을_잡으면_지난_초점_기억을_버리고_진행한다()
+    {
+        var ctx = Harness.Context();
+        ctx.Memory.LastFocus = (30000, 10);
+        var dev = new ZeroFocus(new SimulatedFocusDevices(Fast, new SimFaults()), new FocuserZero(true, true));
+        var (done, run) = await RunAlone(new FocusTask(dev), ctx);
+        Assert.Contains(run.Statuses, s => s.Contains("0점을 잡았습니다"));
+        Assert.DoesNotContain(run.Statuses, s => s.Contains("30,000")); // 지난 위치에서 시작하지 않음
+        Assert.IsType<FocusResult>(done.Result);
+    }
+
+    [Fact]
+    public async Task 초점_0점_실패는_다시_시도하고_직접_했다고_하면_진행한다()
+    {
+        var dev = new ZeroFocus(new SimulatedFocusDevices(Fast, new SimFaults()),
+            new FocuserZero(true, false, Problem: "Oasis 포커서를 찾지 못했습니다"), new FocuserZero(true, false, Problem: "Oasis 포커서를 찾지 못했습니다"));
+        var asked = 0;
+        var (done, run) = await RunAlone(new FocusTask(dev), Harness.Context(),
+            actions => actions.Any(a => a.Id == "zero-done") ? (++asked == 1 ? "retry" : "zero-done") : actions.First(a => a.Primary).Id);
+        Assert.Equal(2, dev.Tries);
+        Assert.True(dev.Dropped);
+        Assert.IsType<FocusResult>(done.Result);
+    }
+
+    [Fact]
+    public async Task 초점_0점을_못_잡는_포커서는_직접_하라고_묻는다()
+    {
+        var dev = new ZeroFocus(new SimulatedFocusDevices(Fast, new SimFaults()), new FocuserZero(true, false, Unsupported: true));
+        var (_, run) = await RunAlone(new FocusTask(dev), Harness.Context());
+        Assert.Contains("zero-done,zero-skip", run.Asked);
+        Assert.True(dev.Dropped);
+    }
+
     [Fact]
     public async Task 센터링_단독_카메라_방향을_기억한다()
     {

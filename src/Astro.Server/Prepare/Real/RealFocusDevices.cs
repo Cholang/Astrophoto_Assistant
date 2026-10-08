@@ -8,8 +8,33 @@ namespace Astro.Server.Prepare.Real;
 /// 2026-10-05 실기: Oasis 이동 정상, 범위 0~56000(제조사 설정 — 사용자가 0·최대를 설정 창에서 정함), 프로브 기온은 연결할 때만 잡힘.
 /// 자동초점은 별이 필요해 맑은 날 확인. 지점별 곡선은 N.I.N.A.가 끝난 뒤 기록으로만 줘서, 끝난 다음 한꺼번에 그린다.
 /// </summary>
-public sealed class RealFocusDevices(NinaRig rig, IConfiguration config) : IFocusDevices
+public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, FocuserZeroRequest zero) : IFocusDevices
 {
+    public bool ZeroRequested => zero.Pending;
+    public void DropZeroRequest() => zero.Pending = false;
+
+    /// <summary>
+    /// Oasis면: N.I.N.A. 포커서 연결 끊기 → 제조사 SDK로 0점 → 다시 연결 → N.I.N.A.가 읽는 위치가 0인지 확인.
+    /// Oasis가 아니면 Unsupported (ASCOM·N.I.N.A.에는 0점 명령이 없음)
+    /// </summary>
+    public async Task<FocuserZero> ZeroIfRequestedAsync(CancellationToken ct)
+    {
+        if (!zero.Pending) return FocuserZero.None;
+        var name = await rig.FocuserNameAsync(ct) ?? "";
+        if (!name.Contains("Oasis", StringComparison.OrdinalIgnoreCase) && !name.Contains("AOFocuser", StringComparison.OrdinalIgnoreCase) || !OasisSdk.Installed)
+            return new FocuserZero(true, false, Unsupported: true);
+        if ((await rig.FocuserAsync(ct))?.Connected == true && !await rig.DisconnectAsync("focuser", ct))
+            return new FocuserZero(true, false, Problem: "N.I.N.A.에서 포커서 연결을 끊지 못했습니다");
+        var problem = await Task.Run(OasisSdk.SetZero, ct);
+        // 0점이 안 됐어도 포커서는 다시 연결해 둔다
+        var back = await rig.ConnectAsync("focuser", ct) && (await rig.FocuserAsync(ct))?.Connected == true;
+        if (!back) problem = (problem is null ? "" : problem + " · ") + "N.I.N.A.에 포커서를 다시 연결하지 못했습니다";
+        else if (problem is null && (await rig.FocuserAsync(ct))?.Position is { } p && p != 0) problem = $"0점을 잡았지만 N.I.N.A.가 읽는 위치가 {p}입니다";
+        if (problem is not null) return new FocuserZero(true, false, Problem: problem);
+        zero.Pending = false;
+        return new FocuserZero(true, true);
+    }
+
     /// <summary>포커서 최대 위치 (N.I.N.A.가 알려 주지 않아 설정 Prepare:FocuserMax, 기본은 Oasis 기본값)</summary>
     private int Max => config.GetValue("Prepare:FocuserMax", 56000);
 

@@ -391,7 +391,15 @@ export default function App() {
             onDone={() => fadeTo(siteReturn.current)}
           />
         )}
-        {phase === 'preflight' && <PreflightScreen onContinue={toRig} />}
+        {phase === 'preflight' && (
+          <PreflightScreen
+            onContinue={() => {
+              // 점검을 마침 = "포커서 0점" 확인 → 초점 작업이 0점을 잡는다 (이어서 하기는 점검을 건너뛰어 잡지 않음)
+              void fetch('/api/prepare/focuser-zero', { method: 'POST' }).catch(() => null)
+              toRig()
+            }}
+          />
+        )}
         {phase === 'rig' && <PrepareScreen key="rig" group="rig" onDone={() => void rigDone()} />}
         {phase === 'plan' && <PlanScreen onContinue={toTarget} />}
         {phase === 'target' && <PrepareScreen key="target" group="target" onDone={toShoot} onReplan={toPlan} onHandoff={handoff} />}

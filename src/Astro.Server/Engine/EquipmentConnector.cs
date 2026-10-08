@@ -144,8 +144,85 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         return (await ReadDevicesAsync(ct)).Select(d => d.Absent ? Make(d, CheckStatus.Absent, "") : Pending(d)).ToList();
     }
 
-    public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
+    // ── 연결 중 종료 (2026-10-09 사용자 요청): AA를 끄면 연결을 바로 멈추고, 이번에 연결하던 장비의 연결을 끊은 것을 확인한 뒤 닫는다.
+    // 연결 요청을 취소해도 N.I.N.A.는 하던 연결을 끝까지 하므로(실기: AA가 꺼진 뒤 "스위치 연결됨") 끊고, 늦게 붙는지도 잠시 지켜본다
+    private readonly Lock _gate = new();
+    private CancellationTokenSource? _runCts;
+    private TaskCompletionSource? _runDone;
+    private readonly List<string> _touched = []; // 이번 연결에서 연결을 시도한 장비 (끊을 대상)
+
+    private CancellationToken BeginRun(CancellationToken ct, bool fresh)
     {
+        lock (_gate)
+        {
+            if (fresh) _touched.Clear();
+            _runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _runDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            return _runCts.Token;
+        }
+    }
+
+    private void EndRun()
+    {
+        lock (_gate)
+        {
+            _runDone?.TrySetResult();
+            _runCts?.Dispose();
+            _runCts = null;
+        }
+    }
+
+    private void Touch(string kind)
+    {
+        lock (_gate) if (!_touched.Contains(kind)) _touched.Add(kind);
+    }
+
+    /// <summary>
+    /// 종료 전: 연결 중이면 멈추고, 이번에 연결을 시도한 장비를 끊고 끊긴 것을 확인한다 (전원 허브는 맨 나중).
+    /// 연결 중이 아니었으면 아무것도 하지 않는다. 끊지 못한 장비가 있으면 그 이름들
+    /// </summary>
+    public async Task<IReadOnlyList<string>> AbortAsync(CancellationToken ct)
+    {
+        Task done;
+        List<string> kinds;
+        lock (_gate)
+        {
+            if (_runCts is null) return [];
+            _runCts.Cancel();
+            done = _runDone?.Task ?? Task.CompletedTask;
+            kinds = [.. _touched];
+            _touched.Clear();
+        }
+        try { await done.WaitAsync(TimeSpan.FromSeconds(5), ct); } catch (TimeoutException) { }
+        if (options.Value.Simulate) return [];
+
+        var failed = new List<string>();
+        foreach (var kind in Slots.Select(s => s.Kind).Reverse().Where(kinds.Contains))
+        {
+            // 끊고, 3초 동안(1초마다) 끊긴 채인지 본다. 하던 연결이 늦게 붙으면 다시 끊는다 (최대 30초)
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+            var quiet = 0;
+            while (quiet < 3 && DateTime.UtcNow < deadline)
+            {
+                if (await nina.IsConnectedAsync(kind, ct))
+                {
+                    quiet = 0;
+                    await nina.DisconnectAsync(kind, ct);
+                }
+                else quiet++;
+                await Task.Delay(1000, ct);
+            }
+            if (quiet < 3) failed.Add(FindSlot(kind)?.Role ?? kind);
+            else live.Forget(kind);
+        }
+        return failed;
+    }
+
+    public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken outer = default)
+    {
+        var ct = BeginRun(outer, fresh: true);
+        try
+        {
         var devices = await ReadDevicesAsync(ct);
         if (devices.Count == 0)
         {
@@ -174,6 +251,8 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             yield return result;
             if (d.Slot.Kind == Hub && result.Status != CheckStatus.Pass) hubFailed = true;
         }
+        }
+        finally { EndRun(); }
     }
 
     /// <summary>
@@ -186,7 +265,9 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         if (d is null) return null;
         // [임시] 시뮬레이션: 사용자가 원인을 해결하고 "다시 연결"을 눌렀다고 보고, 이 장비는 이제 성공한다
         if (options.Value.Simulate && !simulateFail) sim.Fix(id);
-        return await ConnectOneAsync(d, ct, simulateFail && options.Value.Simulate);
+        var token = BeginRun(ct, fresh: false);
+        try { return await ConnectOneAsync(d, token, simulateFail && options.Value.Simulate); }
+        finally { EndRun(); }
     }
 
     /// <summary>장비 하나의 지금 모습 (연결 전). 장비 변경 모드에서 고른 뒤 칸을 바꿀 때</summary>
@@ -247,6 +328,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             //  - AA에서 따로 고른 적이 없어 N.I.N.A. 프로필 그대로인 경우(N.I.N.A.가 연결한 것 = 프로필 장비)만.
             // 그 밖에는(AA에서 다른 장비를 골랐는데 확인된 적 없음) 지금 연결을 끊고 고른 장비로 새로 연결한다 (2026-09-30 리뷰)
             var kind = d.Slot.Kind;
+            Touch(kind);
             using var behind = BackgroundWindows.ForConnect(kind); // PHD2·Wanderer Empire가 켜지며 AA 위로 뜨지 않게
             var connectedNow = await nina.IsConnectedAsync(kind, ct);
             var known = live.Get(kind);

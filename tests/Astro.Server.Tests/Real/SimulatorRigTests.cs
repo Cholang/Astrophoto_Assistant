@@ -94,7 +94,7 @@ public class SimulatorRigTests(ITestOutputHelper output)
             output.WriteLine($"가이딩 시작: {settled}");
         }
         var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
-        var dev = new Shoot.RealShootDevices(rig, phd2, live, new RealCenterDevices(rig, live), new RealFocusDevices(rig, config),
+        var dev = new Shoot.RealShootDevices(rig, phd2, live, new RealCenterDevices(rig, live), new RealFocusDevices(rig, config, new()),
             new AscomWeather(NullLogger<AscomWeather>.Instance), NullLogger<Shoot.RealShootDevices>.Instance);
         var session = new Shoot.ShootSession(dev, new global::Astro.Server.Prepare.PrepareMode(false), NullLogger<Shoot.ShootSession>.Instance);
         var results = new global::Astro.Server.Prepare.Flow.PrepResults();
