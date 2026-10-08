@@ -36,21 +36,31 @@ public sealed class SlewTask(ISlewDevices devices) : IPrepTask
 
     public bool AppliesTo(PrepContext ctx) => true;
 
+    /// <summary>이동이 안 될 때 "지금 위치를 목표로" — 핸드 컨트롤러·성도 앱으로 이미 맞춘 경우 (2026-10-08 사용자 결정). 센터링도 건너뜀</summary>
+    private static readonly PrepAction AcceptHere = new("here", "지금 위치를 목표로");
+    private bool _acceptHere;
+
+    private Completed Accepted(PrepContext ctx) =>
+        new(new SlewResult(0, devices.TargetAltitude(ctx), ctx.Now(), AcceptedHere: true), "지금 위치를 목표로", "지금 위치에서 찍어요",
+            "적도의를 옮기지 않고 지금 가리키는 곳을 대상으로 봐요. 가운데 맞추기(센터링)도 건너뛰니, 시험 사진에서 구도를 확인해 주세요.") { AutoNext = true };
+
     public async Task<TaskOutcome> RunAsync(ITaskRun run, CancellationToken ct)
     {
         var ctx = run.Context;
+        _acceptHere = false;
         run.Live("sky-map");
         while (true)
         {
             run.SubStep(0);
             await WaitUntilUsableAsync(run, ct);
             var moved = await MoveAsync(run, ct);
+            if (_acceptHere) return Accepted(ctx);
             if (moved is null) continue; // 멈춤 → 다시 이동을 누르면 처음부터(고도 확인 포함)
             run.SubStep(2);
             if (moved.ArrivalErrorDeg > ArrivalLimitDeg)
             {
                 run.Status($"목표에서 {moved.ArrivalErrorDeg:F1}° 벗어난 곳에 멈췄습니다. 다시 이동해 주세요", Tone.Fail);
-                await run.AskAsync([new("move", "다시 이동", true)], ct);
+                if (await run.AskAsync([new("move", "다시 이동", true), AcceptHere], ct) == "here") return Accepted(ctx);
                 continue;
             }
             var alt = devices.TargetAltitude(ctx);
@@ -165,7 +175,7 @@ public sealed class SlewTask(ISlewDevices devices) : IPrepTask
             if (result.Ok) return result;
             run.Guide("이동을 마치지 못했습니다", "적도의가 응답하지 않습니다. 적도의 전원과 케이블을 확인해 주세요.");
             run.Status(result.Problem ?? "이동하지 못했습니다", Tone.Fail);
-            await run.AskAsync([new("move", "다시 시도", true)], ct);
+            if (await run.AskAsync([new("move", "다시 시도", true), AcceptHere], ct) == "here") { _acceptHere = true; return null; }
         }
     }
 
@@ -174,7 +184,7 @@ public sealed class SlewTask(ISlewDevices devices) : IPrepTask
         var s = await devices.ReadEndStateAsync(ctx, ct);
         if (s.Moving) return EndStateCheck.Fail("적도의가 아직 움직이고 있습니다");
         if (!s.Tracking) return EndStateCheck.Fail("적도의 추적이 꺼져 있습니다");
-        if (s.DistanceToTargetDeg > ArrivalLimitDeg) return EndStateCheck.Fail($"적도의가 목표에서 {s.DistanceToTargetDeg:F1}° 벗어나 있습니다");
+        if (ctx.Results.Get<SlewResult>() is not { AcceptedHere: true } && s.DistanceToTargetDeg > ArrivalLimitDeg) return EndStateCheck.Fail($"적도의가 목표에서 {s.DistanceToTargetDeg:F1}° 벗어나 있습니다");
         return EndStateCheck.Pass;
     }
 

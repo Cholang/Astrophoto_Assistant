@@ -67,14 +67,14 @@ public class RulesAndContractTests
 
     /// <summary>결과 기록의 모양을 고정한다. 이 시험이 깨지면 그 기록을 읽는 모든 작업을 같이 확인하고 리뷰할 것</summary>
     [Theory]
-    [InlineData(typeof(PolarResult), "ErrorArcmin:Nullable`1 ErrorXPx:Double ErrorYPx:Double Grade:String At:DateTimeOffset")]
-    [InlineData(typeof(CalibrationResult), "Reused:Boolean OrthogonalityErrorDeg:Nullable`1 Position:String Evening:DateOnly At:DateTimeOffset")]
-    [InlineData(typeof(SlewResult), "ArrivalErrorDeg:Double AltitudeDeg:Double At:DateTimeOffset")]
+    [InlineData(typeof(PolarResult), "ErrorArcmin:Nullable`1 ErrorXPx:Double ErrorYPx:Double Grade:String At:DateTimeOffset Skipped:Boolean")]
+    [InlineData(typeof(CalibrationResult), "Reused:Boolean OrthogonalityErrorDeg:Nullable`1 Position:String Evening:DateOnly At:DateTimeOffset Skipped:Boolean")]
+    [InlineData(typeof(SlewResult), "ArrivalErrorDeg:Double AltitudeDeg:Double At:DateTimeOffset AcceptedHere:Boolean")]
     [InlineData(typeof(FocusResult), "Manual:Boolean Position:Nullable`1 Hfr:Nullable`1 TemperatureC:Nullable`1 At:DateTimeOffset")]
-    [InlineData(typeof(CenterResult), "ErrorArcmin:Double CameraAngleDeg:Nullable`1 Attempts:Int32 At:DateTimeOffset Hfr:Nullable`1 Stars:Nullable`1")]
+    [InlineData(typeof(CenterResult), "ErrorArcmin:Double CameraAngleDeg:Nullable`1 Attempts:Int32 At:DateTimeOffset Hfr:Nullable`1 Stars:Nullable`1 Skipped:Boolean")]
     [InlineData(typeof(FocusCheckResult), "Refocused:Boolean TemperatureChangeC:Nullable`1 CenterHfr:Nullable`1 Position:Nullable`1 Hfr:Nullable`1 TemperatureC:Nullable`1 At:DateTimeOffset")]
-    [InlineData(typeof(GuidingResult), "TotalArcsec:Double RaArcsec:Double DecArcsec:Double Grade:String At:DateTimeOffset")]
-    [InlineData(typeof(TestShotResult), "ExposureSeconds:Int32 Hfr:Nullable`1 Eccentricity:Nullable`1 SaturatedPercent:Nullable`1 FilePath:String At:DateTimeOffset")]
+    [InlineData(typeof(GuidingResult), "TotalArcsec:Double RaArcsec:Double DecArcsec:Double Grade:String At:DateTimeOffset Skipped:Boolean")]
+    [InlineData(typeof(TestShotResult), "ExposureSeconds:Int32 Hfr:Nullable`1 Eccentricity:Nullable`1 SaturatedPercent:Nullable`1 FilePath:String At:DateTimeOffset Skipped:Boolean")]
     public void 결과_기록의_모양(Type type, string shape)
     {
         var ctor = type.GetConstructors().Single();

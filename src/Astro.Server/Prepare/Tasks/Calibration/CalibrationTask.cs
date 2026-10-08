@@ -45,6 +45,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
     {
         var ctx = run.Context;
         var evening = TonightService.EveningOf(ctx.Now());
+        ctx.Results.Remove(typeof(GuiderSkipped)); // 캘리브레이션을 다시 하면 가이딩도 다시 쓴다
         // 같은 밤 + 마지막 극축 정렬 뒤에 만든 보정값만 재사용 (극축 정렬을 다시 했으면 새로, CX-PREP-CODE-06)
         if (ctx.Memory.LastCalibration is { } last && last.Evening == evening && last.At > (ctx.Memory.LastPolarAlignedAt ?? DateTimeOffset.MinValue)
             && await devices.HasCalibrationAsync(ct))
@@ -82,7 +83,14 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
             }
             run.Guide("캘리브레이션을 하지 못했습니다", "두 위치 모두에서 별을 찾지 못했습니다.");
             run.Status("구름이 지나가는지, 가이드 망원경 덮개와 초점을 확인해 주세요", Tone.Fail);
-            await run.AskAsync([new("retry", "다시 시도", true)], ct);
+            // 오늘 밤 보정값이 있으면 위에서 이미 물었다 — 지난밤 보정값은 조립하며 카메라 방향이 바뀌었을 수 있어 쓰지 않는다 (2026-10-08 결정)
+            if (await run.AskAsync([new("retry", "다시 시도", true), new("noguide", "가이딩 없이 진행")], ct) == "noguide")
+            {
+                await devices.StopAsync(ct); // PHD2 루프·적도의 이동을 멈춰 둔다
+                ctx.Results.Set(new GuiderSkipped("캘리브레이션을 하지 못함", ctx.Now()));
+                return new Completed(new CalibrationResult(false, null, "", evening, ctx.Now(), Skipped: true), "건너뜀 · 가이딩 없이",
+                    "가이딩 없이 진행합니다", "오늘 밤은 가이딩 없이 찍습니다. 노출은 대상 단계에서 짧게 고를 수 있어요. 다음은 초점입니다.") { AutoNext = true };
+            }
         Retry:;
         }
     }
@@ -136,6 +144,8 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
     public async Task<EndStateCheck> CheckEndStateAsync(PrepContext ctx, CancellationToken ct)
     {
         var s = await devices.ReadEndStateAsync(ct);
+        if (ctx.Results.Get<CalibrationResult>() is { Skipped: true }) // 건너뜀: 보정값은 없어도 됨, 장비는 멈춰 있어야
+            return s.MountMoving ? EndStateCheck.Fail("적도의가 아직 움직이고 있습니다") : s.Phd2Guiding || s.Phd2Looping ? EndStateCheck.Fail("PHD2가 아직 가이딩·루프 중입니다") : EndStateCheck.Pass;
         if (!s.HasCalibration) return EndStateCheck.Fail("PHD2에 보정값이 없습니다");
         if (s.Phd2Guiding || s.Phd2Looping) return EndStateCheck.Fail("PHD2가 아직 가이딩·루프 중입니다");
         if (s.MountMoving) return EndStateCheck.Fail("적도의가 아직 움직이고 있습니다");

@@ -55,7 +55,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
             var start = ctx.Memory.LastFocus?.Position ?? await devices.PositionAsync(ct);
             run.Status(ctx.Memory.LastFocus is { } lf ? $"지난번 위치 {lf.Position:N0}에서 시작합니다{TempText(temp, lf.TemperatureC)}" : "지금 위치에서 시작합니다");
             var moved = await devices.MoveAsync(start, ct);
-            if (!moved.Ok) { if (await FocuserErrorAsync(run, moved.Stalled, moved.Problem, ct)) continue; }
+            if (!moved.Ok) { if (await FocuserErrorAsync(run, moved.Stalled, moved.Problem, ct)) continue; return ManualDone(ctx); }
 
             run.SubStep(1);
             run.Guide("별 크기 측정", "포커서를 조금씩 옮기며 별 크기를 잽니다. 가장 작아지는 위치를 찾습니다.");
@@ -74,7 +74,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
                 await run.AskAsync([new("recheck-stop", "장비 상태 다시 확인", true)], ct);
                 if (await devices.StopAsync(ct)) af = af with { StopUnconfirmed = false };
             }
-            if (af.Stalled) { await FocuserErrorAsync(run, true, af.Problem, ct); continue; }
+            if (af.Stalled) { if (await FocuserErrorAsync(run, true, af.Problem, ct)) continue; return ManualDone(ctx); }
             if (!af.StarsFound)
             {
                 // 별이 안 보임 → 범위 안에서 넓게 훑기
@@ -89,7 +89,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
                 }
                 run.Guide("초점을 대략 손으로 맞춰 주세요", "넓게 훑어도 별을 찾지 못했습니다. 밝은 별이 점으로 보일 때까지 포커서를 손으로 돌린 뒤 다시 자동초점을 누르세요. 덮개가 닫혀 있지 않은지도 확인해 주세요.");
                 run.Status("자동초점에서 별을 찾지 못했습니다", Tone.Fail);
-                var c = await run.AskAsync([new("retry", "다시 자동초점", true), new("manual", "손으로 맞췄어요")], ct);
+                var c = await run.AskAsync([new("retry", "다시 자동초점", true), new("manual", "지금 초점으로 진행")], ct);
                 if (c == "manual") return ManualDone(ctx);
                 continue;
             }
@@ -97,7 +97,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
             {
                 run.Guide("다시 하는 게 좋아요", "곡선이 고르지 않습니다. 구름이 지나가거나 바람에 흔들렸을 수 있습니다.");
                 run.Status(af.Problem ?? "초점 곡선이 고르지 않습니다", Tone.Warn);
-                var c = await run.AskAsync([new("retry", "다시 자동초점", true), new("manual", "손으로 맞췄어요")], ct);
+                var c = await run.AskAsync([new("retry", "다시 자동초점", true), new("manual", "지금 초점으로 진행")], ct);
                 if (c == "manual") return ManualDone(ctx);
                 continue;
             }
@@ -118,15 +118,14 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
     private static string TempText(double? now, double? then) =>
         now is { } n && then is { } t ? $" (그때 {t:F1}°C, 지금 {n:F1}°C)" : "";
 
-    /// <summary>포커서 에러: 멈춤 감지면 해제 안내. 다시 시도를 누르면 true</summary>
+    /// <summary>포커서 에러: 멈춤 감지면 해제 안내. 다시 시도를 누르면 true, "지금 초점으로 진행"이면 false (2026-10-08 — 포커서 문제로 밤이 막히지 않게)</summary>
     private static async Task<bool> FocuserErrorAsync(ITaskRun run, bool stalled, string? problem, CancellationToken ct)
     {
         run.Guide("포커서가 멈췄습니다", stalled
             ? "포커서가 끝에 닿아 멈춘 것 같습니다. 포커서 설정 창(N.I.N.A. 포커서 톱니바퀴)에서 Clear stall을 누른 뒤 다시 시도해 주세요."
             : "포커서가 응답하지 않습니다. 연결을 확인한 뒤 다시 시도해 주세요.");
         run.Status(problem ?? (stalled ? "포커서 멈춤 감지" : "포커서 오류"), Tone.Fail);
-        await run.AskAsync([new("retry", "다시 시도", true)], ct);
-        return true;
+        return await run.AskAsync([new("retry", "다시 시도", true), new("manual", "지금 초점으로 진행")], ct) == "retry";
     }
 
     private static async Task<TaskOutcome> ManualAsync(ITaskRun run, string text, CancellationToken ct)

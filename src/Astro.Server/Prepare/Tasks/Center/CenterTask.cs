@@ -36,6 +36,8 @@ public sealed class CenterTask(ICenterDevices devices) : IPrepTask
     public async Task<TaskOutcome> RunAsync(ITaskRun run, CancellationToken ct)
     {
         var ctx = run.Context;
+        // 이동에서 "지금 위치를 목표로"를 골랐으면 가운데 맞추기도 하지 않는다 (2026-10-08 사용자 결정)
+        if (ctx.Results.Get<SlewResult>() is { AcceptedHere: true }) return Skip(ctx, "지금 위치를 목표로 해서 가운데 맞추기를 하지 않아요.");
         run.Guide("사진 촬영", "사진을 찍어 실제 위치를 계산하고, 적도의를 조금씩 옮깁니다. 카메라 방향은 그대로 둡니다.");
         run.Live("solved-photo", "/api/prepare/live/photo");
         while (true)
@@ -57,7 +59,8 @@ public sealed class CenterTask(ICenterDevices devices) : IPrepTask
                     if (!blind) { blind = true; run.Status("다시 실패 · 하늘 전체에서 찾는 중입니다 (전체 하늘 검색)", Tone.Warn); i--; continue; }
                     run.Guide("위치를 계산하지 못했습니다", "노출을 늘리고 하늘 전체에서 찾아도 별 배치를 찾지 못했습니다. 초점이 나갔거나 구름이 지나가는 중일 수 있습니다. 초점이나 구름을 확인해 주세요.");
                     run.Status("센터링에 실패했습니다", Tone.Fail);
-                    var c = await run.AskAsync([new("retry", "다시 시도", true), new("refocus", "초점 다시 맞추기")], ct);
+                    var c = await run.AskAsync([new("retry", "다시 시도", true), new("refocus", "초점 다시 맞추기"), new("skip", "센터링 건너뛰기")], ct);
+                    if (c == "skip") return Skip(ctx, "대상이 가운데에서 벗어나 있을 수 있어요. 시험 사진에서 구도를 확인해 주세요.");
                     if (c == "refocus")
                     {
                         // 초점 확인이 비교 없이 바로 다시 맞춘다 (장비 준비의 초점은 그대로)
@@ -86,10 +89,17 @@ public sealed class CenterTask(ICenterDevices devices) : IPrepTask
             }
             run.Guide("가운데에 맞추지 못했습니다", $"{MaxAttempts}번 보정해도 목표(1′) 안에 들어오지 않았습니다. 적도의가 바람에 흔들리거나 케이블이 당기고 있을 수 있습니다.");
             run.Status($"마지막 오차 {last?.ErrorArcmin:F1}′", Tone.Fail);
-            await run.AskAsync([new("retry", "다시 시도", true)], ct);
+            if (await run.AskAsync([new("retry", "다시 시도", true), new("skip", "센터링 건너뛰기")], ct) == "skip")
+                return Skip(ctx, $"대상이 가운데에서 {last?.ErrorArcmin:F1}′쯤 벗어나 있어요. 시험 사진에서 구도를 확인해 주세요.");
         NextRound:;
         }
     }
+
+    /// <summary>센터링 건너뛰기 (2026-10-08 사용자 결정)</summary>
+    private static Completed Skip(PrepContext ctx, string why) =>
+        // 탐색의 "이 대상으로 확정 / 다른 대상"은 그대로 묻는다
+        new(new CenterResult(0, null, 0, ctx.Now(), Skipped: true), "건너뜀", "센터링을 건너뛰었어요",
+            why + " 이 대상으로 확정하거나 다른 대상을 고르세요.", [new("flow:replan", "다른 대상")]);
 
     public async Task<EndStateCheck> CheckEndStateAsync(PrepContext ctx, CancellationToken ct)
     {
@@ -97,7 +107,7 @@ public sealed class CenterTask(ICenterDevices devices) : IPrepTask
         if (s.MountMoving) return EndStateCheck.Fail("적도의가 아직 움직이고 있습니다");
         if (!s.Tracking) return EndStateCheck.Fail("적도의 추적이 꺼져 있습니다");
         if (s.CameraExposing) return EndStateCheck.Fail("카메라가 아직 노출 중입니다");
-        if (s.ErrorArcmin > TargetArcmin) return EndStateCheck.Fail($"대상이 가운데에서 {s.ErrorArcmin:F1}′ 벗어나 있습니다");
+        if (ctx.Results.Get<CenterResult>() is not { Skipped: true } && s.ErrorArcmin > TargetArcmin) return EndStateCheck.Fail($"대상이 가운데에서 {s.ErrorArcmin:F1}′ 벗어나 있습니다");
         return EndStateCheck.Pass;
     }
 

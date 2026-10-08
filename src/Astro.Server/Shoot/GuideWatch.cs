@@ -20,6 +20,11 @@ public enum GuideLoss
     MountStopped,
     /// <summary>가이드 카메라·PHD2 연결 끊김</summary>
     Disconnected,
+    /// <summary>
+    /// 핫픽셀·너무 작은 별: PHD2가 "HFD가 낮음"(ErrorCode 4)으로 별을 놓침 — 기다리면 같은 핫픽셀을 다시 잡을 수 있어 바로 별을 다시 고른다
+    /// (2026-10-08 사용자 결정, 제미나이 의견 반영)
+    /// </summary>
+    HotPixel,
 }
 
 /// <summary>
@@ -38,7 +43,9 @@ public sealed record GuideSignals(GuideRaw Raw, double? MainStarsRatio, double? 
 public static class GuideWatch
 {
     /// <summary>가이드 별을 잃은 원인인가 (약해짐·없음이 아닌 것)</summary>
-    public static bool IsLost(this GuideLoss l) => l is GuideLoss.Light or GuideLoss.Cloud or GuideLoss.Jump or GuideLoss.MountStopped or GuideLoss.Disconnected;
+    public static bool IsLost(this GuideLoss l) => l is GuideLoss.Light or GuideLoss.Cloud or GuideLoss.Jump or GuideLoss.MountStopped or GuideLoss.Disconnected or GuideLoss.HotPixel;
+    /// <summary>최근 30프레임 중 "HFD가 낮음"이 이만큼 이상이고 잃은 프레임의 절반 이상이면 핫픽셀·작은 별</summary>
+    public const int HotPixelLost = 3;
 
     public const double JumpPx = 4;          // 한 걸음에 4픽셀 넘게 튀면 바람·케이블
     public const double LightMean = 1.8;     // 주 사진 배경이 기준의 1.8배 넘게 밝으면 빛
@@ -55,6 +62,7 @@ public static class GuideWatch
         if (!r.Guiding)
         {
             if (r.LastJumpPx > JumpPx) return GuideLoss.Jump;
+            if (r.LowHfdRecent >= HotPixelLost && r.LowHfdRecent * 2 >= r.LostRecent) return GuideLoss.HotPixel;
             if (s.MainMeanRatio > LightMean) return GuideLoss.Light;
             // 갑자기 잃음(잃기 직전까지 신호가 기준 근처) + 주 사진 별 수는 그대로면 빛, 아니면 구름.
             // 그날 기준이 아직 없으면 바로 앞 신호들의 최댓값과 비교
@@ -89,6 +97,7 @@ public static class GuideWatch
         GuideLoss.GuideFocus => "guidefocus",
         GuideLoss.Faint => "faint",
         GuideLoss.Jump => "jump",
+        GuideLoss.HotPixel => "hotpixel",
         GuideLoss.MountStopped => "mount",
         GuideLoss.Disconnected => "guider",
         _ => "",

@@ -356,13 +356,15 @@ public class ShootAndWrapTests
     }
 
     [Fact]
-    public async Task 제외_사진이_5장_이어지면_알린다()
+    public async Task 제외_사진이_5장_이어지면_멈추고_확인_사진에_별이_보이면_이어서_찍는다()
     {
-        var r = NewShoot(3);
+        var r = NewShoot(3, exposure: 30);
         r.Faults.Arm("shoot.nostars");
         r.Session.Start(r.Ctx);
         var v = await UntilEnded(r.Session);
         Assert.Equal(1, r.Session.ExcludedRunAlerts);
+        Assert.Contains(ShootMode.Paused, r.Session.ModeHistory);
+        Assert.True(r.Ctx.Results.Get<NightShootResult>()!.Targets.Single().PausedMinutes!.ContainsKey("frames"));
         Assert.Equal(5, v.Excluded);
         Assert.Equal(3, v.Good); // 알림만 — 그 뒤 계속 찍어 계획 장수를 채움
     }
@@ -413,6 +415,19 @@ public class ShootAndWrapTests
         Assert.Null(await session.RecheckStopAsync());
         Assert.True(session.View().MountStopped);
         Assert.Null(session.BlocksNext());
+    }
+
+    [Fact]
+    public async Task 가이드_별_대신_핫픽셀이면_기다리지_않고_별을_다시_고른다()
+    {
+        var r = NewShoot(6, exposure: 30);
+        r.Faults.Arm("shoot.hotpixel");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal("done", v.Ended);
+        var paused = r.Ctx.Results.Get<NightShootResult>()!.Targets.Single().PausedMinutes!;
+        Assert.True(paused.ContainsKey("hotpixel"));
+        Assert.False(paused.ContainsKey("light")); // "강한 빛"으로 기다리지 않음
     }
 
     // ── 디더링 안정화 실패 (2026-10-06 시뮬레이터 확인 · 사용자 결정) ─────────

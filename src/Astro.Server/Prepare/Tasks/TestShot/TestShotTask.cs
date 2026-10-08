@@ -51,7 +51,7 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
                 run.ClearReadout();
                 run.Guide("시험 사진을 찍지 못했습니다", "카메라가 노출하지 못했습니다. 카메라 전원·USB 연결과 카메라의 PC 연결 방식(테더링)을 확인한 뒤 다시 찍어 주세요.");
                 run.Status("카메라가 노출하지 못했습니다", Tone.Fail);
-                await run.AskAsync([new("retry", "다시 찍기", true)], ct);
+                if (await run.AskAsync([new("retry", "다시 찍기", true), SkipAction], ct) == "skip") return Skipped(ctx);
                 continue;
             }
 
@@ -68,7 +68,7 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
             {
                 run.Guide("사진을 받지 못했습니다", "두 번 시도했지만 카메라에서 사진을 내려받지 못했습니다. 카메라 USB 연결과 전원, 카메라 화질 설정이 RAW인지 확인한 뒤 다시 찍어 주세요 (JPEG면 사진을 쓸 수 없습니다).");
                 run.Status("시험 사진을 찍지 못했습니다", Tone.Fail);
-                await run.AskAsync([new("retry", "다시 찍기", true)], ct);
+                if (await run.AskAsync([new("retry", "다시 찍기", true), SkipAction], ct) == "skip") return Skipped(ctx);
                 continue;
             }
 
@@ -113,11 +113,19 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
         }
     }
 
+    /// <summary>시험 사진 건너뛰기 (2026-10-08 사용자 결정 — 구름이 몰려오거나 구도를 이미 확인한 경우)</summary>
+    private static readonly PrepAction SkipAction = new("skip", "시험 사진 건너뛰기");
+
+    private static Completed Skipped(PrepContext ctx) =>
+        new(new TestShotResult(ctx.ExposureSeconds, null, null, null, null, ctx.Now(), Skipped: true), "건너뜀", "시험 사진을 건너뛰었어요",
+            "바로 촬영을 시작할 수 있어요. 첫 사진들의 등급으로 초점·추적을 확인해요.");
+
     public async Task<EndStateCheck> CheckEndStateAsync(PrepContext ctx, CancellationToken ct)
     {
         var s = await devices.ReadEndStateAsync(ct);
         if (s.CameraExposing) return EndStateCheck.Fail("카메라가 아직 노출 중입니다");
         if (ctx.HasGuider && !s.Guiding) return EndStateCheck.Fail("가이딩이 멈춰 있습니다");
+        if (ctx.Results.Get<TestShotResult>() is { Skipped: true }) return EndStateCheck.Pass;
         if (!s.FileSaved) return EndStateCheck.Fail("시험 사진 파일이 저장되지 않았습니다");
         return EndStateCheck.Pass;
     }

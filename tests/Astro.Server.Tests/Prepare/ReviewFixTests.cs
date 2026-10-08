@@ -1,6 +1,8 @@
 using Astro.Server.Prepare.Flow;
 using Astro.Server.Prepare.Sim;
 using Astro.Server.Prepare.Tasks.Calibration;
+using Astro.Server.Prepare.Tasks.Center;
+using Astro.Server.Prepare.Tasks.Guiding;
 using Astro.Server.Prepare.Tasks.Polar;
 using Astro.Server.Prepare.Tasks.Slew;
 using Astro.Server.Prepare.Tasks.TestShot;
@@ -127,6 +129,74 @@ public class ReviewFixTests
 
     private static string Primary(IReadOnlyList<PrepAction> actions) => actions.First(a => a.Primary).Id;
 
+    /// <summary>id가 있으면 그것을, 없으면 주 버튼을 누른다</summary>
+    private static Func<IReadOnlyList<PrepAction>, string> Prefer(string id) => actions =>
+        actions.Any(a => a.Id == id) ? id
+        : actions is [{ Id: "stop" or "end-wait" }] ? "" // 진행 중 "멈춤"·"기다리기 끝"은 누르지 않는다
+        : Primary(actions);
+
+    // ── 작업 실패 시 건너뛰기 (2026-10-08 사용자 결정, 제미나이 의견 반영) ─────────
+
+    [Fact]
+    public async Task 건너뛰기_극축_정렬은_별을_못_찾으면_건너뛰고_카메라를_돌려준다()
+    {
+        var sim = new SimOptions { Speed = 0 };
+        var faults = new SimFaults();
+        faults.Arm("polar.stars");
+        var task = new PolarTask(new SimulatedPolarDevices(sim, faults));
+        var ctx = Harness.Context();
+        var run = new ScriptRun(ctx, Prefer("skip"));
+        var done = Assert.IsType<Completed>(await task.RunAsync(run, CancellationToken.None).WaitAsync(Harness.Timeout));
+        Assert.True(Assert.IsType<PolarResult>(done.Result).Skipped);
+        ctx.Results.Set(done.Result);
+        Assert.True((await task.CheckEndStateAsync(ctx, CancellationToken.None)).Ok); // SharpCap 닫힘·카메라 PHD2
+    }
+
+    [Fact]
+    public async Task 건너뛰기_가이딩을_못하면_가이딩_없이_진행하고_노출을_줄일지_묻는다()
+    {
+        var sim = new SimOptions { Speed = 0 };
+        var faults = new SimFaults();
+        faults.Arm("guiding.star");
+        var task = new GuidingTask(new SimulatedGuidingDevices(sim, faults));
+        var ctx = Harness.Context(plan: Harness.Plan()); // 120초 계획
+        var run = new ScriptRun(ctx, Prefer("noguide"));
+        var done = Assert.IsType<Completed>(await task.RunAsync(run, CancellationToken.None).WaitAsync(Harness.Timeout));
+        Assert.True(Assert.IsType<GuidingResult>(done.Result).Skipped);
+        Assert.Contains("shorter,keep", run.Asked);
+        Assert.Equal(GuidingTask.UnguidedExposure, ctx.ExposureSeconds); // 주 버튼 = 줄이기
+        Assert.False(ctx.HasGuider); // 그날 밤 가이딩 없음
+        ctx.Results.Set(done.Result);
+        Assert.True((await task.CheckEndStateAsync(ctx, CancellationToken.None)).Ok);
+    }
+
+    [Fact]
+    public async Task 건너뛰기_이동이_안_되면_지금_위치를_목표로_하고_센터링도_건너뛴다()
+    {
+        var sim = new SimOptions { Speed = 0 };
+        var faults = new SimFaults();
+        faults.Arm("slew.move");
+        var ctx = Harness.Context(plan: Harness.Plan());
+        ctx.IgnoreAltitude = true;
+        var slew = new SlewTask(new SimulatedSlewDevices(sim, faults));
+        var done = Assert.IsType<Completed>(await slew.RunAsync(new ScriptRun(ctx, Prefer("here")), CancellationToken.None).WaitAsync(Harness.Timeout));
+        Assert.True(Assert.IsType<SlewResult>(done.Result).AcceptedHere);
+        ctx.Results.Set(done.Result);
+        var center = await new CenterTask(new SimulatedCenterDevices(sim, faults)).RunAsync(new ScriptRun(ctx, Primary), CancellationToken.None).WaitAsync(Harness.Timeout);
+        Assert.True(Assert.IsType<CenterResult>(Assert.IsType<Completed>(center).Result).Skipped);
+    }
+
+    [Fact]
+    public async Task 건너뛰기_시험_사진을_못_찍으면_건너뛸_수_있다()
+    {
+        var faults = new SimFaults();
+        faults.Arm("test.expose");
+        var task = new TestShotTask(new SimulatedTestShotDevices(new SimOptions { Speed = 0 }, faults));
+        var ctx = Harness.Context();
+        var done = Assert.IsType<Completed>(await task.RunAsync(new ScriptRun(ctx, Prefer("skip")), CancellationToken.None).WaitAsync(Harness.Timeout));
+        Assert.True(Assert.IsType<TestShotResult>(done.Result).Skipped);
+    }
+
     [Fact]
     public async Task CODE02_이동_중_정지를_확인하지_못하면_다시_이동을_보이지_않는다()
     {
@@ -193,7 +263,7 @@ public class ReviewFixTests
         var task = new TestShotTask(new SimulatedTestShotDevices(new SimOptions { Speed = 0 }, faults));
         var run = new ScriptRun(Harness.Context(), Primary);
         Assert.IsType<Completed>(await task.RunAsync(run, CancellationToken.None).WaitAsync(Harness.Timeout)); // 다시 찍기 뒤 성공
-        Assert.Equal("retry", run.Asked[0]);
+        Assert.Equal("retry,skip", run.Asked[0]); // 2026-10-08: 시험 사진 건너뛰기도 함께
         var failed = run.Statuses.FindIndex(s => s.Contains("노출하지 못했습니다"));
         Assert.True(failed >= 0);
         Assert.DoesNotContain(run.Statuses.Take(failed), s => s.Contains("내려받는"));

@@ -63,15 +63,16 @@ public sealed class GuidingTask(IGuidingDevices devices) : IPrepTask
             {
                 run.Guide("캘리브레이션이 맞지 않습니다", "보정값이 지금 장비 상태와 맞지 않아 가이딩이 흔들립니다. 캘리브레이션부터 다시 하는 게 좋아요.");
                 run.Status(start.Problem ?? "보정값 불일치", Tone.Fail);
-                var c = await run.AskAsync([new("recal", "캘리브레이션 다시 하기", true), new("retry", "다시 시도")], ct);
+                var c = await run.AskAsync([new("recal", "캘리브레이션 다시 하기", true), new("retry", "다시 시도"), NoGuide], ct);
                 if (c == "recal") return new RedoRequest("calibration");
+                if (c == "noguide") return await SkipAsync(run, ct);
                 continue;
             }
             if (!start.Ok || !start.StarFound)
             {
                 run.Guide("가이드 별을 찾지 못했습니다", "노출을 늘려도 가이드 카메라에 별이 보이지 않습니다. 가이드 망원경 덮개·초점이나 구름을 확인한 뒤 다시 시도해 주세요.");
                 run.Status(start.Problem ?? "별 없음", Tone.Fail);
-                await run.AskAsync([new("retry", "다시 시도", true)], ct);
+                if (await run.AskAsync([new("retry", "다시 시도", true), NoGuide], ct) == "noguide") return await SkipAsync(run, ct);
                 continue;
             }
 
@@ -98,9 +99,34 @@ public sealed class GuidingTask(IGuidingDevices devices) : IPrepTask
         }
     }
 
+    /// <summary>가이딩 없이 찍을 때 권하는 한 장 노출 상한 (2026-10-08 사용자 결정 — 자동으로 바꾸지 않고 권함)</summary>
+    public const int UnguidedExposure = 60;
+    private static readonly PrepAction NoGuide = new("noguide", "가이딩 없이 진행");
+
+    /// <summary>
+    /// 가이딩 없이 진행 (2026-10-08 사용자 결정): PHD2를 멈추고 그날 밤 가이딩을 쓰지 않는다(GuiderSkipped — 촬영은 PHD2를 부르지 않음, 디더링 없음).
+    /// 노출이 길면 줄일지 묻는다 — AA가 계획을 몰래 바꾸지 않는다
+    /// </summary>
+    private async Task<TaskOutcome> SkipAsync(ITaskRun run, CancellationToken ct)
+    {
+        var ctx = run.Context;
+        await devices.StopAsync(ct);
+        ctx.Results.Set(new GuiderSkipped("가이딩을 시작하지 못함", ctx.Now()));
+        if (ctx.ExposureSeconds > UnguidedExposure)
+        {
+            run.Guide("노출을 줄일까요?", $"가이딩 없이 {ctx.ExposureSeconds}초를 찍으면 별이 흐를 수 있어요. 가이딩 없이는 {UnguidedExposure}초 이하를 권해요. 시험 사진에서 별 모양을 확인할 수 있어요.");
+            run.Status(null);
+            var c = await run.AskAsync([new("shorter", $"{UnguidedExposure}초로 줄이기", true), new("keep", $"계획대로 {ctx.ExposureSeconds}초")], ct);
+            if (c == "shorter") ctx.ExposureSeconds = UnguidedExposure;
+        }
+        return new Completed(new GuidingResult(0, 0, 0, "건너뜀", ctx.Now(), Skipped: true), $"건너뜀 · 가이딩 없이 {ctx.ExposureSeconds}초",
+            "가이딩 없이 진행합니다", "오늘 밤은 가이딩 없이 찍어요. 디더링도 하지 않아요. 다음은 시험 사진입니다.") { AutoNext = true };
+    }
+
     public async Task<EndStateCheck> CheckEndStateAsync(PrepContext ctx, CancellationToken ct)
     {
         var s = await devices.ReadEndStateAsync(ct);
+        if (ctx.Results.Get<GuidingResult>() is { Skipped: true }) return EndStateCheck.Pass; // 가이딩 없이 진행
         if (!s.Guiding) return EndStateCheck.Fail("PHD2가 가이딩하고 있지 않습니다");
         if (!s.Settled) return EndStateCheck.Fail("가이딩이 아직 안정되지 않았습니다");
         if (s.StarLostRecently > 0) return EndStateCheck.Fail("방금 가이드 별을 잃었습니다");

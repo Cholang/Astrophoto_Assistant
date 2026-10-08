@@ -68,7 +68,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private readonly List<double> _snrSamples = [], _hfdSamples = [];
     private double _snrBaseline, _hfdBaseline;
     private double? _mainStarsRatio, _mainMeanRatio;
-    private readonly List<DateTimeOffset> _jumps = [];
+    private readonly List<DateTimeOffset> _jumps = [], _hotPixels = [];
     private readonly Dictionary<GuideLoss, DateTimeOffset> _lastDegrade = [];
     private bool _windWarned;
     // CX-SHOOT-01: 끝날 때 가이딩 정지를 확인했는가 (확인 전에는 마무리·다른 대상으로 못 감). 가이더 없는 구성은 감시·정지를 건너뜀(07)
@@ -87,10 +87,14 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private DateTimeOffset _lowHfdWarned, _dewWarned;
     private DewStatus? _dew;
     public const int UnstableAfter = 3;
-    // 제외 사진이 이어짐: 가이드 별은 멀쩡한데 주 사진만 나쁠 때(렌즈 덮개·주 경통 이슬·초점·구름) — 2026-10-08 시뮬레이터 전체 시험에서 35장이 말없이 제외됨
+    // 제외 사진이 이어짐: 가이드 별은 멀쩡한데 주 사진만 나쁠 때(렌즈 덮개·주 경통 이슬·초점·구름) — 2026-10-08 시뮬레이터 전체 시험에서 35장이 말없이 제외됨.
+    // 5장 연속이면 멈추고 3분마다 한 장씩 확인 → 쓸 사진이 나오면 이어서, 30분 넘으면 촬영 끝 (2026-10-08 사용자 결정 — 가이드 별 신호는 이 경우 멀쩡해서 재개 기준으로 쓰지 않음)
     public const int ExcludedRunAlert = 5;
+    public static readonly TimeSpan FramesRetry = TimeSpan.FromMinutes(3), FramesGiveUp = TimeSpan.FromMinutes(30);
     private int _excludedRun;
-    /// <summary>[테스트] 제외 사진이 이어져 알린 횟수</summary>
+    private DateTimeOffset? _framesPausedSince;
+    private DateTimeOffset _framesLastTry;
+    /// <summary>[테스트] 제외 사진이 이어져 멈춘 횟수</summary>
     internal int ExcludedRunAlerts { get; private set; }
     public static readonly TimeSpan UnstableHold = TimeSpan.FromMinutes(1), UnstableAsk = TimeSpan.FromMinutes(15);
 
@@ -194,9 +198,9 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _lastGrade = _ended = _folder = null; _note = null; _focusPoints = null; _photoAt = null;
             _flipped = false; _stopRequested = false; _recordIndex = -1; _hfrRecent.Clear();
             _pause = null; _pausedMinutes.Clear(); _snrSamples.Clear(); _hfdSamples.Clear(); _snrBaseline = _hfdBaseline = 0;
-            _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _lastDegrade.Clear(); _windWarned = false;
+            _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _hotPixels.Clear(); _lastDegrade.Clear(); _windWarned = false;
             _guideStopped = true; _mountStill = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
-            _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _excludedRun = 0; _lowHfdWarned = _dewWarned = DateTimeOffset.MinValue; _dew = null;
+            _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _excludedRun = 0; _framesPausedSince = null; _lowHfdWarned = _dewWarned = DateTimeOffset.MinValue; _dew = null;
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
             _mode = ShootMode.Shoot;
             Changed();
@@ -342,6 +346,28 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                     continue;
                 }
 
+                // 제외 사진이 이어져 멈춘 동안: 3분마다 한 장만 찍어 확인, 30분 넘으면 끝
+                if (_framesPausedSince is { } fp)
+                {
+                    var retry = mode.Simulate ? TimeSpan.FromMilliseconds(300) : FramesRetry;
+                    var giveUp = mode.Simulate ? TimeSpan.FromSeconds(3) : FramesGiveUp;
+                    if (DateTimeOffset.Now - fp > giveUp)
+                    {
+                        Resume(null);
+                        Note($"별이 없는 사진이 {(int)giveUp.TotalMinutes}분 넘게 이어져 촬영을 멈췄어요 · 렌즈 덮개·주 경통 이슬·초점·구름을 확인해 주세요", Tone.Fail, 600);
+                        await EndAsync("frames", ct);
+                        return;
+                    }
+                    var left = retry - (DateTimeOffset.Now - _framesLastTry);
+                    if (left > TimeSpan.Zero)
+                    {
+                        Set(() => { _note = new StatusLine($"멈춤 · 별이 없는 사진이 이어져요 · {(int)(DateTimeOffset.Now - fp).TotalMinutes}분째 · {Math.Ceiling(left.TotalSeconds):0}초 뒤 한 장 확인", Tone.Warn); _noteUntil = DateTimeOffset.MaxValue; });
+                        await WakeableDelayAsync(left < TimeSpan.FromSeconds(5) ? left : TimeSpan.FromSeconds(5), ct);
+                        continue;
+                    }
+                    _framesLastTry = DateTimeOffset.Now;
+                }
+
                 // 한 장 (찍는 동안에도 가이드 별을 지켜봄 — 오래 잃으면 이 장을 멈추고 버림)
                 Set(() => { _mode = _stopRequested ? ShootMode.Finishing : ShootMode.Shoot; _elapsed = 0; });
                 var (shot, lost) = await ExposeWatchedAsync(ctx, ct);
@@ -385,10 +411,16 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 });
                 if (grade.Excluded) Note($"{_good + _excluded}번 사진: {grade.Reason} · {(moveFailed ? "제외 폴더로 옮기지 못했어요 (직접 옮겨 주세요)" : "제외 폴더로 옮겼어요")}", Tone.Warn, 8);
                 _excludedRun = grade.Excluded ? _excludedRun + 1 : 0;
-                if (_excludedRun > 0 && _excludedRun % ExcludedRunAlert == 0) // 5장마다 다시 (계속 찍으며 알림만 — 멈출지는 사용자 결정 전)
+                if (_framesPausedSince is not null)
+                {
+                    if (grade.Excluded) Pause("frames", $"확인 사진도 별이 없어요 ({grade.Reason}) · 3분 뒤 다시 확인해요", keepSince: true);
+                    else { _framesPausedSince = null; Resume("별이 돌아왔어요 · 이어서 찍어요"); }
+                }
+                else if (_excludedRun >= ExcludedRunAlert)
                 {
                     ExcludedRunAlerts++;
-                    Note($"제외한 사진이 {_excludedRun}장 이어져요 ({grade.Reason}) · 렌즈 덮개·주 경통 이슬·초점·구름을 확인해 주세요", Tone.Fail, 60);
+                    _framesPausedSince = _framesLastTry = DateTimeOffset.Now;
+                    Pause("frames", $"제외한 사진이 {_excludedRun}장 이어져 촬영을 멈췄어요 ({grade.Reason}) · 렌즈 덮개·주 경통 이슬·초점·구름을 확인해 주세요");
                 }
                 Record(ctx);
 
@@ -417,6 +449,16 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     }
 
     private readonly List<double> _hfrRecent = [];
+
+    /// <summary>기다리기 — "촬영 중단"이 바로 깨운다</summary>
+    private async Task WakeableDelayAsync(TimeSpan wait, CancellationToken ct)
+    {
+        using var wake = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        lock (_gate) _wake = wake;
+        try { await Task.Delay(wait, wake.Token); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        finally { lock (_gate) _wake = null; }
+    }
 
     /// <summary>끝낼 이유: user(중단) · done(계획 장수) · low(고도 30° 아래) · dawn(계획 끝 시각). 아니면 null</summary>
     private string? EndReason(PrepContext ctx) =>
@@ -638,6 +680,16 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 if (!await devices.ReselectStarAsync(ct) && !await RecenterSafelyAsync(ctx, ct)) return false;
                 Resume(_jumps.Count >= 3 && !_windWarned ? "별이 자주 튀어요 · 바람이나 케이블을 확인해 주세요" : "가이드 별을 다시 잡았어요 · 이어서 찍어요");
                 if (_jumps.Count >= 3) _windWarned = true;
+                return true;
+
+            case GuideLoss.HotPixel:
+                // 핫픽셀·너무 작은 별: 기다리지 않고 바로 별을 다시 고른다. 10분에 두 번째면 가이드 노출을 한 단계 올림 (별 신호가 핫픽셀보다 커지게)
+                _hotPixels.Add(DateTimeOffset.Now);
+                _hotPixels.RemoveAll(t => DateTimeOffset.Now - t > TimeSpan.FromMinutes(10));
+                Pause("hotpixel", "가이드 별 대신 핫픽셀이나 너무 작은 별을 잡은 것 같아요 · 별을 다시 고르는 중이에요");
+                var raised = _hotPixels.Count >= 2 && await StepGuideExposureAsync(+1, ct);
+                if (!await devices.ReselectStarAsync(ct)) { Resume(null); return await WaitForStarAsync(ctx, GuideLoss.Cloud, ct); }
+                Resume(raised ? $"다른 별을 골랐어요 · 가이드 노출을 {devices.GuideExposureMs / 1000.0:0.#}초로 늘렸어요" : "다른 별을 골랐어요 · 이어서 찍어요");
                 return true;
 
             case GuideLoss.Light:

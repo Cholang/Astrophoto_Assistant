@@ -80,6 +80,9 @@ public sealed class SimulatedPolarDevices(SimOptions sim, SimFaults faults) : IP
         await sim.Delay(100, ct);
         if (faults.Take("stop.fail")) return false;
         _rotating = false;
+        // 실제처럼: SharpCap을 닫고 가이드 카메라를 PHD2에 돌려준다 (RealPolarDevices.StopAsync)
+        _sharpCapOpen = false;
+        _onPhd2 = true;
         return true;
     }
 

@@ -47,8 +47,7 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
 
     public async Task<TaskOutcome> RunAsync(ITaskRun run, CancellationToken ct)
     {
-        await HandOverAsync(run, ct);
-        await FindPoleAsync(run, ct);
+        if (!await HandOverAsync(run, ct) || !await FindPoleAsync(run, ct)) return await SkipAsync(run, ct);
         var offset = await AlignAsync(run, ct);
         await GiveBackAsync(run, ct);
         var scale = await devices.GuidePixelScaleAsync(ct);
@@ -60,7 +59,26 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
             "가이드 카메라가 PHD2에 다시 연결되었습니다. 다음은 가이딩 보정값을 만드는 캘리브레이션입니다.");
     }
 
-    private async Task HandOverAsync(ITaskRun run, CancellationToken ct)
+    /// <summary>
+    /// 극축 정렬 건너뛰기 (2026-10-08 사용자 결정 — 북쪽이 막혔거나 SharpCap·카메라 문제로 밤이 막히지 않게): SharpCap을 닫고 카메라를 PHD2에 돌려준 뒤 다음으로
+    /// </summary>
+    private async Task<TaskOutcome> SkipAsync(ITaskRun run, CancellationToken ct)
+    {
+        run.Guide("극축 정렬을 건너뜁니다", "SharpCap을 닫고 가이드 카메라를 PHD2에 돌려준 뒤 다음으로 갑니다.");
+        run.Live("none");
+        while (true)
+        {
+            run.Status("가이드 카메라를 PHD2로 돌려주는 중입니다");
+            if (await devices.StopAsync(ct)) break;
+            run.Status("가이드 카메라를 PHD2에 다시 연결하지 못했습니다. PHD2의 장비 연결 창을 확인해 주세요", Tone.Fail);
+            await run.AskAsync([new("retry", "다시 시도", true)], ct);
+        }
+        return new Completed(new PolarResult(null, 0, 0, "건너뜀", run.Context.Now(), Skipped: true), "건너뜀", "극축 정렬을 건너뛰었어요",
+            "극축이 틀어져 있으면 가이딩 보정이 잦아지고 긴 촬영에서 시야가 조금 돌 수 있어요. 다음은 캘리브레이션입니다.") { AutoNext = true };
+    }
+
+    /// <summary>넘겨받기. 건너뛰기를 고르면 false</summary>
+    private async Task<bool> HandOverAsync(ITaskRun run, CancellationToken ct)
     {
         run.SubStep(0);
         run.Guide("넘겨받기", "가이드 카메라를 PHD2에서 SharpCap으로 넘깁니다. 손대실 것은 없습니다.");
@@ -79,15 +97,16 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
             {
                 run.Status("SharpCap을 실행하는 중입니다");
                 var started = await devices.StartSharpCapAsync(ct);
-                if (started.Ok) return;
+                if (started.Ok) return true;
                 run.Status($"SharpCap을 실행하지 못했습니다. {started.Problem}".Trim(), Tone.Fail);
             }
             else run.Status($"{released.Problem} PHD2의 장비 연결 창에서 가이드 카메라 연결을 해제한 뒤 다시 시도해 주세요.", Tone.Fail);
-            await run.AskAsync([new("retry", "다시 시도", true)], ct);
+            if (await run.AskAsync([new("retry", "다시 시도", true), new("skip", "극축 정렬 건너뛰기")], ct) == "skip") return false;
         }
     }
 
-    private async Task FindPoleAsync(ITaskRun run, CancellationToken ct)
+    /// <summary>극 찾기. 건너뛰기를 고르면 false</summary>
+    private async Task<bool> FindPoleAsync(ITaskRun run, CancellationToken ct)
     {
         run.SubStep(1);
         run.Guide("극 찾기", "회전 전후의 별 위치를 비교해 극축 오차를 계산합니다. 잠시 기다려 주세요.");
@@ -103,9 +122,9 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
                     _ => p.Stars > 0 ? $"별을 찾는 중입니다 · 별 {p.Stars}개 · 노출 {p.ExposureSeconds:0.#}초 (AA가 정함)" : $"별을 찾는 중입니다 · 노출 {p.ExposureSeconds:0.#}초 (AA가 정함)",
                 });
             }, ct);
-            if (found.Ok) return;
+            if (found.Ok) return true;
             run.Status(found.Problem ?? "별을 찾지 못했습니다. 가이드 망원경 덮개와 구름, 북쪽 시야를 확인해 주세요.", Tone.Fail);
-            await run.AskAsync([new("retry", "다시 시도", true)], ct);
+            if (await run.AskAsync([new("retry", "다시 시도", true), new("skip", "극축 정렬 건너뛰기")], ct) == "skip") return false;
         }
     }
 

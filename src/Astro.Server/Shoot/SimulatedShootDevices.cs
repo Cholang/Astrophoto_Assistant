@@ -75,7 +75,7 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
         GuideRawCalls++;
         if (faults.Take("shoot.mount") || _abortScenario) _mountStopped = true;
         if (faults.Take("shoot.guider")) _disconnected = true;
-        foreach (var k in new[] { "cloud", "light", "wind" })
+        foreach (var k in new[] { "cloud", "light", "wind", "hotpixel" })
             if (faults.Take("shoot." + k)) { _lostKind = k; _lostChecks = k == "cloud" ? 4 : 2; }
         if (faults.Take("shoot.dew")) _dewChecks = 40;
 
@@ -94,7 +94,9 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
         Push(_snr, snr);
         Push(_hfd, 2.2 + _r.NextDouble() * .2);
         _steps++;
-        return Task.FromResult(new GuideRaw(!_disconnected, guiding, !_mountStopped, _snr.ToArray(), _hfd.ToArray(), jump, _dewChecks > 0 ? 1.2 : 6, _steps));
+        // 핫픽셀: 별을 잃었는데 대부분 "HFD가 낮음"
+        var lowHfd = !guiding && _lostKind == "hotpixel" ? 5 : 0;
+        return Task.FromResult(new GuideRaw(!_disconnected, guiding, !_mountStopped, _snr.ToArray(), _hfd.ToArray(), jump, _dewChecks > 0 ? 1.2 : 6, _steps, lowHfd, lowHfd));
     }
 
     private static void Push(List<double> xs, double v)
