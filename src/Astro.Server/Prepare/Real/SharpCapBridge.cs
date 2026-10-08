@@ -70,6 +70,15 @@ public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
         {
             return $"SharpCap을 켜지 못했습니다 ({e.Message})";
         }
+        var problem = await WaitStartedAsync(ct);
+        // 실패면 AA가 켠 SharpCap을 닫아 둔다 — 남겨 두면 "다시 시도"가 "이미 켜져 있습니다"로 막힘 (2026-10-08 시뮬레이터 전체 시험에서 발견).
+        // 켜기 전에 SharpCap이 없었던 것을 확인했으므로 지금 열린 SharpCap은 AA가 켠 것
+        if (problem is not null && _process is { HasExited: false }) await CloseAsync(CancellationToken.None);
+        return problem;
+    }
+
+    private async Task<string?> WaitStartedAsync(CancellationToken ct)
+    {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(90);
         while (DateTime.UtcNow < deadline)
         {

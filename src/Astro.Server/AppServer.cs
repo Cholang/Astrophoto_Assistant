@@ -127,6 +127,8 @@ public static class AppServer
         api.MapGet("/equipment/plan", (EquipmentConnector connector, CancellationToken ct) => connector.PlanAsync(ct));
         api.MapGet("/equipment/connect", (EquipmentConnector connector, CancellationToken ct) =>
             TypedResults.ServerSentEvents(connector.RunAsync(ct), eventType: "check"));
+        // 장비 연결이 모의인가 — 화면의 [임시] 모의 전용 버튼을 실장비에서 숨기려고
+        api.MapGet("/equipment/simulated", (IOptions<EquipmentOptions> eq) => Results.Ok(new { simulated = eq.Value.Simulate }));
         // simulateFail=true: [임시] 화면 설계용 실패 만들기 (Equipment:Simulate가 켜져 있을 때만 동작)
         api.MapGet("/equipment/connect/{id}", async (string id, bool? simulateFail, EquipmentConnector connector, CancellationToken ct) =>
             await connector.RetryAsync(id, simulateFail ?? false, ct) is { } result ? Results.Ok(result) : Results.NotFound());

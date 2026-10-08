@@ -8,7 +8,26 @@
 
 ---
 
-## 2026-10-08 · [Claude] 촬영 화면에 이슬 여유·열선 상태
+## 2026-10-08 · [Claude] AA 전체를 시뮬레이터에 붙여 찾은 문제 고치기
+
+**요청**: 사무실에서 AA 전체를 실장비 모드로 시뮬레이터에 붙여 돌려 보고, 중대한 결정이 아닌 고칠 것·답이 분명한 것은 바로 고치기 (사용자 회의 중)
+
+**변경**
+- `Engine/Phd2Check`: "On Camera"(PHD2가 실제로 주는 이름)도 ST-4로 인정(`IsOnCamera` 띄어쓰기·하이픈 무시), N.I.N.A.·PHD2 적도의가 둘 다 시뮬레이터면 통과
+- `GET /api/equipment/simulated` + 장비 화면 `TempFailButtons`는 모의일 때만
+- `SharpCapBridge.LaunchAsync`: 실패하면 AA가 켠 SharpCap을 닫음
+- `RealFocusDevices.AutofocusAsync`: 자동초점 진행 이벤트가 3분(`Stall`) 없으면 취소·실패 (`NinaRig.LastEventAtAsync`)
+- `ShootSession`: 제외 사진 5장 이어질 때마다 알림(`ExcludedRunAlert`), 모의 실패 shoot.nostars
+- 점검 화면 타일 `aria-label`
+- 시험: `SimulatorRigTests`에 촬영 세션·마무리, `Phd2CheckTests` 3개, `ShootAndWrapTests` 1개
+
+**확인**: 서버 테스트 122 통과·1 건너뜀(두 번), 시뮬레이터 시험(AA_SIM=1) 촬영 세션·마무리 실행, lint 오류 0, 웹·데스크톱 빌드. 화면은 장비 연결·점검·극축 정렬(실패·중단)까지 브라우저로. 확인 못 함: 극축 정렬 뒤 화면 흐름(사무실에 가이드 카메라 없음), 자동초점·솔빙 성공 경로(시뮬레이터 카메라 별 사진 설정 안 함)
+
+**남은 것**: 결정 필요 — 작업 실패 시 건너뛰기, 제외 사진 연속 시 멈출지, "HFD가 낮음" 별 잃음 판정. 사용자 설정 `rig-overrides.json` 카메라가 시뮬레이터(X-T5로 바꿔야 함). 시험 중 바꾼 것: PHD2 AA-Simulator 프로필 적도의 On-camera로 되돌림, N.I.N.A. AstroAssistant 프로필 스위치는 없음으로 둠(실험용)
+
+---
+
+## 2026-10-08 · be79263 [Claude] 촬영 화면에 이슬 여유·열선 상태
 
 **요청**: 열선은 Empire 자동에 맡기고 AA는 이슬 여유·열선 세기·자동 여부를 보여 주고 이상하면 알리기 (사용자 결정)
 

@@ -62,4 +62,16 @@ public class Phd2CheckTests
 
     [Fact(Skip = "실기: PHD2가 켜져 있을 때만 수동으로")]
     public async Task 실제_PHD2() => Assert.Null(await Phd2Check.CheckAsync("localhost", 4400, "On-Step", CancellationToken.None));
+
+    [Fact]
+    public async Task 카메라_ST4_PHD2가_알려주는_이름_On_Camera도_통과() =>
+        Assert.Null(await Run(Eq("G3M662M", true, "On Camera", true), "On-Step")); // PHD2 실제 이름은 띄어쓰기 (2026-10-08)
+
+    [Fact]
+    public async Task 둘_다_시뮬레이터면_장비_없이_시험하는_것이라_통과() =>
+        Assert.Null(await Run(Eq("Simulator", true, "Alpaca Telescope Simulator (ASCOM)", true), "Telescope Simulator for .NET"));
+
+    [Fact]
+    public async Task N_I_N_A는_실제인데_PHD2만_시뮬레이터면_막는다() =>
+        Assert.NotNull(await Run(Eq("G3M662M", true, "Telescope Simulator for .NET (ASCOM)", true), "On-Step"));
 }

@@ -25,6 +25,9 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config) : IFocu
         return problem is null ? new FocuserMove(true) : new FocuserMove(false, Stalled: problem.Contains("멈췄"), problem);
     }
 
+    /// <summary>자동초점 측정점 사이 최대 간격 (노출 + 포커서 이동은 보통 수십 초)</summary>
+    public static readonly TimeSpan Stall = TimeSpan.FromMinutes(3);
+
     public async Task<AutofocusRun> AutofocusAsync(Action<int, double> point, CancellationToken ct)
     {
         var since = DateTimeOffset.Now;
@@ -33,6 +36,14 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config) : IFocu
         while (DateTime.UtcNow < deadline)
         {
             await Task.Delay(2000, ct);
+            // N.I.N.A. 자동초점이 끝·실패 신호 없이 멈추는 일이 있다(2026-10-08 시뮬레이터: 측정점 5개 뒤 조용히 멈춤, 취소해야 끝남) →
+            // 측정점(AUTOFOCUS-POINT-ADDED)이 Stall 동안 늘지 않으면 멈춘 것으로 보고 취소
+            var progress = await rig.LastEventAtAsync("AUTOFOCUS", since, ct) ?? since;
+            if (DateTimeOffset.Now - progress > Stall)
+            {
+                await rig.CancelAutofocusAsync(ct);
+                return new AutofocusRun(false, true, 0, 0, false, Problem: $"자동초점이 {Stall.TotalMinutes:0}분 넘게 진행되지 않아 멈췄습니다");
+            }
             var events = await rig.EventsSinceAsync(since, ct);
             if (events.Contains("ERROR-AF"))
                 // N.I.N.A. 자동초점 실패는 대부분 별을 못 찾은 경우 (초점이 크게 나갔거나 구름·덮개)

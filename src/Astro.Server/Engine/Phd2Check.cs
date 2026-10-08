@@ -35,16 +35,28 @@ public static class Phd2Check
         if (mountName is null || !mountOn)
             return new Problem("PHD2에서 적도의가 연결되지 않았습니다",
                 "PHD2의 장비 연결 창에서 적도의를 연결한 뒤 다시 연결을 눌러 주세요. 가이딩 보정은 이 적도의로 보냅니다.");
-        if (mountName.Contains("Simulator", StringComparison.OrdinalIgnoreCase)
-            || (ninaMountName is { Length: > 0 } nm && !mountName.Contains(nm, StringComparison.OrdinalIgnoreCase) && !IsOnCamera(mountName)))
+        // 시뮬레이터: N.I.N.A. 적도의도 시뮬레이터면(장비 없이 시험) 같은 것으로 본다 — 이름은 서로 다를 수 있음
+        // (2026-10-08: N.I.N.A. "Telescope Simulator for .NET", PHD2 "Alpaca Telescope Simulator (ASCOM)")
+        var phdSim = IsSimulator(mountName);
+        var ninaSim = ninaMountName is { Length: > 0 } ns && IsSimulator(ns);
+        if (phdSim != ninaSim && !IsOnCamera(mountName)
+            || !phdSim && !ninaSim && ninaMountName is { Length: > 0 } nm && !mountName.Contains(nm, StringComparison.OrdinalIgnoreCase) && !IsOnCamera(mountName))
             return new Problem($"PHD2의 적도의가 N.I.N.A.와 다릅니다 (PHD2: {mountName})",
                 $"PHD2의 장비 연결 창에서 적도의를 {(ninaMountName is { Length: > 0 } n ? $"{n}(으)로" : "실제 적도의로")} 바꾼 뒤 다시 연결을 눌러 주세요. 지금은 가이딩 보정이 실제 적도의로 가지 않습니다.");
         return null;
     }
 
-    /// <summary>카메라의 ST-4 포트로 보정을 보내는 방식 — 적도의 이름이 N.I.N.A.와 달라도 맞는 설정</summary>
-    private static bool IsOnCamera(string name) =>
-        name.Contains("On-camera", StringComparison.OrdinalIgnoreCase) || name.Contains("ST4", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// 카메라의 ST-4 포트로 보정을 보내는 방식 — 적도의 이름이 N.I.N.A.와 달라도 맞는 설정.
+    /// PHD2는 "On Camera"(띄어쓰기)로 알려 준다(2026-10-08 확인) — 메뉴 이름은 "On-camera"라 띄어쓰기·하이픈을 무시하고 본다
+    /// </summary>
+    internal static bool IsOnCamera(string name)
+    {
+        var n = name.Replace(" ", "").Replace("-", "");
+        return n.Contains("OnCamera", StringComparison.OrdinalIgnoreCase) || n.Contains("ST4", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSimulator(string name) => name.Contains("Simulator", StringComparison.OrdinalIgnoreCase);
 
     private static (string? Name, bool Connected) Part(JsonElement eq, string key) =>
         eq.TryGetProperty(key, out var p) && p.ValueKind == JsonValueKind.Object

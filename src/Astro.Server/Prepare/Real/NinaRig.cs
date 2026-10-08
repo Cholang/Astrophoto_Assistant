@@ -379,6 +379,20 @@ public sealed class NinaRig(NinaApiClient nina)
         return names;
     }
 
+    /// <summary>since 뒤에 prefix로 시작하는 이벤트가 마지막으로 일어난 시각 (없으면 null) — 진행이 멈췄는지 볼 때</summary>
+    public async Task<DateTimeOffset?> LastEventAtAsync(string prefix, DateTimeOffset since, CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("event-history", Short, ct);
+        if (r.Response is not { ValueKind: JsonValueKind.Array } list) return null;
+        DateTimeOffset? last = null;
+        foreach (var e in list.EnumerateArray())
+            if (e.TryGetProperty("Time", out var t) && DateTimeOffset.TryParse(t.GetString(), Inv, DateTimeStyles.None, out var at) && at >= since
+                && e.TryGetProperty("Event", out var n) && n.GetString() is { } name && name.StartsWith(prefix, StringComparison.Ordinal)
+                && (last is null || at > last))
+                last = at;
+        return last;
+    }
+
     internal static bool Bool(JsonElement e, string key) => e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
 
     /// <summary>숫자 (N.I.N.A.는 값이 없으면 문자열 "NaN"을 준다 — Codex 실기 조회 2026-10-06)</summary>

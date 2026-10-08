@@ -67,6 +67,81 @@ public class SimulatorRigTests(ITestOutputHelper output)
         dev.EndSession();
     }
 
+    /// <summary>
+    /// 촬영 세션 전체를 실장비 코드(RealShootDevices)로: 찍기·저장·등급·제외 폴더·디더링·가이딩 감시·이슬·끝(가이딩 정지).
+    /// 시뮬레이터 카메라가 잡음 사진이면 별이 없어 등급은 의미 없음 — 흐름과 명령이 끝까지 가는지를 본다 (2026-10-08)
+    /// </summary>
+    [Fact]
+    public async Task 시뮬레이터_촬영_세션_실장비_코드로_끝까지()
+    {
+        if (!Enabled) return;
+        var api = Api();
+        var rig = new NinaRig(api);
+        var phd2 = new Phd2Client(NullLogger<Phd2Client>.Instance);
+        var live = new LiveImages(phd2);
+        // 대상: 자오선 동쪽 1시간 (반전 없음, 높이 충분)
+        var m = (await rig.MountAsync(CancellationToken.None))!;
+        await rig.SetTrackingAsync(true, CancellationToken.None);
+        var ra = ((m.SiderealHours + 1) % 24) * 15;
+        Assert.Null(await rig.StartSlewAsync(ra, 45, CancellationToken.None));
+        Assert.NotNull(await rig.WaitSlewAsync(ra, 45, null, TimeSpan.FromMinutes(3), CancellationToken.None));
+        // 가이딩 (대상 단계가 해 둔 상태)
+        using (var ev = await phd2.SubscribeAsync(CancellationToken.None))
+        {
+            await phd2.CallAsync("guide", new { settle = new { pixels = 1.5, time = 5, timeout = 120 }, recalibrate = true }, CancellationToken.None);
+            var settled = await ev.WaitAsync(["SettleDone"], TimeSpan.FromMinutes(4), CancellationToken.None);
+            output.WriteLine($"가이딩 시작: {settled}");
+        }
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var dev = new Shoot.RealShootDevices(rig, phd2, live, new RealCenterDevices(rig, live), new RealFocusDevices(rig, config),
+            new AscomWeather(NullLogger<AscomWeather>.Instance), NullLogger<Shoot.RealShootDevices>.Instance);
+        var session = new Shoot.ShootSession(dev, new global::Astro.Server.Prepare.PrepareMode(false), NullLogger<Shoot.ShootSession>.Instance);
+        var results = new global::Astro.Server.Prepare.Flow.PrepResults();
+        // 초점 때 기온 = 지금 포커서 온도 (다르면 바로 초점 다시 맞추기로 감)
+        results.Set(new global::Astro.Server.Prepare.Flow.FocusResult(false, 25000, 2.0, (await rig.FocuserAsync(CancellationToken.None))?.Temperature, DateTimeOffset.Now));
+        var plan = Prepare.Harness.Plan() with { RaDegrees = ra, DecDegrees = 45, ExposureSeconds = 3, EstimatedFrames = 4 };
+        var ctx = Prepare.Harness.TargetContext(results, new global::Astro.Server.Prepare.Flow.InMemoryPrepMemory(), plan);
+        session.Start(ctx);
+        var notes = new List<string>();
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(8);
+        Shoot.ShootView v;
+        while ((v = session.View()).Mode != Shoot.ShootMode.Ended && DateTime.UtcNow < deadline)
+        {
+            if (v.Note is { } n && (notes.Count == 0 || notes[^1] != n.Text)) notes.Add(n.Text);
+            await session.NextChangeAsync().WaitAsync(TimeSpan.FromSeconds(5)).ContinueWith(_ => { });
+        }
+        output.WriteLine($"끝: {v.Ended} · 쓸 {v.Good} · 제외 {v.Excluded} · 등급 {string.Join(",", v.Tally.Where(t => t.Value > 0).Select(t => $"{t.Key}{t.Value}"))} · 가이딩 정지 {v.GuideStopped} · 이슬 {v.Dew}");
+        output.WriteLine("상태: " + string.Join(" → ", session.ModeHistory));
+        foreach (var n in notes) output.WriteLine("알림: " + n);
+        if (results.Get<Shoot.NightShootResult>()?.Targets.SingleOrDefault() is { } shots)
+            output.WriteLine($"폴더 {shots.Folder} · 못 옮김 {shots.NotMoved?.Count ?? 0}");
+        Assert.Equal(Shoot.ShootMode.Ended, v.Mode);
+        Assert.True(v.GuideStopped);
+    }
+
+    /// <summary>마무리 실장비 코드: 플랫용 위쪽 이동 · 노출 찾기 · 홈 · 추적 끄기 (프로그램 닫기는 하지 않음, 2026-10-08)</summary>
+    [Fact]
+    public async Task 시뮬레이터_마무리_위쪽_노출찾기_홈_추적끄기()
+    {
+        if (!Enabled) return;
+        var api = Api();
+        var rig = new NinaRig(api);
+        var wrap = new RealWrapDevices(rig, new NinaWatcher(api, NullLogger<NinaWatcher>.Instance), NullLogger<RealWrapDevices>.Instance);
+        await rig.SetTrackingAsync(true, CancellationToken.None);
+        var up = await wrap.PointUpAsync(CancellationToken.None);
+        var m = (await rig.MountAsync(CancellationToken.None))!;
+        output.WriteLine($"위쪽: {up} · Dec {m.DecDeg:F1} (위도 {m.Site.Latitude:F1})");
+        var tries = new List<string>();
+        var flat = await wrap.FindFlatExposureAsync(800, (s, pct) => tries.Add($"{s:0.###}초→{pct:F0}%"), CancellationToken.None);
+        output.WriteLine($"플랫 노출: {flat} · 시도 {string.Join(", ", tries)}");
+        var home = await wrap.HomeAsync(CancellationToken.None);
+        var off = await wrap.TrackingOffAsync(CancellationToken.None);
+        m = (await rig.MountAsync(CancellationToken.None))!;
+        output.WriteLine($"홈 {home} (AtHome {m.AtHome}) · 추적 끔 {off} (Tracking {m.Tracking})");
+        Assert.True(up);
+        Assert.True(off && !m.Tracking);
+    }
+
     [Fact]
     public async Task 시뮬레이터_자오선_반전은_방향이_바뀐_뒤_멈출_때까지()
     {

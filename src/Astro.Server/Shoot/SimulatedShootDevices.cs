@@ -28,11 +28,13 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     private readonly List<double> _snr = [.. Enumerable.Range(0, 10).Select(i => 30.0 + i % 3)], _hfd = [.. Enumerable.Repeat(2.2, 10)];
 
     public string? PhotoUrl => null;
+    private int _noStars;
     public int GuideExposureMs => _guideMs;
 
     public async Task<FrameShot> ExposeAsync(int seconds, int iso, Action<int> elapsed, CancellationToken ct)
     {
         _trail = faults.Take("shoot.trail");
+        if (faults.Take("shoot.nostars")) _noStars = 5; // 렌즈 덮개를 안 연 것처럼 다음 5장은 별 없음
         if (faults.Take("shoot.abortfail"))
         {
             // 찍는 동안 적도의가 멈추고, 노출 멈춤은 듣지 않아 사진이 그대로 저장된다 (속도와 관계없이 1.5초 — 지켜보기가 잡을 시간)
@@ -47,7 +49,11 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
         }
         _ha += seconds * 15.0 / 3600;
         var hfr = Math.Round(2.12 + _r.NextDouble() * .28, 2);
-        var stats = _trail
+        var dark = _noStars > 0;
+        if (dark) _noStars--;
+        var stats = dark
+            ? new FrameStats(0, 0, 1000, .35, .6)
+            : _trail
             ? new FrameStats(3.4, 30, 1200, .85, 6.5)
             : new FrameStats(hfr, 44 + _r.Next(8), 1100 + _r.Next(60), .35, Math.Round(.5 + _r.NextDouble() * .2, 2));
         return new FrameShot(true, null, $"D:/Astro/sim/LIGHT_{DateTime.Now:HHmmss}.fits", stats);

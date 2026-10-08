@@ -83,6 +83,11 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private DateTimeOffset _lowHfdWarned, _dewWarned;
     private DewStatus? _dew;
     public const int UnstableAfter = 3;
+    // 제외 사진이 이어짐: 가이드 별은 멀쩡한데 주 사진만 나쁠 때(렌즈 덮개·주 경통 이슬·초점·구름) — 2026-10-08 시뮬레이터 전체 시험에서 35장이 말없이 제외됨
+    public const int ExcludedRunAlert = 5;
+    private int _excludedRun;
+    /// <summary>[테스트] 제외 사진이 이어져 알린 횟수</summary>
+    internal int ExcludedRunAlerts { get; private set; }
     public static readonly TimeSpan UnstableHold = TimeSpan.FromMinutes(1), UnstableAsk = TimeSpan.FromMinutes(15);
 
     public static readonly int[] GuideExposuresMs = [1000, 1500, 2000, 2500, 3000, 3500, 4000];
@@ -187,7 +192,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _pause = null; _pausedMinutes.Clear(); _snrSamples.Clear(); _hfdSamples.Clear(); _snrBaseline = _hfdBaseline = 0;
             _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _lastDegrade.Clear(); _windWarned = false;
             _guideStopped = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
-            _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _lowHfdWarned = _dewWarned = DateTimeOffset.MinValue; _dew = null;
+            _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _excludedRun = 0; _lowHfdWarned = _dewWarned = DateTimeOffset.MinValue; _dew = null;
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
             _mode = ShootMode.Shoot;
             Changed();
@@ -367,6 +372,12 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                     _photoAt = DateTimeOffset.Now;
                 });
                 if (grade.Excluded) Note($"{_good + _excluded}번 사진: {grade.Reason} · {(moveFailed ? "제외 폴더로 옮기지 못했어요 (직접 옮겨 주세요)" : "제외 폴더로 옮겼어요")}", Tone.Warn, 8);
+                _excludedRun = grade.Excluded ? _excludedRun + 1 : 0;
+                if (_excludedRun > 0 && _excludedRun % ExcludedRunAlert == 0) // 5장마다 다시 (계속 찍으며 알림만 — 멈출지는 사용자 결정 전)
+                {
+                    ExcludedRunAlerts++;
+                    Note($"제외한 사진이 {_excludedRun}장 이어져요 ({grade.Reason}) · 렌즈 덮개·주 경통 이슬·초점·구름을 확인해 주세요", Tone.Fail, 60);
+                }
                 Record(ctx);
 
                 // 디더링 (좋은 사진 3장마다)

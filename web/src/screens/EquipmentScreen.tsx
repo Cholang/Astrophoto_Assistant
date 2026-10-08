@@ -914,6 +914,18 @@ function TempFailButtons({
   done: boolean
   patch: (fn: (prev: CheckItem[]) => CheckItem[]) => void
 }) {
+  // 모의 장비일 때만 (실장비에서는 이 버튼이 실제 다시 연결이 되어 헷갈림 — 2026-10-08 시뮬레이터 전체 시험에서 발견)
+  const [simulated, setSimulated] = useState(false)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/equipment/simulated')
+      .then((r) => (r.ok ? (r.json() as Promise<{ simulated: boolean }>) : null))
+      .then((b) => alive && setSimulated(!!b?.simulated))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   const fail = async (id: string) => {
     const res = await fetch(`/api/equipment/connect/${id}?simulateFail=true`)
     if (!res.ok) return
@@ -930,7 +942,7 @@ function TempFailButtons({
   }
 
   const connected = items.filter((i) => i.status === 'Pass')
-  if (!done || connected.length === 0) return null
+  if (!simulated || !done || connected.length === 0) return null
   return (
     <div className={styles.temp}>
       <span>연결 실패로 만들기 (임시)</span>

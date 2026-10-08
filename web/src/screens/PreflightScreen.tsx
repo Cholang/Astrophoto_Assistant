@@ -165,7 +165,7 @@ export default function PreflightScreen({ onContinue }: { onContinue: () => void
 
       <div className={styles.tiles}>
         {ITEMS.map((item, i) => (
-          <button key={item.title} type="button" className={styles.tile} data-on={on[i]} aria-pressed={on[i]} onClick={() => toggle(i)}>
+          <button key={item.title} type="button" className={styles.tile} data-on={on[i]} aria-pressed={on[i]} aria-label={`${item.title}: ${item.question}`} onClick={() => toggle(i)}>
             {/* 그림 카드: 확인하면 뒤집히며 뒷면(그림 + V 표시)이 보이고, 해제하면 반대로 뒤집힌다 */}
             <span className={styles.pic} aria-hidden="true">
               <span className={styles.flip}>

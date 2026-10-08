@@ -354,6 +354,18 @@ public class ShootAndWrapTests
         Assert.True(v.Dew.HeaterAuto);
     }
 
+    [Fact]
+    public async Task 제외_사진이_5장_이어지면_알린다()
+    {
+        var r = NewShoot(3);
+        r.Faults.Arm("shoot.nostars");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal(1, r.Session.ExcludedRunAlerts);
+        Assert.Equal(5, v.Excluded);
+        Assert.Equal(3, v.Good); // 알림만 — 그 뒤 계속 찍어 계획 장수를 채움
+    }
+
     // ── 디더링 안정화 실패 (2026-10-06 시뮬레이터 확인 · 사용자 결정) ─────────
 
     [Fact]

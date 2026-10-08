@@ -57,6 +57,7 @@ const FAULTS: [string, string][] = [
   ['shoot.abortfail', '노출 멈춤 실패'],
   ['shoot.unstable', '가이딩 불안정 (곧 안정)'],
   ['shoot.unstablelong', '가이딩 불안정 (오래)'],
+  ['shoot.nostars', '별 없는 사진 5장 (렌즈 덮개)'],
 ]
 
 export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void; onRetarget: () => void }) {
