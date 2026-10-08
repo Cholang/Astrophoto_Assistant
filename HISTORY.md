@@ -8,7 +8,19 @@
 
 ---
 
-## 2026-10-06 · [Claude] 제미나이 최적화 리뷰 반영
+## 2026-10-08 · [Claude] WandererBox 기온·습도·이슬점 읽기 (실기)
+
+**요청**: WandererBox Plus V3 + 온도 프로브 + DHT22를 연결 — 이슬점·열선 확인. 열선은 Empire 자동에 맡기기로(사용자 결정, Empire 이슬점 온도 차이를 15→5°C로 사용자가 바꿈)
+
+**변경**: `Prepare/Real/AscomWeather` 신규 — ASCOM ObservingConditions를 직접 읽어 기온·습도·이슬점(1분 캐시, 실패 시 5분 쉼), `RealShootDevices.GuideRawAsync`의 `DewMarginC` = 기온 − 이슬점(전에는 null). 문서: SHOOT_IMPLEMENTATION·api-coverage
+
+**확인**: COM4 상태 줄 듣기(명령 없음), N.I.N.A. 스위치(유성철 프로필에 설정된 것) 연결해 DC3 읽기 — "Automatic control in progress", 설정 변경 뒤 255→0. 실기 시험 `실장비_기온_습도_이슬점`(AA_REAL=1) 통과(25.3°C·36.4%·이슬점 9.3°C), 서버 테스트 115 통과·1 건너뜀. 확인 못 함: 실제 열선 발열(열선 미장착), 이슬 판단이 촬영 화면에 뜨는지(실촬영 필요)
+
+**남은 것**: 이슬 여유·DC3 세기·자동 여부를 화면에 보여 주고 이상하면 알리기, `DewHeaterBoostAsync`는 자동 모드면 알림만(지금도 false). Empire 자동이 상자에서 도는지(Empire 꺼도 유지되는지) 확인
+
+---
+
+## 2026-10-06 · 9c7dd2a [Claude] 제미나이 최적화 리뷰 반영
 
 **요청**: 제미나이(GitHub 읽기)가 낸 최적화·안정성 제안을 검토해 동의하는 것만 고치고, 반대는 이유를 정리
 

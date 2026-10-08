@@ -54,7 +54,7 @@ public class SimulatorRigTests(ITestOutputHelper output)
     {
         if (!Enabled) return;
         var phd2 = new Phd2Client(NullLogger<Phd2Client>.Instance);
-        var dev = new Shoot.RealShootDevices(new NinaRig(Api()), phd2, new LiveImages(phd2), null!, null!, NullLogger<Shoot.RealShootDevices>.Instance);
+        var dev = new Shoot.RealShootDevices(new NinaRig(Api()), phd2, new LiveImages(phd2), null!, null!, new AscomWeather(NullLogger<AscomWeather>.Instance), NullLogger<Shoot.RealShootDevices>.Instance);
         await dev.GuideRawAsync(CancellationToken.None); // 이벤트 받기 시작
         await Task.Delay(TimeSpan.FromSeconds(40));
         var raw = await dev.GuideRawAsync(CancellationToken.None);

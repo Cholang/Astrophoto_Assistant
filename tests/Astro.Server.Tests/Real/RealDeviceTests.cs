@@ -42,6 +42,20 @@ public class RealDeviceTests(ITestOutputHelper output)
         if (await live.GetAsync("test", CancellationToken.None) is { } img) await File.WriteAllBytesAsync(Out("test.jpg"), img.Bytes);
     }
 
+    /// <summary>WandererBox 기온·습도·이슬점 (읽기만, 2026-10-08)</summary>
+    [Fact]
+    public async Task 실장비_기온_습도_이슬점()
+    {
+        if (!Enabled) return;
+        var w = new AscomWeather(NullLogger<AscomWeather>.Instance);
+        var r = await w.ReadAsync(CancellationToken.None);
+        output.WriteLine($"{r} · 여유 {r?.MarginC:F1}°C");
+        Assert.NotNull(r);
+        Assert.InRange(r.HumidityPercent, 1, 100);
+        Assert.True(r.DewPointC < r.TemperatureC);
+        Assert.Same(r, await w.ReadAsync(CancellationToken.None)); // 1분 안에는 다시 읽지 않음
+    }
+
     [Fact]
     public async Task 실장비_포커서_300걸음_갔다_돌아오기()
     {

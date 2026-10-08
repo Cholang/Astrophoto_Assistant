@@ -13,7 +13,7 @@ namespace Astro.Server.Shoot;
 /// 가이딩 상태는 PHD2 앱 상태, 자오선 반전은 N.I.N.A. mount/flip → 센터링(준비의 센터링 장비) → 가이딩 재시작, 초점은 준비의 초점 장비.
 /// ISO는 N.I.N.A. gain으로 넘긴다 (X-T5는 gain이 ISO로 동작 — 사용자가 예전 촬영에서 확인).
 /// </summary>
-public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages live, ICenterDevices center, IFocusDevices focus, ILogger<RealShootDevices> log) : IShootDevices
+public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages live, ICenterDevices center, IFocusDevices focus, AscomWeather weather, ILogger<RealShootDevices> log) : IShootDevices
 {
     public string? PhotoUrl => "/api/prepare/live/shoot";
 
@@ -143,10 +143,11 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         catch (Phd2Exception) { return new GuideRaw(false, false, (await rig.MountAsync(ct))?.Tracking ?? true, [], [], null, null, _steps); }
         var connected = state != "" && await rig.GuiderConnectedAsync(ct);
         var mount = await rig.MountAsync(ct);
+        var air = await weather.ReadAsync(ct); // 이슬 여유 = 기온 − 이슬점 (WandererBox 센서, 1분에 한 번)
         lock (_gate)
             return new GuideRaw(connected, state == "Guiding", mount?.Tracking ?? true, _snr.ToArray(), _hfd.ToArray(),
                 _jump.Count > 0 ? _jump.TakeLast(3).Max() : null,
-                null, // 이슬 여유: WandererBox 기온·습도 읽기는 아직 (docs/SHOOT_IMPLEMENTATION.md 확인 목록)
+                air?.MarginC,
                 _steps, _codes.Count(c => c != 0), _codes.Count(c => c == LowHfdCode));
     }
 

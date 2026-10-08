@@ -43,6 +43,7 @@ public static class PrepareSetup
         {
             s.AddSingleton<Real.NinaRig>();
             s.AddSingleton<Real.AscomAxis>();
+            s.AddSingleton<Real.AscomWeather>();
             s.AddSingleton<Real.ReportAddress>();
             s.AddSingleton<IPolarDevices, Real.RealPolarDevices>();
             s.AddSingleton<ICalibrationDevices, Real.RealCalibrationDevices>();

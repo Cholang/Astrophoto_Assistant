@@ -34,7 +34,7 @@
 | 전체 연결 상태 | `GET /equipment/info` | ✅ | 한 번에 전체 상태 |
 | 연결 끊김 감지 | 이벤트 `*-CONNECTED`, `*-DISCONNECTED` | ✅ | 상시 처리의 "연결 끊김 → 이상 감지" |
 | Wanderer Box 전원·히터 | `GET /equipment/switch/info`, `/equipment/switch/set?index=&value=` | ✅🔍 | 포트 번호와 실제 장비 대응 확인. 2026-10-05 사용자 장비(Plus V3): index 1 = DC2(적도의), 3 = DC4-6, 4 = USB(적도의·가이드 카메라·포커서가 여기 뒤), 읽기 전용 0 = DC1 Always On, 2 = DC3 PWM(열선). **N.I.N.A. `switch/set`은 "성공" 응답인데 실제로 안 바뀜** (Empire 2.4.0·2.4.3 모두, DC4-6로 확인). Wanderer ASCOM 드라이버(`ASCOM.WandererBox1.Switch`)는 켜고 끄는 출력에 `GetSwitchValue`를 지원하지 않음 → N.I.N.A.의 값 방식 명령이 안 닿는 것으로 보임. **드라이버에 직접 `SetSwitch(i, bool)` / `GetSwitch(i)`는 동작**(반영까지 몇 초, N.I.N.A.와 동시 연결 가능) → AA는 전원 켜고 끄기를 ASCOM 직접으로 |
-| 온도·습도 | `GET /equipment/weather/info` | ✅ | Wanderer의 Observing Conditions 드라이버 |
+| 온도·습도 | `GET /equipment/weather/info` | ⚠️ | Wanderer의 Observing Conditions 드라이버. 2026-10-08: 사용자 프로필에 날씨 장비가 없어(연결하면 프로필이 바뀜) AA는 ASCOM 드라이버를 직접 읽음 (`AscomWeather`) |
 | 날씨 **예보** (구름, 시잉) | — | ❌ | 외부 예보 서비스 연동 필요 (NINA weather는 현재 센서값) |
 | 과거 기록 불러오기 | — | ❌ | 우리 앱의 세션 기록 DB |
 
