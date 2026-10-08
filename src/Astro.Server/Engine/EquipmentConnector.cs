@@ -93,7 +93,7 @@ public sealed class EquipmentChoices
 ///   단 전원 허브는 다른 장비에 전원을 주므로, 있으면 맨 먼저 연결하고 실패하면 뒤 장비는 보류한다
 /// 돔·안전 모니터·날씨 장치는 다루지 않는다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics)
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics, EquipmentRun state)
 {
     private const CheckSeverity Required = CheckSeverity.Required;
     private const CheckSeverity Recommended = CheckSeverity.Recommended;
@@ -146,10 +146,12 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
 
     // ── 연결 중 종료 (2026-10-09 사용자 요청): AA를 끄면 연결을 바로 멈추고, 이번에 연결하던 장비의 연결을 끊은 것을 확인한 뒤 닫는다.
     // 연결 요청을 취소해도 N.I.N.A.는 하던 연결을 끝까지 하므로(실기: AA가 꺼진 뒤 "스위치 연결됨") 끊고, 늦게 붙는지도 잠시 지켜본다
-    private readonly Lock _gate = new();
-    private CancellationTokenSource? _runCts;
-    private TaskCompletionSource? _runDone;
-    private readonly List<string> _touched = []; // 이번 연결에서 연결을 시도한 장비 (끊을 대상)
+    // 연결기는 요청마다 새로 만들어지므로(Transient) 진행 상태는 앱에 하나인 EquipmentRun에 둔다
+    // (2026-10-09 시험: 상태를 연결기에 두었더니 종료 요청이 연결 중인 것을 보지 못함)
+    private Lock _gate => state.Gate;
+    private CancellationTokenSource? _runCts { get => state.Cts; set => state.Cts = value; }
+    private TaskCompletionSource? _runDone { get => state.Done; set => state.Done = value; }
+    private List<string> _touched => state.Touched;
 
     private CancellationToken BeginRun(CancellationToken ct, bool fresh)
     {
@@ -196,26 +198,28 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         try { await done.WaitAsync(TimeSpan.FromSeconds(5), ct); } catch (TimeoutException) { }
         if (options.Value.Simulate) return [];
 
-        var failed = new List<string>();
-        foreach (var kind in Slots.Select(s => s.Kind).Reverse().Where(kinds.Contains))
+        // 모든 장비를 함께 1초마다 보며 붙어 있으면 끊는다 (허브는 다른 장비가 다 끊긴 뒤에). 3번 연속 모두 끊긴 채면 끝.
+        // 하던 연결이 늦게 붙으면 다시 끊는다 (최대 30초) — 장비마다 차례로 지켜보면 17초 걸렸음 (2026-10-09 시험)
+        var order = Slots.Select(s => s.Kind).Reverse().Where(kinds.Contains).ToList();
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        var quiet = 0;
+        var still = new List<string>();
+        while (quiet < 3 && DateTime.UtcNow < deadline)
         {
-            // 끊고, 3초 동안(1초마다) 끊긴 채인지 본다. 하던 연결이 늦게 붙으면 다시 끊는다 (최대 30초)
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-            var quiet = 0;
-            while (quiet < 3 && DateTime.UtcNow < deadline)
+            still.Clear();
+            foreach (var kind in order)
+                if (await nina.IsConnectedAsync(kind, ct)) still.Add(kind);
+            if (still.Count == 0) quiet++;
+            else
             {
-                if (await nina.IsConnectedAsync(kind, ct))
-                {
-                    quiet = 0;
-                    await nina.DisconnectAsync(kind, ct);
-                }
-                else quiet++;
-                await Task.Delay(1000, ct);
+                quiet = 0;
+                var others = still.Where(k => k != Hub).ToList();
+                await Task.WhenAll((others.Count > 0 ? others : still).Select(k => nina.DisconnectAsync(k, ct)));
             }
-            if (quiet < 3) failed.Add(FindSlot(kind)?.Role ?? kind);
-            else live.Forget(kind);
+            await Task.Delay(1000, ct);
         }
-        return failed;
+        foreach (var kind in order.Except(still)) live.Forget(kind);
+        return still.Select(k => FindSlot(k)?.Role ?? k).ToList();
     }
 
     public async IAsyncEnumerable<CheckResult> RunAsync([EnumeratorCancellation] CancellationToken outer = default)
@@ -462,4 +466,13 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     private static CheckResult Make(Device d, CheckStatus status, string message, Diagnosis? diagnosis = null) =>
         // 칸 가운데에는 장비 종류(적도의 등), 그 아래 작게 장비 이름(OnStep 등)
         new(d.Slot.Kind, d.Slot.Role, d.Name, d.Slot.Hint, d.Slot.Tier, status, message, diagnosis);
+}
+
+/// <summary>장비 연결 진행 상태 (앱에 하나): 연결 취소용 토큰, 끝남 신호, 이번에 연결을 시도한 장비</summary>
+public sealed class EquipmentRun
+{
+    public Lock Gate { get; } = new();
+    public CancellationTokenSource? Cts { get; set; }
+    public TaskCompletionSource? Done { get; set; }
+    public List<string> Touched { get; } = [];
 }
