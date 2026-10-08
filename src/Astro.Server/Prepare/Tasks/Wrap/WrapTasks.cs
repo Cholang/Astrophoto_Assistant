@@ -30,6 +30,12 @@ public sealed record FlatExposure(bool Ok, double Seconds, double MeanPercent, b
 public sealed record FlatResult(bool Skipped, int Count, double ExposureSeconds, int Iso, double MeanPercent, DateTimeOffset At);
 public sealed record DarkSet(int ExposureSeconds, int Iso, int Count);
 public sealed record DarkResult(bool Skipped, int FlatDarks, IReadOnlyList<DarkSet> Sets, bool Homed, DateTimeOffset At);
+
+/// <summary>
+/// 마무리 진행 (한 장 찍을 때마다): AA가 중간에 꺼졌다 이어서 하면 찍은 장수부터 (2026-10-08 사용자 결정 — 다크를 30~40분씩 다시 찍지 않게).
+/// 새로 시작하면 지운다 (PrepareRunner.StartFreshAsync)
+/// </summary>
+public sealed record WrapProgress(int Flats, double FlatSeconds, double FlatMeanPercent, int FlatIso, int FlatDarks, int DarkCount, IReadOnlyList<DarkSet> Darks);
 /// <summary>UserConfirmed = 홈·추적 끄기를 확인하지 못해 사용자가 직접 확인했다고 누름</summary>
 public sealed record PackResult(bool Homed, bool TrackingOff, bool Disconnected, bool Closed, bool UserConfirmed, DateTimeOffset At)
 {
@@ -74,8 +80,9 @@ public sealed class FlatTask(IWrapDevices devices) : IPrepTask
         if (await run.AskAsync([new("panel", "씌우고 켰어요", true), new("skip", "보정 프레임 건너뛰기")], ct) == "skip")
             return new Completed(new FlatResult(true, 0, 0, iso, 0, ctx.Now()), "건너뜀", "보정 프레임을 건너뛰어요", "플랫·다크 없이 장비를 정리해요.") { AutoNext = true };
 
-        FlatExposure exp;
-        while (true)
+        FlatExposure exp = new(false, 0, 0);
+        var resumed = ctx.Results.Get<WrapProgress>() is { Flats: > 0, FlatSeconds: > 0 } wp ? wp : null;
+        while (resumed is null)
         {
             run.SubStep(2);
             run.Guide("밝기에 맞는 노출을 찾고 있어요", "패널 빛으로 망원경·센서의 먼지와 주변 어두움을 기록해요. 사진의 평균 밝기가 절반쯤 되는 노출을 찾아요.");
@@ -92,15 +99,22 @@ public sealed class FlatTask(IWrapDevices devices) : IPrepTask
                 return new Completed(new FlatResult(true, 0, 0, iso, 0, ctx.Now()), "건너뜀", "보정 프레임을 건너뛰어요", "플랫·다크 없이 장비를 정리해요.") { AutoNext = true };
         }
 
+        if (resumed is not null) exp = new FlatExposure(true, resumed.FlatSeconds, resumed.FlatMeanPercent); // 이어서: 같은 노출로 찍은 장수부터
         run.SubStep(3);
         run.Guide("플랫을 찍고 있어요", "패널 빛으로 망원경·센서의 먼지와 주변 어두움을 기록해요. 스태킹 때 이걸로 사진의 얼룩을 지워요.");
-        var taken = 0;
+        var taken = resumed?.Flats ?? 0;
         var fails = 0;
         while (taken < Count)
         {
             run.Readout("count", $"{taken} / {Count}장", $"플랫 · 노출 {exp.Seconds:0.###}초 · 평균 밝기 {exp.MeanPercent:F0}%", Tone.Busy, live: true);
             run.Status("플랫 촬영 중입니다");
-            if (await devices.CaptureAsync("FLAT", exp.Seconds, iso, ct)) { taken++; fails = 0; continue; }
+            if (await devices.CaptureAsync("FLAT", exp.Seconds, iso, ct))
+            {
+                taken++;
+                fails = 0;
+                ctx.Results.Set(new WrapProgress(taken, exp.Seconds, exp.MeanPercent, iso, 0, 0, []));
+                continue;
+            }
             if (++fails < 3) continue;
             run.Status("플랫을 찍지 못했습니다", Tone.Fail);
             await run.AskAsync([new("retry", "다시 시도", true)], ct);
@@ -161,7 +175,8 @@ public sealed class DarkTask(IWrapDevices devices) : IPrepTask
         if (flat is { Skipped: true })
             return new Completed(new DarkResult(true, 0, [], false, ctx.Now()), "건너뜀", "다크를 건너뛰어요", "장비를 정리해요.") { AutoNext = true };
         var sets = SetsOf(ctx);
-        var count = DefaultCount;
+        var progress = ctx.Results.Get<WrapProgress>();
+        var count = progress is { DarkCount: > 0 } ? progress.DarkCount : DefaultCount; // 이어서: 전에 고른 장수
 
         // 뚜껑 + 장수 고르기
         while (true)
@@ -192,13 +207,18 @@ public sealed class DarkTask(IWrapDevices devices) : IPrepTask
         run.Guide("플랫 다크를 찍고 있어요", "플랫과 같은 노출로 빛 없이 찍어 센서 자체의 신호를 기록해요.");
         var flatExp = flat?.ExposureSeconds ?? 1;
         var flatIso = flat?.Iso ?? FlatTask.IsoOf(ctx);
-        var flatDarks = 0;
+        var flatDarks = progress?.FlatDarks ?? 0;
         var fails = 0;
+        var done = new List<DarkSet>(progress?.Darks ?? []); // 이어서: 전에 찍은 다크 묶음
+        void Save() => ctx.Results.Set((progress ?? new WrapProgress(flat?.Count ?? 0, flatExp, flat?.MeanPercent ?? 0, flatIso, 0, count, [])) with
+        {
+            FlatDarks = flatDarks, DarkCount = count, Darks = [.. done],
+        });
         while (flatDarks < FlatDarks)
         {
             run.Readout("count", $"{flatDarks} / {FlatDarks}장", $"플랫 다크 · 노출 {flatExp:0.###}초", Tone.Busy, live: true);
             run.Status(Homing() + "다크 촬영 중에는 다른 짐을 정리하셔도 돼요");
-            if (await devices.CaptureAsync("DARKFLAT", flatExp, flatIso, ct)) { flatDarks++; fails = 0; continue; }
+            if (await devices.CaptureAsync("DARKFLAT", flatExp, flatIso, ct)) { flatDarks++; fails = 0; Save(); continue; }
             if (++fails < MaxFails) continue;
             fails = 0;
             var c = await CaptureFailedAsync(run, "플랫 다크", flatDarks, ct);
@@ -208,11 +228,14 @@ public sealed class DarkTask(IWrapDevices devices) : IPrepTask
 
         run.SubStep(2);
         run.Guide("다크를 찍고 있어요", "촬영과 같은 노출·ISO로 빛 없이 찍어 센서의 열 잡음을 기록해요. 촬영 직후라 센서 온도가 비슷해 잘 맞아요.");
-        var done = new List<DarkSet>();
         var stop = false;
         foreach (var (exposure, iso) in sets)
         {
-            var taken = 0;
+            // 이어서: 이 노출·ISO를 전에 찍던 만큼부터 (다 찍은 묶음은 건너뜀)
+            var before = done.FindIndex(d => d.ExposureSeconds == exposure && d.Iso == iso);
+            var taken = before >= 0 ? done[before].Count : 0;
+            if (before >= 0) done.RemoveAt(before);
+            if (taken >= count) { done.Add(new DarkSet(exposure, iso, taken)); continue; }
             while (taken < count && !stop)
             {
                 var left = (count - taken) * exposure + sets.SkipWhile(s => s != (exposure, iso)).Skip(1).Sum(s => s.Exposure * count);
@@ -225,7 +248,16 @@ public sealed class DarkTask(IWrapDevices devices) : IPrepTask
                 if (ask is not null && await Task.WhenAny(capture, ask) == ask && ask.IsCompletedSuccessfully) stop = true;
                 askCts.Cancel();
                 try { if (ask is not null) await ask; } catch (OperationCanceledException) { }
-                if (await capture) { taken++; fails = 0; continue; }
+                if (await capture)
+                {
+                    taken++;
+                    fails = 0;
+                    done.RemoveAll(d => d.ExposureSeconds == exposure && d.Iso == iso);
+                    done.Add(new DarkSet(exposure, iso, taken));
+                    Save();
+                    done.RemoveAt(done.Count - 1); // 아래 묶음 끝에서 다시 더함
+                    continue;
+                }
                 if (++fails < MaxFails) continue;
                 fails = 0;
                 var c = await CaptureFailedAsync(run, "다크", taken + done.Sum(d => d.Count), ct);

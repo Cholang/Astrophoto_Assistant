@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Astro.Server.Assistant;
 using Astro.Server.Prepare.Flow;
+using Astro.Server.Prepare.Tasks.Wrap;
 using Astro.Server.Shoot;
 
 namespace Astro.Server.Session;
@@ -13,7 +14,10 @@ public sealed record SessionSnapshot(
     DateOnly Evening, string? ProfileId, string Phase, DateTimeOffset UpdatedAt, DateTimeOffset BootedAt, bool Closed,
     PreparationPlan? Plan, ShootingPlan? Talk, NightShootResult? Shots,
     PolarResult? Polar, CalibrationResult? Calibration, FocusResult? Focus, bool GuiderSkipped,
-    int? FocusPosition, double? FocusTemperatureC, CalibrationResult? LastCalibration, DateTimeOffset? LastPolarAlignedAt);
+    int? FocusPosition, double? FocusTemperatureC, CalibrationResult? LastCalibration, DateTimeOffset? LastPolarAlignedAt,
+    IReadOnlyList<string>? Done = null,
+    SlewResult? Slew = null, CenterResult? Center = null, FocusCheckResult? FocusCheck = null, GuidingResult? Guiding = null, TestShotResult? Test = null,
+    FlatResult? Flat = null, DarkResult? Dark = null, WrapProgress? Wrap = null);
 
 /// <summary>
 /// 다시 켰을 때 화면에 보일 것. Kind: resume = 이어서 할지 묻기, notice = 중단된 촬영이 있었다고 알리기만(컴퓨터가 꺼졌거나 오래 지남).
@@ -59,8 +63,9 @@ public sealed class NightSessionStore
     public bool Recording { get { lock (_gate) return Active.Contains(_phase) || _phase == "summary"; } }
 
     /// <summary>지금 상태를 기록한다 (진행 중 단계에서만 — 요약이면 끝난 밤으로)</summary>
-    public void Save(PlanAssistant planner, PrepResults results, IPrepMemory memory)
+    public void Save(PlanAssistant planner, PrepareFlow flow, IPrepMemory memory)
     {
+        var results = flow.ResultsFor(TonightServiceEvening());
         string phase;
         string? profile;
         lock (_gate) { phase = _phase; profile = _profileId; }
@@ -69,7 +74,10 @@ public sealed class NightSessionStore
             TonightServiceEvening(), profile, phase, _now(), _bootedAt(), Closed: phase == "summary",
             planner.Confirmed, planner.Plan, results.Get<NightShootResult>(),
             results.Get<PolarResult>(), results.Get<CalibrationResult>(), results.Get<FocusResult>(), results.Get<GuiderSkipped>() is not null,
-            memory.LastFocus?.Position, memory.LastFocus?.TemperatureC, memory.LastCalibration, memory.LastPolarAlignedAt);
+            memory.LastFocus?.Position, memory.LastFocus?.TemperatureC, memory.LastCalibration, memory.LastPolarAlignedAt,
+            flow.DoneIds(),
+            results.Get<SlewResult>(), results.Get<CenterResult>(), results.Get<FocusCheckResult>(), results.Get<GuidingResult>(), results.Get<TestShotResult>(),
+            results.Get<FlatResult>(), results.Get<DarkResult>(), results.Get<WrapProgress>());
         Write(snap);
     }
 
@@ -145,20 +153,18 @@ public sealed class NightSessionStore
     /// <summary>촬영 기록 한 줄을 그 계획과 짝짓는 열쇠 (ShootSession과 같음)</summary>
     public static string PlanKeyOf(PreparationPlan plan) => plan.ConfirmedAt.ToString("O");
 
-    /// <summary>이어서: 그날 밤 결과 기록·기억·계획을 되살린다</summary>
-    public async Task<string?> ResumeAsync(PlanAssistant planner, PrepResults results, IPrepMemory memory, CancellationToken ct)
+    /// <summary>이어서: 그날 밤 결과 기록·기억·계획을 되살린다. 기록(단계·끝낸 작업)을 돌려준다 — 어디로 갈지는 PrepareStarter.ResumeAsync가 장비를 다시 확인해 정한다</summary>
+    public async Task<SessionSnapshot?> RestoreAsync(PlanAssistant? planner, PrepResults results, IPrepMemory memory, CancellationToken ct)
     {
         if (Read() is not { } s) return null;
-        if (s.Shots is { } shots) results.Set(shots);
-        if (s.Polar is { } polar) results.Set(polar);
-        if (s.Calibration is { } cal) results.Set(cal);
-        if (s.Focus is { } focus) results.Set(focus);
+        foreach (var r in new object?[] { s.Shots, s.Polar, s.Calibration, s.Focus, s.Slew, s.Center, s.FocusCheck, s.Guiding, s.Test, s.Flat, s.Dark, s.Wrap })
+            if (r is not null) results.Set(r);
         if (s.GuiderSkipped) results.Set(new GuiderSkipped("이어서 — 전에 가이딩 없이 진행", _now()));
         if (s.FocusPosition is { } pos) memory.LastFocus = (pos, s.FocusTemperatureC);
         memory.LastCalibration = s.LastCalibration;
         memory.LastPolarAlignedAt = s.LastPolarAlignedAt;
-        if (s.Plan is { } plan) await planner.RestoreAsync(plan, s.Talk, ct);
-        return Destination(s);
+        if (s.Plan is { } plan && planner is not null) await planner.RestoreAsync(plan, s.Talk, ct);
+        return s;
     }
 
     /// <summary>새로 시작: 기록은 남기되(요약용) 다시 묻지 않는다</summary>
@@ -176,7 +182,7 @@ public sealed class NightSessionRecorder(NightSessionStore store, PlanAssistant 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20));
         do
         {
-            if (store.Recording) store.Save(planner, flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now)), memory);
+            if (store.Recording) store.Save(planner, flow, memory);
         } while (await timer.WaitForNextTickAsync(ct));
     }
 }

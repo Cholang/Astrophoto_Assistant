@@ -81,8 +81,54 @@ public static class PrepareSetup
 public sealed record PrepareMode(bool Simulate);
 
 /// <summary>준비 묶음을 시작한다: 장비 준비는 N.I.N.A. 프로필(관측지·장비)만으로, 대상은 확정 계획·오늘 밤 정보로. 결과 기록은 그날 밤 함께</summary>
-public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService tonight, Engine.EquipmentChoices equipment, PrepareFlow flow, MountLock mount, IPrepMemory memory, Shoot.ShootSession shoot)
+public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService tonight, Engine.EquipmentChoices equipment, PrepareFlow flow, MountLock mount, IPrepMemory memory, Shoot.ShootSession shoot,
+    Shoot.IShootDevices shootDevices, Tasks.Focus.IFocusDevices focusDevices)
 {
+    /// <summary>
+    /// AA를 다시 켜 이어서 (2026-10-08 사용자 결정). 먼저 장비를 멈춘다 — AA만 꺼졌으면 N.I.N.A. 노출·자동초점·적도의 이동이 계속 돌 수 있다
+    /// (가이딩은 묶음을 이어서 시작할 때 멈춘다). 멈춘 것을 확인하지 못하면 이유
+    /// </summary>
+    public async Task<string?> StopForResumeAsync(CancellationToken ct)
+    {
+        var problems = new List<string>();
+        try { if (!await shootDevices.AbortExposureAsync(ct)) problems.Add("카메라 노출"); } catch (Exception) { problems.Add("카메라 노출"); }
+        try { if (!await focusDevices.StopAsync(ct)) problems.Add("자동초점·포커서"); } catch (Exception) { problems.Add("자동초점·포커서"); }
+        try { if (!await shootDevices.ConfirmMountStillAsync(ct)) problems.Add("적도의 이동"); } catch (Exception) { problems.Add("적도의 이동"); }
+        return problems.Count == 0 ? null : $"{string.Join(" · ", problems)}이 멈췄는지 확인하지 못했어요. N.I.N.A.를 확인한 뒤 다시 눌러 주세요.";
+    }
+
+    /// <summary>
+    /// 이어서: 끝낸 작업은 다시 확인(장비가 살아 있는지)해 통과하면 건너뛰고, 아니면 그 작업부터. 갈 화면을 돌려준다.
+    /// 장비 준비가 다 확인되지 않으면 장비 준비로 (대상은 장비 준비가 끝나야 시작할 수 있다)
+    /// </summary>
+    public async Task<string> ResumeAsync(string phase, IReadOnlySet<string> done, CancellationToken ct)
+    {
+        var evening = Sky.TonightService.EveningOf(DateTimeOffset.Now);
+        if (await tonight.ReadProfileAsync(ct) is not { } profile) return "rig";
+        var rigCtx = new PrepContext(null, profile.Site, profile.Rig.PixelScale is > 0 and var px ? px : 2.0,
+            hasGuider: profile.Rig.HasGuider && !equipment.IsWithout("guider"),
+            hasFocuser: !equipment.IsWithout("focuser"),
+            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
+        await flow.ResumeRigAsync(rigCtx, evening, done);
+        if (phase == "rig" || !flow.Rig.AllDone) return "rig";
+        switch (phase)
+        {
+            case "target" or "shoot":
+                if (planner.Confirmed is not { } plan || planner.Night is not { } night) return "plan";
+                var ctx = new PrepContext(plan, night.Site, night.Rig.PixelScale is > 0 and var px2 ? px2 : 2.0,
+                    hasGuider: night.Rig.HasGuider && !equipment.IsWithout("guider"),
+                    hasFocuser: !equipment.IsWithout("focuser"),
+                    flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
+                await flow.ResumeTargetAsync(ctx, done);
+                return phase == "shoot" && flow.Target.AllDone ? "shoot" : "target";
+            case "wrap":
+                await flow.ResumeWrapAsync(rigCtx, evening, done);
+                return "wrap";
+            default:
+                return "plan";
+        }
+    }
+
     /// <summary>장비 준비 시작 (같은 밤이면 이어서). 할 수 없으면 이유(사용자에게 보여 줄 문장)</summary>
     public async Task<string?> StartRigAsync(CancellationToken ct)
     {

@@ -468,6 +468,70 @@ public class ShootAndWrapTests
 
     // ── 마무리 ─────────
 
+    // ── AA를 다시 켜 이어서 (2026-10-08 사용자 결정) ─────────
+
+    [Fact]
+    public async Task 이어서_장비_준비는_끝낸_작업을_다시_확인해_건너뛰고_안_맞으면_그것만_다시()
+    {
+        var evening = new DateOnly(2026, 10, 7);
+        // 처음 밤: 장비 준비를 끝까지
+        var (first, _) = Harness.Flow();
+        var results = first.ResultsFor(evening);
+        var memory = new InMemoryPrepMemory();
+        first.StartRig(Harness.RigContext(results, memory), evening);
+        await first.Rig.RunToReady();
+        var done = first.Rig.DoneIds().ToHashSet();
+        Assert.Contains("calibration", done);
+
+        // 같은 장비 상태로 이어서 → 모두 건너뜀
+        await first.ResumeRigAsync(Harness.RigContext(results, memory), evening, done);
+        Assert.True(first.Rig.AllDone);
+        Assert.All(first.Rig.View().Tasks.Where(t => done.Contains(t.Id)), t => Assert.Equal("이어서 · 전에 마침", t.Result));
+
+        // AA를 다시 켰는데 PHD2도 다시 켜져 보정값이 없음 (새 모의 장비) → 캘리브레이션만 다시
+        var (second, _) = Harness.Flow();
+        var restored = second.ResultsFor(evening);
+        foreach (var r in new object?[] { results.Get<PolarResult>(), results.Get<CalibrationResult>(), results.Get<FocusResult>() })
+            if (r is not null) restored.Set(r);
+        await second.ResumeRigAsync(Harness.RigContext(restored, memory), evening, done);
+        var rows = second.Rig.View().Tasks;
+        Assert.Equal("이어서 · 전에 마침", rows.Single(t => t.Id == "polar").Result);
+        Assert.NotEqual("이어서 · 전에 마침", rows.Single(t => t.Id == "calibration").Result);
+        Assert.False(second.Rig.AllDone);
+    }
+
+    [Fact]
+    public async Task 이어서_플랫은_찍은_장수부터_노출_찾기_없이()
+    {
+        var (flow, sim) = Harness.Flow();
+        var evening = new DateOnly(2026, 10, 7);
+        var results = flow.ResultsFor(evening);
+        results.Set(new NightShootResult([new TargetShots("m31", "M31", 40, 2, 180, 800, new Dictionary<string, int>(), "D:/Astro/m31")]));
+        results.Set(new WrapProgress(25, 0.8, 51, 800, 0, 0, []));
+        await flow.ResumeWrapAsync(Harness.RigContext(results, new InMemoryPrepMemory()), evening, new HashSet<string>());
+        await flow.Wrap.RunToReady();
+        Assert.Equal(5, sim.Wrap!.Captured["FLAT"]); // 25장에서 이어서 5장
+        Assert.Equal(30, results.Get<FlatResult>()!.Count);
+    }
+
+    [Fact]
+    public async Task 이어서_끝낸_플랫은_건너뛰고_다크는_찍은_만큼부터()
+    {
+        var (flow, sim) = Harness.Flow();
+        var evening = new DateOnly(2026, 10, 7);
+        var results = flow.ResultsFor(evening);
+        results.Set(new NightShootResult([new TargetShots("m31", "M31", 40, 2, 180, 800, new Dictionary<string, int>(), "D:/Astro/m31")]));
+        results.Set(new FlatResult(false, 30, 0.8, 800, 51, DateTimeOffset.Now));
+        results.Set(new WrapProgress(30, 0.8, 51, 800, DarkTask.FlatDarks, 20, [new DarkSet(180, 800, 15)]));
+        await flow.ResumeWrapAsync(Harness.RigContext(results, new InMemoryPrepMemory()), evening, new HashSet<string> { "flat" });
+        var v = await flow.Wrap.RunToReady();
+        Assert.Equal("이어서 · 전에 마침", v.Tasks.Single(t => t.Id == "flat").Result);
+        Assert.False(sim.Wrap!.Captured.ContainsKey("FLAT"));
+        Assert.False(sim.Wrap.Captured.ContainsKey("DARKFLAT")); // 플랫 다크 30장은 이미
+        Assert.Equal(5, sim.Wrap.Captured["DARK"]); // 15장에서 이어서 5장
+        Assert.Equal(20, results.Get<DarkResult>()!.Sets.Single().Count);
+    }
+
     private static (PrepareFlow Flow, Harness.Sim Sim, PrepResults Results) WrapNight(int exposure = 180)
     {
         var (flow, sim) = Harness.Flow();

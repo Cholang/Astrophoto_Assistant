@@ -28,11 +28,15 @@ public sealed class SimulatedWrapDevices(SimOptions sim, SimFaults faults) : IWr
 
     private int _darkFails;
 
+    /// <summary>[테스트] 종류별로 찍은 장수 (FLAT · DARKFLAT · DARK)</summary>
+    public Dictionary<string, int> Captured { get; } = [];
+
     public async Task<bool> CaptureAsync(string imageType, double seconds, int iso, CancellationToken ct)
     {
         await sim.Delay(imageType == "DARK" ? 250 : 70, ct);
         if (imageType == "DARK" && faults.Take("wrap.dark")) _darkFails = 3;
         if (imageType == "DARK" && _darkFails > 0) { _darkFails--; return false; }
+        lock (Captured) Captured[imageType] = Captured.GetValueOrDefault(imageType) + 1;
         return true;
     }
 

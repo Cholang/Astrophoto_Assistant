@@ -25,6 +25,12 @@ public interface IPrepTask
     /// <summary>끝 상태 약속을 실제 장비에서 읽어 확인한다 (러너가 다음 작업으로 넘기기 전에)</summary>
     Task<EndStateCheck> CheckEndStateAsync(PrepContext ctx, CancellationToken ct);
 
+    /// <summary>
+    /// AA를 다시 켜 이어서 할 때, 전에 끝낸 이 작업을 건너뛰어도 되는가 (2026-10-08 사용자 결정 — 장비가 살아 있는지는 확인).
+    /// 기본은 끝 상태 약속 그대로 (예: PHD2가 다시 켜져 보정값이 없으면 캘리브레이션을 다시)
+    /// </summary>
+    Task<EndStateCheck> CheckResumeAsync(PrepContext ctx, CancellationToken ct) => CheckEndStateAsync(ctx, ct);
+
     /// <summary>움직이던 장비를 멈추고 멈춘 것을 확인한다 (CX-PREP-IMPL-01). 확인하지 못하면 false</summary>
     Task<bool> StopAsync(CancellationToken ct);
 

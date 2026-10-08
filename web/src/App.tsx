@@ -180,7 +180,7 @@ export default function App() {
   )
 
   // 지난 진행 기록 (AA가 중간에 꺼졌다 다시 켬 — 2026-10-08): 장비 연결 뒤에 묻는다
-  const [pending, setPending] = useState<(PendingSession & { changeSite: boolean }) | null>(null)
+  const [pending, setPending] = useState<(PendingSession & { changeSite: boolean; error?: string; busy?: boolean }) | null>(null)
 
   const toNext: EquipmentDone = useCallback((items, opts) => {
     // 상태 줄에는 장비 이름(OnStep 등)을 쓴다. 칸의 큰 글씨는 장비 종류, 작은 글씨(term)가 장비 이름
@@ -198,12 +198,18 @@ export default function App() {
   const answerPending = useCallback(
     async (resume: boolean) => {
       const p = pending
-      setPending(null)
-      if (!p) return
+      if (!p || p.busy) return
       if (resume && p.kind === 'resume') {
-        const next = await resumeSession()
-        if (next) return goAfterEquipment(next as Phase, p.changeSite)
+        // 장비를 멈추고 끝낸 작업을 다시 확인하는 동안 (몇 초)
+        setPending({ ...p, busy: true, error: undefined })
+        const result = await resumeSession()
+        if ('phase' in result) {
+          setPending(null)
+          return goAfterEquipment(result.phase as Phase, p.changeSite)
+        }
+        return setPending({ ...p, busy: false, error: result.error }) // 장비를 멈추지 못함 → 이유와 함께 다시 묻기
       }
+      setPending(null)
       dismissSession()
       goAfterEquipment('preflight', p.changeSite)
     },
@@ -403,11 +409,15 @@ export default function App() {
       <ConfirmDialog
         open={pending !== null}
         message={
-          pending?.kind === 'resume'
-            ? `오늘 밤 진행 기록이 있어요 · ${pending.summary}. 이어서 할까요? 출발 전 점검은 건너뛰고, 촬영 중이었으면 대상으로 다시 이동해요.`
-            : (pending?.summary ?? '')
+          pending?.busy
+            ? '장비를 멈추고, 전에 끝낸 작업이 그대로인지 확인하는 중이에요…'
+            : pending?.error
+              ? `${pending.error} (${pending.summary})`
+              : pending?.kind === 'resume'
+                ? `오늘 밤 진행 기록이 있어요 · ${pending.summary}. 이어서 할까요? 출발 전 점검은 건너뛰고, 끝낸 작업은 장비가 그대로인지 확인한 뒤 건너뛰어요.`
+                : (pending?.summary ?? '')
         }
-        confirmLabel={pending?.kind === 'resume' ? '이어서 하기' : '확인'}
+        confirmLabel={pending?.kind === 'resume' ? (pending.error ? '다시 시도' : '이어서 하기') : '확인'}
         cancelLabel="새로 시작"
         single={pending?.kind !== 'resume'}
         dismissable={false}

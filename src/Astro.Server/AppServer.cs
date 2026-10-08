@@ -353,15 +353,20 @@ public static class AppServer
         {
             store.SetPhase(body.Phase, body.ProfileId);
             // 단계가 바뀔 때 바로 한 번 (요약에 닿으면 그 밤은 끝으로)
-            if (store.Recording) store.Save(planner, flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now)), memory);
+            if (store.Recording) store.Save(planner, flow, memory);
             return Results.NoContent();
         });
         session.MapGet("/pending", (string? profileId, Session.NightSessionStore store) =>
             store.Pending(profileId) is { } p ? Results.Ok(p) : Results.NoContent());
-        session.MapPost("/resume", async (Session.NightSessionStore store, PlanAssistant planner, Prepare.Flow.PrepareFlow flow, Prepare.Flow.IPrepMemory memory, CancellationToken ct) =>
-            await store.ResumeAsync(planner, flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now)), memory, ct) is { } phase
-                ? Results.Ok(new { phase })
-                : Results.Conflict(new { error = "이어서 할 기록이 없습니다." }));
+        // 이어서: ① 장비 멈춤 확인(노출·자동초점·적도의 이동) ② 기록·계획 되살림 ③ 끝낸 작업을 다시 확인해 건너뛰고 갈 화면을 정함
+        session.MapPost("/resume", async (Session.NightSessionStore store, PlanAssistant planner, Prepare.Flow.PrepareFlow flow, Prepare.Flow.IPrepMemory memory, Prepare.PrepareStarter starter, CancellationToken ct) =>
+        {
+            if (await starter.StopForResumeAsync(ct) is { } problem) return Results.Conflict(new { error = problem });
+            if (await store.RestoreAsync(planner, flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now)), memory, ct) is not { } s)
+                return Results.Conflict(new { error = "이어서 할 기록이 없습니다." });
+            var phase = await starter.ResumeAsync(s.Phase, (s.Done ?? []).ToHashSet(), ct);
+            return Results.Ok(new { phase });
+        });
         session.MapPost("/dismiss", (Session.NightSessionStore store) =>
         {
             store.Dismiss();

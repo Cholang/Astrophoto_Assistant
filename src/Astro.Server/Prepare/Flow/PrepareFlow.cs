@@ -80,6 +80,14 @@ public sealed class PrepareFlow
     /// <summary>마무리 시작 (그날 밤 하나 — 같은 밤이면 하던 곳에서 그대로). 촬영이 끝난 뒤</summary>
     public void StartWrap(PrepContext ctx, DateOnly evening) => Wrap.Start(ctx, $"wrap:{evening:yyyy-MM-dd}");
 
+    // AA를 다시 켜 이어서 (Session/NightSession): 같은 열쇠로 시작해 화면이 열 때 "같은 계획 — 이어서"가 되게
+    public Task ResumeRigAsync(PrepContext ctx, DateOnly evening, IReadOnlySet<string> done) => Rig.StartResumedAsync(ctx, $"rig:{evening:yyyy-MM-dd}", done);
+    public Task ResumeTargetAsync(PrepContext ctx, IReadOnlySet<string> done) => Target.StartResumedAsync(ctx, ctx.Plan.ConfirmedAt.ToString("O"), done);
+    public Task ResumeWrapAsync(PrepContext ctx, DateOnly evening, IReadOnlySet<string> done) => Wrap.StartResumedAsync(ctx, $"wrap:{evening:yyyy-MM-dd}", done);
+
+    /// <summary>세 묶음에서 끝난 작업들</summary>
+    public IReadOnlyList<string> DoneIds() => [.. Rig.DoneIds(), .. Target.DoneIds(), .. Wrap.DoneIds()];
+
     /// <summary>촬영 중 N.I.N.A.가 꺼졌다 다시 켜졌을 때: 적도의 위치·가이딩을 알 수 없으므로 대상 작업 전체를 다시 확인 (같은 계획으로 시작하면 이동부터)</summary>
     public Task<bool> RecheckTargetAsync() =>
         Target.SuspendAsync(Target.Tasks.Select(t => t.Id).ToList(), "N.I.N.A.가 다시 켜져 대상 맞추기부터 다시 해요");

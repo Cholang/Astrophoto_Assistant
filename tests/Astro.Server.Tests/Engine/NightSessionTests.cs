@@ -93,7 +93,7 @@ public class NightSessionTests : IDisposable
         // 계획을 되살리는 부분은 PlanAssistant가 N.I.N.A.를 읽어야 해서 여기서는 기록·기억만 (계획은 직접)
         var restored = snap with { Plan = null };
         File.WriteAllText(Path.Combine(_dir, "session.json"), System.Text.Json.JsonSerializer.Serialize(restored, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
-        Assert.Equal("plan", await Store().ResumeAsync(null!, results, memory, CancellationToken.None));
+        Assert.Equal("shoot", (await Store().RestoreAsync(null, results, memory, CancellationToken.None))!.Phase);
         Assert.Equal(25000, memory.LastFocus!.Value.Position);
 
         var sim = new SimOptions { Speed = 0 };

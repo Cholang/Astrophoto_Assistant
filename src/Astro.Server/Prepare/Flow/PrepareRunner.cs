@@ -202,6 +202,53 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         else _ = StartFreshAsync(ctx, key);
     }
 
+    /// <summary>끝난 작업 (그날 밤 기록에 남겨 AA를 다시 켰을 때 건너뛰려고)</summary>
+    public IReadOnlyList<string> DoneIds()
+    {
+        lock (_gate) return _rows.Where(r => r.Value.Status == PrepTaskStatus.Done).Select(r => r.Key).ToList();
+    }
+
+    /// <summary>
+    /// AA를 다시 켜 이어서 시작 (2026-10-08 사용자 결정): 하던 작업·가이딩을 멈춘 뒤, 전에 끝낸 작업(done)은 결과가 남아 있고
+    /// 다시 확인(CheckResumeAsync)이 통과하면 끝남으로 둔다. 아니면 다시 한다. 결과 기록은 지우지 않는다(되살린 값)
+    /// </summary>
+    public async Task StartResumedAsync(PrepContext ctx, string key, IReadOnlySet<string> done)
+    {
+        if (!await StopCurrentAsync(() => StartResumedAsync(ctx, key, done))) return;
+        if (!await StopLingeringAsync(_tasks.Select(t => t.Id).ToList(), () => StartResumedAsync(ctx, key, done))) return;
+        var rows = new Dictionary<string, (PrepTaskStatus, string?)>();
+        foreach (var t in _tasks)
+        {
+            if (!t.AppliesTo(ctx)) { rows[t.Id] = (PrepTaskStatus.Skipped, null); continue; }
+            var kept = done.Contains(t.Id) && (ResultType(t.Id) is not { } type || ctx.Results.Has(type));
+            if (kept)
+            {
+                EndStateCheck check;
+                try { check = await t.CheckResumeAsync(ctx, CancellationToken.None); }
+                catch (Exception e) { check = EndStateCheck.Fail(e.Message); }
+                kept = check.Ok;
+                if (!kept) log.LogInformation("이어서: {Task} 다시 함 ({Problem})", t.Id, check.Problem);
+            }
+            if (!kept && ResultType(t.Id) is { } drop) ctx.Results.Remove(drop);
+            rows[t.Id] = kept ? (PrepTaskStatus.Done, "이어서 · 전에 마침") : (PrepTaskStatus.Pending, null);
+        }
+        lock (_gate)
+        {
+            _ctx = ctx;
+            _key = key;
+            _ready = false;
+            _suspended = false;
+            _handoff = null;
+            _cur = null;
+            _rows.Clear();
+            foreach (var (id, row) in rows) _rows[id] = row;
+            _heartbeat ??= new Timer(_ => Heartbeat(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            Changed();
+        }
+        log.LogInformation("준비 이어서 ({Group}): 건너뜀 {Done}", _setup.Group, string.Join(",", rows.Where(r => r.Value.Item1 == PrepTaskStatus.Done).Select(r => r.Key)));
+        RunNext();
+    }
+
     private async Task StartFreshAsync(PrepContext ctx, string key)
     {
         // 새 계획: 하던 작업과 끝난 뒤에도 도는 작업(가이딩)을 멈추고 정지를 확인한 뒤 시작
@@ -219,6 +266,7 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
             // 결과 기록은 두 묶음이 함께 쓴다: 이 묶음의 지난 결과만 지운다
             foreach (var t in _tasks)
                 if (ResultType(t.Id) is { } type) ctx.Results.Remove(type);
+            if (_tasks.Any(t => t.Id == "flat")) ctx.Results.Remove(typeof(Tasks.Wrap.WrapProgress)); // 마무리를 새로 시작하면 진행도 처음부터
             foreach (var t in _tasks)
                 _rows[t.Id] = (t.AppliesTo(ctx) ? PrepTaskStatus.Pending : PrepTaskStatus.Skipped, null);
             _heartbeat ??= new Timer(_ => Heartbeat(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));

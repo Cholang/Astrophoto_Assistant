@@ -26,13 +26,18 @@ export async function pendingSession(profileId: string | null): Promise<PendingS
   }
 }
 
-/** 이어서: 서버가 계획·기록을 되살리고 갈 화면을 돌려준다 (실패면 null) */
-export async function resumeSession(): Promise<string | null> {
+/**
+ * 이어서: 서버가 장비를 멈추고(노출·자동초점·적도의 이동) 계획·기록을 되살린 뒤, 끝낸 작업을 다시 확인해 갈 화면을 돌려준다.
+ * 장비를 멈추지 못했으면 error (다시 시도하게)
+ */
+export async function resumeSession(): Promise<{ phase: string } | { error: string }> {
   try {
     const r = await fetch('/api/session/resume', { method: 'POST' })
-    return r.ok ? ((await r.json()) as { phase: string }).phase : null
+    const body = (await r.json().catch(() => null)) as { phase?: string; error?: string } | null
+    if (r.ok && body?.phase) return { phase: body.phase }
+    return { error: body?.error ?? '이어서 하지 못했습니다.' }
   } catch {
-    return null
+    return { error: '내부 서버에 연결하지 못했습니다.' }
   }
 }
 

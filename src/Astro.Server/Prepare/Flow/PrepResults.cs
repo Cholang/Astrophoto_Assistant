@@ -51,4 +51,9 @@ public sealed class PrepResults
     {
         lock (_gate) _byType.Remove(type);
     }
+
+    public bool Has(Type type)
+    {
+        lock (_gate) return _byType.ContainsKey(type);
+    }
 }
