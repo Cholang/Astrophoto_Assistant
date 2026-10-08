@@ -102,14 +102,14 @@ public sealed class RealPolarDevices(NinaRig rig, Phd2Client phd2, SharpCapBridg
             if (!sharpCap.Running) return "SharpCap이 닫혔습니다";
             if (sharpCap.UserChangedExposure)
             {
-                if (user) return $"SharpCap에서 직접 정한 노출({exp:0.##}초)로도 위치를 찾지 못했습니다. 노출·게인을 바꿔 보거나, 구름·가림을 확인한 뒤 다시 시도해 주세요.";
+                if (user) return $"SharpCap에서 직접 정한 노출({exp:0.##}초)로도 위치를 찾지 못했습니다. 망원경이 북극에서 멀리 향해 있을 수 있습니다. 삼각대 방향과 고도 나사로 망원경을 북극 쪽으로 조금 더 가깝게 향하게 한 뒤 다시 시도해 주세요.";
                 continue;
             }
             var bg = sharpCap.Last?.Background;
             if (bg is null)
             {
                 // 밝기를 모르면 예전처럼 늘리기만
-                if (_exposure >= MaxExposure) return $"노출을 {MaxExposure:0}초까지 늘려도 위치를 찾지 못했습니다. 가이드 망원경 덮개·초점과 구름을 확인해 주세요.";
+                if (_exposure >= MaxExposure) return $"노출을 {MaxExposure:0}초까지 늘려도 위치를 찾지 못했습니다. 망원경이 북극에서 멀리 향해 있을 수 있습니다. 삼각대 방향과 고도 나사로 망원경을 북극 쪽으로 조금 더 가깝게 향하게 한 뒤 다시 시도해 주세요. 가이드 망원경 덮개와 구름도 확인해 주세요.";
                 _exposure = Math.Min(MaxExposure, _exposure * 2);
             }
             else if (bg > Bright)
@@ -120,11 +120,12 @@ public sealed class RealPolarDevices(NinaRig rig, Phd2Client phd2, SharpCapBridg
             }
             else if (bg < Dark && _exposure < MaxExposure) _exposure = Math.Min(MaxExposure, _exposure * 2);
             else
-                // 배경은 적당한데 못 찾음 → 노출 탓이 아님. 더 바꾸면 오히려 하얘진다
-                return $"배경 밝기는 적당한데(밝기 {bg:P0}, 노출 {_exposure:0.##}초) SharpCap이 위치를 찾지 못했습니다. 가이드 망원경 초점, 구름·창틀·건물에 가린 부분을 확인해 주세요. SharpCap에서 노출·게인을 직접 바꾸면 AA는 그 값을 씁니다.";
+                // 배경은 적당한데 못 찾음 → 노출 탓이 아님. 더 바꾸면 오히려 하얘진다.
+                // 가장 흔한 원인은 조준: 가이드 시야(세로 약 1.5°)에 북극 주변이 들어와야 한다 (2026-10-09 실기 — 조준을 고치니 바로 찾음)
+                return $"별은 잘 보이는데 SharpCap이 위치를 찾지 못했습니다. 망원경이 북극에서 멀리 향해 있을 수 있습니다. 삼각대 방향과 고도 나사로 망원경을 북극 쪽으로 조금 더 가깝게 향하게 한 뒤 다시 시도해 주세요. 그래도 안 되면 구름·창틀·건물에 가린 부분과 가이드 망원경 초점을 확인해 주세요.";
             sharpCap.Send($"exposure:{_exposure * 1000}");
         }
-        return "노출을 여러 번 바꿔도 위치를 찾지 못했습니다. 가이드 망원경 덮개·초점과 구름을 확인해 주세요.";
+        return $"노출을 여러 번 바꿔도 위치를 찾지 못했습니다. 망원경이 북극에서 멀리 향해 있을 수 있습니다. 삼각대 방향과 고도 나사로 망원경을 북극 쪽으로 조금 더 가깝게 향하게 한 뒤 다시 시도해 주세요.";
     }
 
     public async IAsyncEnumerable<PolarOffset> WatchOffsetsAsync([EnumeratorCancellation] CancellationToken ct)

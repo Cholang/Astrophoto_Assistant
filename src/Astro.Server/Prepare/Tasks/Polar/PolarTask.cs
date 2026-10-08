@@ -124,7 +124,7 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
                 });
             }, ct);
             if (found.Ok) return true;
-            run.Status(found.Problem ?? "별을 찾지 못했습니다. 가이드 망원경 덮개와 구름, 북쪽 시야를 확인해 주세요.", Tone.Fail);
+            run.Status(found.Problem ?? "위치를 찾지 못했습니다. 망원경이 북극에서 멀리 향해 있을 수 있습니다. 삼각대 방향과 고도 나사로 망원경을 북극 쪽으로 조금 더 가깝게 향하게 한 뒤 다시 시도해 주세요.", Tone.Fail);
             if (await run.AskAsync([new("retry", "다시 시도", true), new("skip", "극축 정렬 건너뛰기")], ct) == "skip") return false;
         }
     }
