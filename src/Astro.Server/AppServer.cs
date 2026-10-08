@@ -73,6 +73,9 @@ public static class AppServer
         Prepare.PrepareSetup.AddPrepare(builder.Services, simulate: builder.Configuration.GetValue("Equipment:Simulate", true));
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
+        // 그날 밤 진행 기록: 중간에 꺼져도 다시 켜면 이어서 할지 묻는다 (2026-10-08)
+        builder.Services.AddSingleton(new Session.NightSessionStore(builder.Configuration["App:DataDir"]));
+        builder.Services.AddHostedService<Session.NightSessionRecorder>();
         builder.Services.AddTransient<SiteService>();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -177,6 +180,7 @@ public static class AppServer
         MapPrepare(api.MapGroup("/prepare"));
         MapShoot(api.MapGroup("/shoot"), api.MapGroup("/night"));
         MapProfiles(api.MapGroup("/profiles"));
+        MapSession(api.MapGroup("/session"));
 
         app.MapFallbackToFile("index.html");
         return app;
@@ -337,6 +341,33 @@ public static class AppServer
     private sealed record UpdateDismiss(string Id, string Version);
 
     private sealed record ShootAnswer(string Choice);
+
+    private sealed record SessionPhase(string Phase, string? ProfileId);
+
+    /// <summary>
+    /// 그날 밤 진행 기록 (Session/NightSession). 화면이 단계를 알리고(phase), 장비 연결 뒤 이어서 할지 묻는다(pending → resume / dismiss)
+    /// </summary>
+    private static void MapSession(RouteGroupBuilder session)
+    {
+        session.MapPost("/phase", (SessionPhase body, Session.NightSessionStore store, PlanAssistant planner, Prepare.Flow.PrepareFlow flow, Prepare.Flow.IPrepMemory memory) =>
+        {
+            store.SetPhase(body.Phase, body.ProfileId);
+            // 단계가 바뀔 때 바로 한 번 (요약에 닿으면 그 밤은 끝으로)
+            if (store.Recording) store.Save(planner, flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now)), memory);
+            return Results.NoContent();
+        });
+        session.MapGet("/pending", (string? profileId, Session.NightSessionStore store) =>
+            store.Pending(profileId) is { } p ? Results.Ok(p) : Results.NoContent());
+        session.MapPost("/resume", async (Session.NightSessionStore store, PlanAssistant planner, Prepare.Flow.PrepareFlow flow, Prepare.Flow.IPrepMemory memory, CancellationToken ct) =>
+            await store.ResumeAsync(planner, flow.ResultsFor(Sky.TonightService.EveningOf(DateTimeOffset.Now)), memory, ct) is { } phase
+                ? Results.Ok(new { phase })
+                : Results.Conflict(new { error = "이어서 할 기록이 없습니다." }));
+        session.MapPost("/dismiss", (Session.NightSessionStore store) =>
+        {
+            store.Dismiss();
+            return Results.NoContent();
+        });
+    }
 
     private static void MapProfiles(RouteGroupBuilder profiles)
     {

@@ -97,6 +97,18 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
         return null;
     }
     public NightContext? Night => _night;
+
+    /// <summary>
+    /// AA를 다시 켜 "이어서"를 골랐을 때 (Session/NightSession): 오늘 밤 정보를 다시 만들고 확정 계획·계획 칸을 되살린다.
+    /// 대화 기록은 되살리지 않는다(첫 인사부터) — 계획 칸과 확정 계획만
+    /// </summary>
+    public async Task RestoreAsync(PreparationPlan confirmed, ShootingPlan? plan, CancellationToken ct)
+    {
+        await EnsureStartedAsync(ct);
+        if (plan is not null) _plan = plan;
+        Confirmed = confirmed;
+        log.LogInformation("이어서: 계획 되살림 {Plan}", confirmed);
+    }
     public IReadOnlyList<DisplayMessage> Display => _display;
 
     /// <summary>

@@ -22,6 +22,8 @@ import { applySite, describeSite, fetchCurrentSite, type CurrentSite } from './s
 import type { ObservingSite } from './profiles'
 import { PRODUCT } from './product'
 import { useTheme } from './theme'
+import ConfirmDialog from './components/ConfirmDialog'
+import { dismissSession, pendingSession, reportPhase, resumeSession, type PendingSession } from './session'
 import styles from './App.module.css'
 
 // flow.mmd ① 시작 · 연결:
@@ -165,18 +167,53 @@ export default function App() {
     if (phase === 'equipment') fetchCurrentSite().then(setSite, () => setSite(null))
   }, [phase])
 
+  // 장비 연결 다음 화면으로. "변경"을 눌렀거나 관측지가 없으면 관측지 고르기를 먼저 (없으면 건너뛸 수 없음)
+  const goAfterEquipment = useCallback(
+    (next: Phase, changeSite: boolean) => {
+      if (changeSite || site === null) {
+        siteReturn.current = next
+        return fadeTo('site')
+      }
+      fadeTo(next)
+    },
+    [fadeTo, site],
+  )
+
+  // 지난 진행 기록 (AA가 중간에 꺼졌다 다시 켬 — 2026-10-08): 장비 연결 뒤에 묻는다
+  const [pending, setPending] = useState<(PendingSession & { changeSite: boolean }) | null>(null)
+
   const toNext: EquipmentDone = useCallback((items, opts) => {
     // 상태 줄에는 장비 이름(OnStep 등)을 쓴다. 칸의 큰 글씨는 장비 종류, 작은 글씨(term)가 장비 이름
     setDevices(items.filter((i) => i.status !== 'Absent').map((i) => ({ name: i.term ?? i.title, connected: i.status === 'Pass' })))
     const back = resumeTo.current
     resumeTo.current = null
-    // "변경"을 눌렀거나 관측지가 없으면 관측지 고르기 (없으면 건너뛸 수 없음)
-    if (opts.changeSite || site === null) {
-      siteReturn.current = back ?? 'preflight'
-      return fadeTo('site')
-    }
-    fadeTo(back ?? 'preflight')
-  }, [fadeTo, site])
+    if (back) return goAfterEquipment(back, !!opts.changeSite)
+    void pendingSession(profile?.id ?? null).then((p) => {
+      if (p) setPending({ ...p, changeSite: !!opts.changeSite })
+      else goAfterEquipment('preflight', !!opts.changeSite)
+    })
+  }, [goAfterEquipment, profile])
+
+  // 이어서: 출발 전 점검은 건너뛴다 (앱만 꺼졌다 켠 경우 — 2026-10-08 사용자 결정). 대상·촬영 중이었으면 대상 단계(이동부터)
+  const answerPending = useCallback(
+    async (resume: boolean) => {
+      const p = pending
+      setPending(null)
+      if (!p) return
+      if (resume && p.kind === 'resume') {
+        const next = await resumeSession()
+        if (next) return goAfterEquipment(next as Phase, p.changeSite)
+      }
+      dismissSession()
+      goAfterEquipment('preflight', p.changeSite)
+    },
+    [pending, goAfterEquipment],
+  )
+
+  // 지금 단계를 서버에 알린다 (장비 준비 이후만 기록 — 요약에 닿으면 그 밤은 끝)
+  useEffect(() => {
+    reportPhase(phase, profile?.id ?? null)
+  }, [phase, profile])
 
   const updateProfile = useCallback((p: Profile) => {
     setProfile(p)
@@ -363,6 +400,20 @@ export default function App() {
       )}
       </div>
       {ninaLost && <NinaLostCard state={nina} onRestart={() => void restartNina()} />}
+      <ConfirmDialog
+        open={pending !== null}
+        message={
+          pending?.kind === 'resume'
+            ? `오늘 밤 진행 기록이 있어요 · ${pending.summary}. 이어서 할까요? 출발 전 점검은 건너뛰고, 촬영 중이었으면 대상으로 다시 이동해요.`
+            : (pending?.summary ?? '')
+        }
+        confirmLabel={pending?.kind === 'resume' ? '이어서 하기' : '확인'}
+        cancelLabel="새로 시작"
+        single={pending?.kind !== 'resume'}
+        dismissable={false}
+        onConfirm={() => void answerPending(true)}
+        onCancel={() => void answerPending(false)}
+      />
     </div>
     </div>
   )

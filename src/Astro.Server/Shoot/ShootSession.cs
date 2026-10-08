@@ -6,9 +6,10 @@ namespace Astro.Server.Shoot;
 
 /// <summary>그날 밤 대상 하나의 촬영 기록 (마무리의 다크·요약이 읽는다)</summary>
 /// <summary>PausedMinutes = 원인별 멈춘 시간(분): cloud · light · jump · guider …,
-/// NotMoved = 제외할 사진인데 제외 폴더로 옮기지 못한 파일 (사용자가 직접 옮김, CX-APP-R2)</summary>
+/// NotMoved = 제외할 사진인데 제외 폴더로 옮기지 못한 파일 (사용자가 직접 옮김, CX-APP-R2),
+/// PlanKey = 어느 확정 계획의 촬영인지 (AA를 다시 켜 이어서 찍을 때 같은 줄에 이어 센다)</summary>
 public sealed record TargetShots(string TargetId, string Name, int Good, int Excluded, int ExposureSeconds, int Iso, IReadOnlyDictionary<string, int> Tally, string? Folder,
-    IReadOnlyDictionary<string, double>? PausedMinutes = null, IReadOnlyList<string>? NotMoved = null);
+    IReadOnlyDictionary<string, double>? PausedMinutes = null, IReadOnlyList<string>? NotMoved = null, string? PlanKey = null);
 
 /// <summary>그날 밤 찍은 대상들 (결과 기록 — 촬영이 갱신)</summary>
 public sealed record NightShootResult(IReadOnlyList<TargetShots> Targets);
@@ -202,6 +203,18 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _guideStopped = true; _mountStill = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
             _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _excludedRun = 0; _framesPausedSince = null; _lowHfdWarned = _dewWarned = DateTimeOffset.MinValue; _dew = null;
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
+            // 같은 계획을 전에 찍던 기록이 있으면(AA를 다시 켜 이어서) 그 줄에 이어서 센다
+            if (ctx.Results.Get<NightShootResult>()?.Targets is { } rows && rows.ToList().FindLastIndex(t => t.PlanKey == key) is >= 0 and var at)
+            {
+                var row = rows[at];
+                _recordIndex = at;
+                _good = row.Good;
+                _excluded = row.Excluded;
+                foreach (var (l, n) in row.Tally) _tally[l] = n;
+                _folder = row.Folder;
+                foreach (var (k, m) in row.PausedMinutes ?? new Dictionary<string, double>()) _pausedMinutes[k] = m;
+                _notMoved.AddRange(row.NotMoved ?? []);
+            }
             _mode = ShootMode.Shoot;
             Changed();
         }
@@ -881,7 +894,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
         lock (_gate)
         {
             var mine = new TargetShots(ctx.Plan.TargetId, ctx.TargetName, _good, _excluded, ctx.ExposureSeconds, ctx.Plan.Iso, new Dictionary<string, int>(_tally), _folder,
-                new Dictionary<string, double>(_pausedMinutes), [.. _notMoved]);
+                new Dictionary<string, double>(_pausedMinutes), [.. _notMoved], _key);
             var list = ctx.Results.Get<NightShootResult>()?.Targets.ToList() ?? [];
             // 이 촬영(계획 하나)의 줄: 처음이면 더하고, 이후엔 바꾼다
             if (_recordIndex >= 0 && _recordIndex < list.Count) list[_recordIndex] = mine;
