@@ -31,7 +31,9 @@ public sealed class RealTestShotDevices(NinaRig rig, LiveImages live) : ITestSho
         var saved = await rig.LastSavedAsync(ct);
         var file = saved is { } f && f.Date >= since ? f.File : "";
         var rms = await rig.GuideRmsArcsecAsync(ct) ?? 0;
-        return new ShotStats(s.Hfr, 0, s.Median / 65535.0, 0, rms, file);
+        // 히스토그램: 저장된 FITS를 직접 읽어 센다 (N.I.N.A.는 통계만 줌). 80MB 읽기라 따로
+        var hist = file.Length > 0 && File.Exists(file) ? await Task.Run(() => Fits.Histogram(file), ct) : null;
+        return new ShotStats(s.Hfr, 0, s.Median / 65535.0, 0, rms, file, hist);
     }
 
     public Task<bool> StopAsync(CancellationToken ct) => rig.AbortExposureAsync(ct);

@@ -37,7 +37,8 @@ public sealed class SimulatedTestShotDevices(SimOptions sim, SimFaults faults) :
         _saved = true;
         var bright = _bright && _lastExposure > 90;
         if (!bright) _bright = false;
-        return new ShotStats(2.3, 0.3, bright ? 0.5 : 0.2, bright ? 2.8 : 0.4, 0.6, $"시험/test_{_lastExposure}s.raf");
+        var bg = bright ? 0.5 : 0.2;
+        return new ShotStats(2.3, 0.3, bg, bright ? 2.8 : 0.4, 0.6, $"시험/test_{_lastExposure}s.raf", SimHistogram(bg));
     }
 
     public async Task<bool> StopAsync(CancellationToken ct)
@@ -49,4 +50,14 @@ public sealed class SimulatedTestShotDevices(SimOptions sim, SimFaults faults) :
     }
 
     public Task<TestShotEndState> ReadEndStateAsync(CancellationToken ct) => Task.FromResult(new TestShotEndState(_exposing, true, _saved));
+
+    /// <summary>모의 히스토그램: 배경 둘레의 산 + 오른쪽으로 길게 끌리는 별 꼬리</summary>
+    private static int[] SimHistogram(double background)
+    {
+        var h = new int[256];
+        var peak = background * 255;
+        for (var i = 0; i < 256; i++)
+            h[i] = (int)(100000 * Math.Exp(-Math.Pow((i - peak) / 9.0, 2)) + 400 * Math.Exp(-(i - peak) / 40.0) * (i > peak ? 1 : 0));
+        return h;
+    }
 }

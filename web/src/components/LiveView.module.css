@@ -69,6 +69,22 @@
 }
 
 .graph svg { width: 100%; height: 100%; }
+
+/* 시험 사진 히스토그램: 사진 위 오른쪽 세로 가운데 (가이딩 그래프와 같은 바탕) */
+.hist {
+  position: absolute;
+  right: 40px;
+  top: 50%;
+  width: 320px;
+  height: 168px;
+  transform: translateY(-50%);
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.hist svg { width: 100%; height: 100%; }
+.histArea { fill: color-mix(in srgb, var(--star) 55%, transparent); stroke: var(--star); stroke-width: 1; }
+.histBg { stroke: var(--accent); stroke-width: 2; }
 .axis { stroke: var(--sky-line); }
 .limit { stroke: var(--sky-line); stroke-dasharray: 3 6; }
 .ra { fill: none; stroke: var(--accent); stroke-width: 2; }

@@ -98,7 +98,8 @@ public class NightSessionTests : IDisposable
 
         var sim = new SimOptions { Speed = 0 };
         var session = new ShootSession(new SimulatedShootDevices(sim, new SimFaults()), new PrepareMode(true), NullLogger<ShootSession>.Instance);
-        var ctx = Harness.TargetContext(results, memory, snap.Plan! with { EstimatedFrames = 49, ExposureSeconds = 30 });
+        // 촬영은 실제 시계로 끝을 본다 → 끝 시각도 지금 기준 (고정 날짜면 그 시각이 지난 뒤 바로 끝남 — 2026-10-09 03시에 실패)
+        var ctx = Harness.TargetContext(results, memory, snap.Plan! with { EstimatedFrames = 49, ExposureSeconds = 30, Start = DateTimeOffset.Now.AddHours(-1), End = DateTimeOffset.Now.AddHours(4) });
         session.Start(ctx);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
         while (session.View().Mode != ShootMode.Ended && DateTime.UtcNow < deadline) await session.NextChangeAsync().WaitAsync(TimeSpan.FromSeconds(5));

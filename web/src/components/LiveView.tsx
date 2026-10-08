@@ -60,6 +60,7 @@ export default function LiveView({ current, extras, simulated = true }: { curren
       <div className={styles.view} aria-hidden="true">
         <RealImage url={live.url} refresh={kind === 'sharpcap' || kind === 'guide-image'} stamp={live.observedAt} />
         {kind === 'guide-image' && <GuidingGraph data={live.data} />}
+        {kind === 'test-photo' && <Histogram data={live.data} />}
       </div>
     )
 
@@ -69,6 +70,57 @@ export default function LiveView({ current, extras, simulated = true }: { curren
         {body}
       </svg>
       {kind === 'guide-image' && <GuidingGraph data={live?.data} />}
+      {kind === 'test-photo' && !extras?.grid && <Histogram data={live?.data} />}
+    </div>
+  )
+}
+
+/**
+ * 시험 사진 히스토그램 (2026-10-09 사용자 요청): 사진 위 오른쪽 세로 가운데. N.I.N.A.처럼 가로 = 밝기 0~최대(선형), 세로 = 픽셀 수.
+ * 배경 산의 위치로 노출이 맞는지 본다 — 산이 왼쪽에 붙으면 어둡고, 오른쪽 끝에 몰리면 포화
+ */
+function Histogram({ data }: { data: unknown }) {
+  const d = data as { histogram?: number[]; background?: number } | null
+  const h = d?.histogram
+  if (!h || h.length < 2) return null
+  const W = 320
+  const H = 168
+  const x0 = 16
+  const x1 = W - 16
+  const y0 = 128 // 바닥
+  const top = 40
+  const max = Math.max(...h)
+  if (max <= 0) return null
+  const x = (i: number) => x0 + ((x1 - x0) * i) / (h.length - 1)
+  const y = (c: number) => y0 - ((y0 - top) * c) / max
+  const area = `M${x0},${y0}` + h.map((c, i) => `L${x(i).toFixed(1)},${y(c).toFixed(1)}`).join('') + `L${x1},${y0}Z`
+  const total = h.reduce((a, b) => a + b, 0)
+  const full = total > 0 ? h[h.length - 1] / total : 0
+  const bg = d?.background
+  return (
+    <div className={styles.hist}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="시험 사진 히스토그램">
+        <text x={x0} y={24} className={styles.small}>
+          히스토그램
+        </text>
+        {bg !== undefined && (
+          <text x={x1} y={24} textAnchor="end" className={styles.small}>
+            배경 {Math.round(bg * 100)}%{full >= 0.01 ? ` · 포화 ${Math.round(full * 100)}%` : ''}
+          </text>
+        )}
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line key={f} x1={x0 + (x1 - x0) * f} y1={top - 6} x2={x0 + (x1 - x0) * f} y2={y0} className={styles.limit} />
+        ))}
+        <path d={area} className={styles.histArea} />
+        <line x1={x0} y1={y0} x2={x1} y2={y0} className={styles.axis} />
+        {bg !== undefined && <line x1={x0 + (x1 - x0) * bg} y1={top - 6} x2={x0 + (x1 - x0) * bg} y2={y0} className={styles.histBg} />}
+        <text x={x0} y={y0 + 24} className={styles.small}>
+          0
+        </text>
+        <text x={x1} y={y0 + 24} textAnchor="end" className={styles.small}>
+          최대
+        </text>
+      </svg>
     </div>
   )
 }

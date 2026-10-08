@@ -16,8 +16,8 @@ public interface ITestShotDevices
     Task<TestShotEndState> ReadEndStateAsync(CancellationToken ct);
 }
 
-/// <summary>사진 검사값. Background = 배경 밝기(0~1), Eccentricity = 별 길쭉함(0 둥긂 ~ 1)</summary>
-public sealed record ShotStats(double Hfr, double Eccentricity, double Background, double SaturatedPercent, double GuidingRms, string FilePath);
+/// <summary>사진 검사값. Background = 배경 밝기(0~1), Eccentricity = 별 길쭉함(0 둥긂 ~ 1), Histogram = 0~최대 밝기를 나눈 칸마다 픽셀 수 (못 구하면 null)</summary>
+public sealed record ShotStats(double Hfr, double Eccentricity, double Background, double SaturatedPercent, double GuidingRms, string FilePath, int[]? Histogram = null);
 public sealed record TestShotEndState(bool CameraExposing, bool Guiding, bool FileSaved);
 
 /// <summary>
@@ -73,7 +73,9 @@ public sealed class TestShotTask(ITestShotDevices devices) : IPrepTask
             }
 
             run.SubStep(2);
-            run.Live("test-photo", $"/api/prepare/live/test?f={Uri.EscapeDataString(stats.FilePath)}");
+            // 사진 위 오른쪽에 히스토그램 (2026-10-09 사용자 요청 — 배경 산의 위치로 노출이 맞는지 본다)
+            run.Live("test-photo", $"/api/prepare/live/test?f={Uri.EscapeDataString(stats.FilePath)}",
+                stats.Histogram is { } hist ? new { histogram = hist, background = stats.Background } : null);
             // 대상 단계에서 초점을 다시 맞췄으면 그 값과 비교한다
             var focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr;
             var verdict = TestShotRules.Judge(stats, focusHfr, ctx.ExposureSeconds);
