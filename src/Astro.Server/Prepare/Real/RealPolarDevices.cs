@@ -16,7 +16,10 @@ public sealed class RealPolarDevices(NinaRig rig, Phd2Client phd2, SharpCapBridg
     /// <summary>RA 회전: 이 적도의는 홈에서 한쪽으로 약 60°까지만 돈다 (DESIGN.md ①)</summary>
     private const double RotationDeg = 60;
     private const double RotationRate = 2.0; // °/s (최대 3.55)
-    private static readonly double[] Exposures = [1, 2, 4]; // 초 — 별이 모자라면 늘림 (SharpCap 권장 1~2초에서 시작)
+    // 노출(초): 1초에서 시작해 배경 밝기를 보고 0.25~4초 사이에서 줄이거나 늘린다 (2026-10-08 실기: 무조건 늘리면 화면이 하얘져 별이 더 안 보임)
+    private const double MinExposure = 0.25, MaxExposure = 4;
+    private const double Bright = 0.4, Dark = 0.02; // 배경 밝기(0~1, 최대 신호 대비): 이보다 밝으면 줄이고, 어두우면 늘린다
+    private double _exposure = 1;
 
     private string _camera = "";
 
@@ -39,13 +42,21 @@ public sealed class RealPolarDevices(NinaRig rig, Phd2Client phd2, SharpCapBridg
         }
         catch (Phd2Exception e)
         {
-            return DeviceResult.Fail(e.Message);
+            return DeviceResult.Fail(Phd2Words(e.Message));
         }
     }
+
+    /// <summary>PHD2가 영어로 주는 이유를 사용자가 할 일로 (2026-10-08 실기: 장비 연결 창이 열려 있으면 카메라를 놓지 못함)</summary>
+    internal static string Phd2Words(string message) =>
+        message.Contains("Connect Equipment dialog", StringComparison.OrdinalIgnoreCase)
+            ? "PHD2의 장비 연결 창이 열려 있어 가이드 카메라를 놓지 못했습니다. 그 창을 닫은 뒤 다시 시도해 주세요."
+            : message;
 
     public async Task<DeviceResult> StartSharpCapAsync(CancellationToken ct)
     {
         if (_camera.Length == 0) return DeviceResult.Fail("가이드 카메라 이름을 알지 못합니다. PHD2에서 가이드 카메라를 연결해 주세요.");
+        if (_camera.Equals("Simulator", StringComparison.OrdinalIgnoreCase))
+            return DeviceResult.Fail("PHD2의 가이드 카메라가 시뮬레이터(Simulator)로 되어 있어 SharpCap이 열 수 없습니다. PHD2 장비 연결 창에서 실제 가이드 카메라를 고른 뒤 다시 시도해 주세요.");
         var problem = await sharpCap.LaunchAsync(_camera, address.SharpCapReportUrl, ct);
         return problem is null ? DeviceResult.Success : DeviceResult.Fail(problem);
     }
@@ -53,8 +64,8 @@ public sealed class RealPolarDevices(NinaRig rig, Phd2Client phd2, SharpCapBridg
     public async Task<PoleFindResult> FindPoleAsync(Action<PoleProgress> progress, CancellationToken ct)
     {
         // 첫 사진: 위치를 찾을 때까지 (노출을 늘려 가며)
-        if (!await SolveStageAsync("first", progress, 0, ct))
-            return new(false, "노출을 4초까지 늘려도 위치를 찾지 못했습니다. 가이드 망원경 덮개와 구름, 북쪽 시야를 확인해 주세요.");
+        _exposure = 1;
+        if (await SolveStageAsync("first", progress, 0, ct) is { } why1) return new(false, why1);
         sharpCap.Send("advance");
         await sharpCap.WaitAsync(r => r.Stage != "First", TimeSpan.FromSeconds(15), ct);
 
@@ -65,26 +76,55 @@ public sealed class RealPolarDevices(NinaRig rig, Phd2Client phd2, SharpCapBridg
         if (!await rig.ConfirmStillAsync(ct)) return new(false, "적도의가 멈췄는지 확인하지 못했습니다. 적도의 상태를 확인해 주세요.");
 
         // 둘째 사진
-        if (!await SolveStageAsync("second", progress, RotationDeg, ct))
-            return new(false, "회전한 뒤 위치를 찾지 못했습니다. 회전 중 별이 가려졌거나 회전이 부족했을 수 있습니다.");
+        if (await SolveStageAsync("second", progress, RotationDeg, ct) is { } why2)
+            return new(false, $"회전한 뒤 위치를 찾지 못했습니다. 회전 중 별이 가려졌을 수 있습니다. ({why2})");
         sharpCap.Send("advance");
         return await sharpCap.WaitAsync(r => r.Adjusting, TimeSpan.FromSeconds(20), ct) is null
             ? new(false, "SharpCap이 조절 단계로 넘어가지 않았습니다")
             : new(true);
     }
 
-    /// <summary>지금 단계에서 SharpCap이 위치를 찾을(CanAdvance) 때까지. 못 찾으면 노출을 늘려 다시</summary>
-    private async Task<bool> SolveStageAsync(string stage, Action<PoleProgress> progress, double rotation, CancellationToken ct)
+    /// <summary>
+    /// 지금 단계에서 SharpCap이 위치를 찾을(CanAdvance) 때까지. 찾으면 null, 못 찾으면 이유.
+    /// 못 찾으면 배경 밝기를 보고: 밝으면(하얗게 뜸) 노출을 줄이고, 어두우면 늘리고, 적당한데도 못 찾으면 노출 탓이 아니므로 멈추고 알린다.
+    /// 사용자가 SharpCap에서 노출을 직접 바꾸면 그 뒤로는 AA가 바꾸지 않고 그 값으로 기다린다 (2026-10-08 사용자 요청)
+    /// </summary>
+    private async Task<string?> SolveStageAsync(string stage, Action<PoleProgress> progress, double rotation, CancellationToken ct)
     {
-        foreach (var exp in Exposures)
+        if (!sharpCap.UserChangedExposure) sharpCap.Send($"exposure:{_exposure * 1000}");
+        for (var round = 0; round < 8; round++)
         {
-            sharpCap.Send($"exposure:{exp * 1000}");
-            progress(new(stage, 0, exp, rotation));
-            // 노출을 바꾼 뒤 사진 몇 장이 지나가도록
-            if (await sharpCap.WaitAsync(r => r.CanAdvance, TimeSpan.FromSeconds(10 + exp * 6), ct) is not null) return true;
-            if (!sharpCap.Running) return false;
+            var user = sharpCap.UserChangedExposure;
+            var exp = user && sharpCap.Last is { ExposureMs: > 0 } l ? l.ExposureMs / 1000 : _exposure;
+            progress(new(stage, 0, exp, rotation, user));
+            // 노출을 바꾼 뒤 사진 몇 장이 지나가도록. 직접 바꾼 값이면 더 길게 기다린다 (그사이 또 바꿀 수 있음)
+            if (await sharpCap.WaitAsync(r => r.CanAdvance, TimeSpan.FromSeconds((user ? 30 : 10) + exp * 6), ct) is not null) return null;
+            if (!sharpCap.Running) return "SharpCap이 닫혔습니다";
+            if (sharpCap.UserChangedExposure)
+            {
+                if (user) return $"SharpCap에서 직접 정한 노출({exp:0.##}초)로도 위치를 찾지 못했습니다. 노출·게인을 바꿔 보거나, 구름·가림을 확인한 뒤 다시 시도해 주세요.";
+                continue;
+            }
+            var bg = sharpCap.Last?.Background;
+            if (bg is null)
+            {
+                // 밝기를 모르면 예전처럼 늘리기만
+                if (_exposure >= MaxExposure) return $"노출을 {MaxExposure:0}초까지 늘려도 위치를 찾지 못했습니다. 가이드 망원경 덮개·초점과 구름을 확인해 주세요.";
+                _exposure = Math.Min(MaxExposure, _exposure * 2);
+            }
+            else if (bg > Bright)
+            {
+                if (_exposure <= MinExposure)
+                    return $"하늘 배경이 너무 밝습니다 (밝기 {bg:P0}, 노출 {MinExposure}초). 달빛·조명이 들어오지 않는지 보고, SharpCap에서 게인을 낮춘 뒤 다시 시도해 주세요.";
+                _exposure = Math.Max(MinExposure, _exposure / 2);
+            }
+            else if (bg < Dark && _exposure < MaxExposure) _exposure = Math.Min(MaxExposure, _exposure * 2);
+            else
+                // 배경은 적당한데 못 찾음 → 노출 탓이 아님. 더 바꾸면 오히려 하얘진다
+                return $"배경 밝기는 적당한데(밝기 {bg:P0}, 노출 {_exposure:0.##}초) SharpCap이 위치를 찾지 못했습니다. 가이드 망원경 초점, 구름·창틀·건물에 가린 부분을 확인해 주세요. SharpCap에서 노출·게인을 직접 바꾸면 AA는 그 값을 씁니다.";
+            sharpCap.Send($"exposure:{_exposure * 1000}");
         }
-        return false;
+        return "노출을 여러 번 바꿔도 위치를 찾지 못했습니다. 가이드 망원경 덮개·초점과 구름을 확인해 주세요.";
     }
 
     public async IAsyncEnumerable<PolarOffset> WatchOffsetsAsync([EnumeratorCancellation] CancellationToken ct)

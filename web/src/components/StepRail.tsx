@@ -250,7 +250,15 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
           const state = i < shown.stage ? 'done' : i === shown.stage ? 'now' : 'todo'
           const items = groups[i]
           return [
-            <li key={s} className={`${styles.node} ${styles.stage}`} data-state={state} data-first={i === 0} data-last={i === STAGES.length - 1}>
+            // 맨 끝 선 숨기기: 마지막 단계는 작업 묶음이 펼쳐져 있으면 점 아래 선을 이어 그리고, 대신 마지막 작업 아래 선을 숨긴다
+            // (2026-10-08 실기: 마무리 점 아래가 끊기고 마지막 작업 아래로 선이 삐져나옴)
+            <li
+              key={s}
+              className={`${styles.node} ${styles.stage}`}
+              data-state={state}
+              data-first={i === 0}
+              data-last={i === STAGES.length - 1 && !(items?.length && shown.stage === i)}
+            >
               {line(nodes[k], k, 'in')}
               {line(nodes[k], k, 'out')}
               <span className={styles.name} aria-current={state === 'now' ? 'step' : undefined}>
@@ -269,7 +277,7 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
                 }}
               >
                 <ol className={styles.items} aria-label={`${s} 작업`}>
-                  {items.map((it) => {
+                  {items.map((it, j) => {
                     const key = `${i}:${it.id}`
                     const ik = index(key)
                     const st = itemState(nodes[ik], ik)
@@ -279,6 +287,7 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
                         className={`${styles.node} ${styles.item}`}
                         data-state={st}
                         data-open={open === key}
+                        data-tail={i === STAGES.length - 1 && j === items.length - 1}
                         tabIndex={i === shown.stage ? 0 : -1}
                         onMouseEnter={() => setOpen(key)}
                         onMouseLeave={() => setOpen(null)}

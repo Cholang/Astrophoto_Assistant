@@ -68,6 +68,12 @@
   color: var(--accent);
 }
 
+/* 답을 기다리는 동안 지금 하는 일 (도구를 쓰는 중) */
+.working {
+  margin-left: 8px;
+  color: var(--muted);
+}
+
 /* 답을 쓰는 중: 점 세 개 */
 .typing {
   display: inline-block;

@@ -24,7 +24,8 @@ public interface IPolarDevices
     Task<PolarEndState> ReadEndStateAsync(CancellationToken ct);
 }
 
-public sealed record PoleProgress(string Stage, int Stars, double ExposureSeconds, double RotationDeg);
+/// <summary>UserSet = 노출을 사용자가 SharpCap에서 직접 정함</summary>
+public sealed record PoleProgress(string Stage, int Stars, double ExposureSeconds, double RotationDeg, bool UserSet = false);
 public sealed record PoleFindResult(bool Ok, string? Problem = null);
 /// <summary>조절량(px): X = 방위(+는 왼쪽으로), Y = 고도(+는 아래로)</summary>
 public sealed record PolarOffset(double XPx, double YPx, DateTimeOffset At);
@@ -119,7 +120,7 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
                 {
                     "rotate" => $"적경축을 돌리는 중입니다 ({p.RotationDeg:F0}°)",
                     // 별 개수는 모의만 (SharpCap은 알려 주지 않음)
-                    _ => p.Stars > 0 ? $"별을 찾는 중입니다 · 별 {p.Stars}개 · 노출 {p.ExposureSeconds:0.#}초 (AA가 정함)" : $"별을 찾는 중입니다 · 노출 {p.ExposureSeconds:0.#}초 (AA가 정함)",
+                    _ => (p.Stars > 0 ? $"별을 찾는 중입니다 · 별 {p.Stars}개" : "별을 찾는 중입니다") + $" · 노출 {p.ExposureSeconds:0.##}초 ({(p.UserSet ? "직접 정함" : "AA가 정함")})",
                 });
             }, ct);
             if (found.Ok) return true;

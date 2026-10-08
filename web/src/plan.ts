@@ -93,6 +93,8 @@ export type ChatEvent =
   | { type: 'plan'; plan: Plan }
   | { type: 'choices'; choices: string[] }
   | { type: 'notice'; message: string }
+  /** AI가 도구를 쓰는 동안 지금 하는 일 (답 글자가 오기 전까지 점 옆에) */
+  | { type: 'status'; message: string }
   | { type: 'error'; message: string }
   | { type: 'done' }
 

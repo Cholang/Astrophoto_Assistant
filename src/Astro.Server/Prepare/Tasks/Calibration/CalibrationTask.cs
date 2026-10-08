@@ -60,6 +60,15 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
             }
         }
 
+        // 극축 정렬을 건너뛰었으면 움직이기 전에 한 번 묻는다 — 실내·북쪽만 트인 곳처럼 이미 안 될 걸 아는 경우 (2026-10-08 실기)
+        if (ctx.Results.Get<PolarResult>() is { Skipped: true })
+        {
+            run.Guide("캘리브레이션을 할까요?", "적도의를 자오선 근처 하늘로 옮겨 가이드 별로 보정값을 만들어요. 그쪽 하늘이 보이지 않으면 가이딩 없이 진행할 수 있어요.");
+            run.Status(null);
+            if (await run.AskAsync([new("start", "캘리브레이션 시작", true), new("noguide", "가이딩 없이 진행")], ct) == "noguide")
+                return await NoGuideAsync(ctx, evening, "가이딩 없이 진행을 고름", ct);
+        }
+
         while (true)
         {
             foreach (var pos in Positions)
@@ -85,14 +94,31 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
             run.Status("구름이 지나가는지, 가이드 망원경 덮개와 초점을 확인해 주세요", Tone.Fail);
             // 오늘 밤 보정값이 있으면 위에서 이미 물었다 — 지난밤 보정값은 조립하며 카메라 방향이 바뀌었을 수 있어 쓰지 않는다 (2026-10-08 결정)
             if (await run.AskAsync([new("retry", "다시 시도", true), new("noguide", "가이딩 없이 진행")], ct) == "noguide")
-            {
-                await devices.StopAsync(ct); // PHD2 루프·적도의 이동을 멈춰 둔다
-                ctx.Results.Set(new GuiderSkipped("캘리브레이션을 하지 못함", ctx.Now()));
-                return new Completed(new CalibrationResult(false, null, "", evening, ctx.Now(), Skipped: true), "건너뜀 · 가이딩 없이",
-                    "가이딩 없이 진행합니다", "오늘 밤은 가이딩 없이 찍습니다. 노출은 대상 단계에서 짧게 고를 수 있어요. 다음은 초점입니다.") { AutoNext = true };
-            }
+                return await NoGuideAsync(ctx, evening, "캘리브레이션을 하지 못함", ct);
         Retry:;
         }
+    }
+
+    /// <summary>가이딩 없이 진행: PHD2 루프·적도의 이동을 멈춰 두고 그날 밤 가이딩을 쓰지 않는다</summary>
+    private async Task<TaskOutcome> NoGuideAsync(PrepContext ctx, DateOnly evening, string why, CancellationToken ct)
+    {
+        await devices.StopAsync(ct);
+        ctx.Results.Set(new GuiderSkipped(why, ctx.Now()));
+        return new Completed(new CalibrationResult(false, null, "", evening, ctx.Now(), Skipped: true), "건너뜀 · 가이딩 없이",
+            "가이딩 없이 진행합니다", "오늘 밤은 가이딩 없이 찍습니다. 노출은 대상 단계에서 짧게 고를 수 있어요. 다음은 초점입니다.") { AutoNext = true };
+    }
+
+    /// <summary>
+    /// 이어서 할 때: 보정값이 PHD2에 남아 있고 PHD2·적도의가 멈춰 있으면 건너뜀. 추적은 보지 않는다 — 장비 준비가 끝나면 적도의를 홈에 두고 추적을 끄므로 (2026-10-08)
+    /// </summary>
+    public async Task<EndStateCheck> CheckResumeAsync(PrepContext ctx, CancellationToken ct)
+    {
+        if (ctx.Results.Get<CalibrationResult>() is { Skipped: true }) return EndStateCheck.Pass;
+        var s = await devices.ReadEndStateAsync(ct);
+        if (!s.HasCalibration) return EndStateCheck.Fail("PHD2에 보정값이 없습니다");
+        if (s.Phd2Guiding || s.Phd2Looping) return EndStateCheck.Fail("PHD2가 아직 가이딩·루프 중입니다");
+        if (s.MountMoving) return EndStateCheck.Fail("적도의가 아직 움직이고 있습니다");
+        return EndStateCheck.Pass;
     }
 
     /// <summary>한 위치에서 이동 → 별 → 측정. 이 위치가 안 되면 null (다음 위치로)</summary>

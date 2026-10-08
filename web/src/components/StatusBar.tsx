@@ -1,5 +1,6 @@
-import { Pencil } from 'lucide-react'
+import { Minus, Pencil } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { inDesktop, tellHost } from '../host'
 import { PRODUCT, VERSION } from '../product'
 import { profileImageUrl, type ObservingSite, type Profile } from '../profiles'
 import { coordText, type CurrentSite } from '../sites'
@@ -136,6 +137,13 @@ export default function StatusBar({
       </time>
 
       <ThemeSwitch value={theme} onChange={onThemeChange} />
+
+      {/* 창 내리기: 전체 화면이라 창 버튼이 없다 (2026-10-08 사용자 요청, 데스크톱 창에서만) */}
+      {inDesktop() && (
+        <button type="button" className={styles.pen} aria-label={`${PRODUCT.name} 창 내리기 (최소화)`} title="창 내리기" onClick={() => tellHost({ type: 'minimize' })}>
+          <Minus strokeWidth={2} aria-hidden="true" />
+        </button>
+      )}
     </header>
   )
 }

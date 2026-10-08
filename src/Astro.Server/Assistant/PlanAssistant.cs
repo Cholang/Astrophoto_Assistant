@@ -71,6 +71,18 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
 {
     private const int MaxRounds = 8;
 
+    /// <summary>도구 이름 → 화면에 보일 "지금 하는 일"</summary>
+    private static string Doing(string tool) => tool switch
+    {
+        "get_tonight" => "오늘 밤 조건을 보는 중…",
+        "search_targets" or "suggest_targets" => "대상 후보를 찾는 중…",
+        "set_target" => "대상을 정리하는 중…",
+        "set_framing" => "구도를 계산하는 중…",
+        "recommend_settings" or "set_settings" => "촬영 설정을 계산하는 중…",
+        "set_after" => "끝난 뒤 할 일을 정리하는 중…",
+        _ => "답을 정리하는 중…",
+    };
+
     private readonly SemaphoreSlim _busy = new(1, 1);
     private readonly List<ChatMessage> _history = [];
     private readonly List<DisplayMessage> _display = [];
@@ -218,8 +230,13 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
             var said = new StringBuilder();
             IReadOnlyList<string>? choices = null;
 
+            var askedAt = System.Diagnostics.Stopwatch.StartNew();
             for (var round = 0; round < MaxRounds; round++)
             {
+                // 속도 확인용 기록 (2026-10-08 — 답이 느림): 이번 호출에 보낸 양·첫 글자까지·전체 시간
+                var sent = SystemPrompt(night, _plan).Length + _history.Sum(m => m.Parts.Sum(p => p is TextPart t ? t.Text.Length : p is ToolResultPart r ? r.Result.GetRawText().Length : 50));
+                var roundWatch = System.Diagnostics.Stopwatch.StartNew();
+                long firstChunkMs = -1;
                 var channel = System.Threading.Channels.Channel.CreateUnbounded<SseItem<object>>();
                 ChatMessage? reply = null;
                 string? failure = null;
@@ -232,6 +249,7 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
                     {
                         await foreach (var chunk in model.StreamAsync(SystemPrompt(night, _plan), _history, PlanTools.Specs, ct))
                         {
+                            if (firstChunkMs < 0) firstChunkMs = roundWatch.ElapsedMilliseconds;
                             if (chunk is TextDelta d)
                             {
                                 said.Append(d.Text);
@@ -251,6 +269,7 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
 
                 await foreach (var item in channel.Reader.ReadAllAsync(ct)) yield return item;
                 await pump;
+                log.LogInformation("AI 호출 {Round}번째: 보낸 글자 약 {Sent} · 첫 응답 {First}ms · 전체 {Total}ms ({Model})", round + 1, sent, firstChunkMs, roundWatch.ElapsedMilliseconds, model.GetType().Name);
 
                 // 한도 초과·키 문제: 이 대화부터 연습 대화로 넘어가 같은 말을 이어서 처리한다
                 if (failure is not null && failureKind is ChatFailure.Quota or ChatFailure.Key && model is not ScriptedChatModel)
@@ -285,6 +304,8 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
                 if (calls.Count == 0) break;
 
                 var results = new List<ChatPart>();
+                // 도구를 쓰는 동안 지금 하는 일을 화면에 (다음 AI 호출을 기다리는 동안 멈춘 것처럼 보이지 않게)
+                yield return Event("status", new { message = Doing(calls[^1].Name) });
                 foreach (var call in calls)
                 {
                     var result = tools.Run(call.Name, call.Arguments, night, _plan, out var offered);
@@ -301,6 +322,7 @@ public sealed class PlanAssistant(ChatModelFactory models, PlanTools tools, Toni
             }
 
             _display.Add(new DisplayMessage("assistant", said.ToString().Trim(), choices));
+            log.LogInformation("AI 답 하나: {Ms}ms", askedAt.ElapsedMilliseconds);
             yield return Event("done", new { });
         }
         finally

@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace Astro.Server.Prepare.Real;
 
 /// <summary>
-/// 하늘 화면에 보낼 실제 이미지 (실장비 모드). 종류마다 마지막 한 장: sharpcap(창 캡처) · guide(PHD2 사진) · photo(솔빙 사진) · test(시험 사진).
+/// 하늘 화면에 보낼 실제 이미지 (실장비 모드). 종류마다 마지막 한 장: sharpcap(SharpCap 화면 영상) · guide(PHD2 사진) · photo(솔빙 사진) · test(시험 사진).
 /// 화면은 /api/prepare/live/{kind}로 받는다. sharpcap은 요청할 때마다 새로 캡처, guide는 PHD2가 지금 사진을 저장(save_image)하게 해 읽는다(2초에 한 번).
 /// </summary>
 public sealed class LiveImages(Phd2Client phd2)
@@ -19,7 +19,8 @@ public sealed class LiveImages(Phd2Client phd2)
 
     public async Task<(byte[] Bytes, string Type, DateTimeOffset At)?> GetAsync(string kind, CancellationToken ct)
     {
-        if (kind == "sharpcap" && WindowCapture.Capture("SharpCap") is { } shot) Set("sharpcap", shot);
+        // SharpCap: 스크립트가 저장한 영상만 (창 캡처는 메뉴·패널까지 나와 하늘이 작게 보임 — 2026-10-08 실기). 저장본이 없을 때만 창 캡처
+        if (kind == "sharpcap" && (SharpCapBridge.LatestView() ?? WindowCapture.Capture("SharpCap")) is { } shot) Set("sharpcap", shot);
         if (kind == "guide") await RefreshGuideAsync(ct);
         lock (_gate) return _images.TryGetValue(kind, out var v) ? v : null;
     }

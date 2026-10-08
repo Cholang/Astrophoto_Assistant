@@ -35,8 +35,11 @@ public partial class MainWindow : Window
         ApplyTheme(ReadSavedTheme());
         Loaded += OnLoaded;
         Closing += OnClosing;
-        // 처음부터 전체화면 (제목 표시줄·작업 표시줄 없이). F11로 창 모드와 오간다. 끄기는 Alt+F4
-        SetFullScreen(true);
+        // 처음부터 전체화면 (제목 표시줄·작업 표시줄 없이). F11로 창 모드와 오간다. 끄기는 Alt+F4.
+        // 창 핸들이 생긴 뒤에 모니터 크기를 잴 수 있어 SourceInitialized에서
+        SourceInitialized += (_, _) => SetFullScreen(true);
+        // 최소화했다 다시 열면 같은 자리·크기로
+        StateChanged += (_, _) => { if (WindowState == WindowState.Normal && WindowStyle == WindowStyle.None) FitMonitor(); };
         PreviewKeyDown += (_, e) =>
         {
             if (e.Key != System.Windows.Input.Key.F11) return;
@@ -47,13 +50,14 @@ public partial class MainWindow : Window
 
     private void SetFullScreen(bool on)
     {
-        // 작업 표시줄까지 덮으려면 테두리를 없앤 뒤에 최대화해야 한다 (순서 중요)
+        // 테두리 없는 창을 "최대화"하면 WPF가 화면보다 조금 크게 잡아 오른쪽·아래가 화면 밖으로 밀린다 (2026-10-08 실기: 캡처에 왼쪽·위 경계만 보임)
+        // → 최대화하지 않고, 지금 모니터 전체(작업 표시줄 포함) 크기에 정확히 맞춘다
         if (on)
         {
             WindowState = WindowState.Normal;
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
-            WindowState = WindowState.Maximized;
+            FitMonitor();
         }
         else
         {
@@ -89,6 +93,12 @@ public partial class MainWindow : Window
                     {
                         _closeConfirmed = true; // 화면이 확인했다 (또는 묻지 않아도 되는 화면)
                         Close();
+                        return;
+                    }
+                    // 상태 줄의 "창 내리기" (전체 화면이라 창 버튼이 없다)
+                    if (type == "minimize")
+                    {
+                        WindowState = WindowState.Minimized;
                         return;
                     }
                     if (type != "theme") return;
@@ -145,6 +155,31 @@ public partial class MainWindow : Window
     /// 창 닫기: 내부 서버를 끝까지 멈춘 뒤에 닫는다. async void라 await에서 창이 먼저 닫히고 프로세스가 끝나
     /// 서버의 정리(N.I.N.A. 감시 등 백그라운드 작업 종료·기록)가 잘릴 수 있었다 → 닫기를 한 번 미루고, 멈춘 뒤 다시 닫는다
     /// </summary>
+    /// <summary>창을 지금 모니터 전체 크기에 맞춘다 (화면 배율을 고려해 픽셀 → WPF 단위로)</summary>
+    private void FitMonitor()
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (hwnd == 0) return;
+        var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(MonitorFromWindow(hwnd, 2 /* 가장 가까운 모니터 */), ref info)) return;
+        var toDip = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? System.Windows.Media.Matrix.Identity;
+        var topLeft = toDip.Transform(new Point(info.Monitor.Left, info.Monitor.Top));
+        var bottomRight = toDip.Transform(new Point(info.Monitor.Right, info.Monitor.Bottom));
+        Left = topLeft.X;
+        Top = topLeft.Y;
+        Width = bottomRight.X - topLeft.X;
+        Height = bottomRight.Y - topLeft.Y;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct Rect32 { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MonitorInfo { public int Size; public Rect32 Monitor; public Rect32 Work; public uint Flags; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+
     private bool _stopping, _stopped;
 
     // 창의 × 버튼·Alt+F4: 진행 중이면 화면에 "종료할까요?"를 띄운다 (2026-10-08 사용자 결정). 화면이 답("close")하면 닫는다

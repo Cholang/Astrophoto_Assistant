@@ -12,7 +12,9 @@ namespace Astro.Server.Prepare.Real;
 /// </summary>
 public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
 {
-    public sealed record Report(string Stage, bool Active, bool CanAdvance, double X, double Y, double ExposureMs, string Camera, DateTimeOffset At)
+    /// <summary>Background = 배경 밝기 0~1 (SharpCap 히스토그램 평균 ÷ 범위, 모르면 null), Gain = 지금 게인</summary>
+    public sealed record Report(string Stage, bool Active, bool CanAdvance, double X, double Y, double ExposureMs, string Camera, DateTimeOffset At,
+        double? Background = null, double? Gain = null)
     {
         /// <summary>조절량이 진짜 측정인가 (첫·둘째 사진 단계가 아님)</summary>
         public bool Adjusting => Active && Stage is not ("First" or "Second" or "" or "None");
@@ -31,7 +33,9 @@ public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
         var r = new Report(
             Str(body, "stage"), body.TryGetProperty("active", out var a) && a.ValueKind == JsonValueKind.True,
             body.TryGetProperty("canAdvance", out var c) && c.ValueKind == JsonValueKind.True,
-            Dbl(body, "x"), Dbl(body, "y"), Dbl(body, "exp"), Str(body, "camera"), DateTimeOffset.Now);
+            Dbl(body, "x"), Dbl(body, "y"), Dbl(body, "exp"), Str(body, "camera"), DateTimeOffset.Now,
+            body.TryGetProperty("bg", out var bg) && bg.TryGetDouble(out var b) && b >= 0 ? b : null,
+            body.TryGetProperty("gain", out var gn) && gn.TryGetDouble(out var gv) ? gv : null);
         lock (_gate)
         {
             _last = r;
@@ -44,7 +48,47 @@ public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
     /// <summary>스크립트에 보낼 명령: advance · exposure:밀리초 · quit</summary>
     public void Send(string command)
     {
-        lock (_gate) _commands.Enqueue(command);
+        lock (_gate)
+        {
+            _commands.Enqueue(command);
+            if (command.StartsWith("exposure:", StringComparison.Ordinal) && double.TryParse(command[9..], System.Globalization.CultureInfo.InvariantCulture, out var ms))
+                _commandedMs = (ms, DateTimeOffset.Now);
+        }
+    }
+
+    private (double Ms, DateTimeOffset At)? _commandedMs;
+
+    /// <summary>
+    /// 사용자가 SharpCap에서 노출을 직접 바꿨는가 (2026-10-08 사용자 요청 — AA가 덮어쓰지 않게): AA가 보낸 값과 3초 넘게 다르면.
+    /// 그 뒤로는 AA가 노출을 바꾸지 않는다
+    /// </summary>
+    public bool UserChangedExposure
+    {
+        get
+        {
+            lock (_gate)
+                return _commandedMs is { } c && _last is { } r && r.At - c.At > TimeSpan.FromSeconds(3) && r.ExposureMs > 0
+                    && Math.Abs(r.ExposureMs - c.Ms) > Math.Max(5, c.Ms * 0.05);
+        }
+    }
+
+    /// <summary>스크립트가 1.5초마다 저장하는 "화면에 보이는 영상"의 이름 앞부분 (뒤에 -번호_WithDisplayStretch.png). 하늘 화면이 읽는다</summary>
+    public static string ViewFile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Product.DataFolder, "sharpcap-view");
+
+    /// <summary>저장된 영상 (5초 안에 쓴 것만). 없으면 null</summary>
+    public static byte[]? LatestView()
+    {
+        var dir = Path.GetDirectoryName(ViewFile)!;
+        try
+        {
+            var f = new DirectoryInfo(dir).EnumerateFiles("sharpcap-view*.png").OrderByDescending(x => x.LastWriteTimeUtc).FirstOrDefault();
+            if (f is null || DateTime.UtcNow - f.LastWriteTimeUtc > TimeSpan.FromSeconds(5)) return null;
+            using var s = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var m = new MemoryStream();
+            s.CopyTo(m);
+            return m.ToArray();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
     public bool Running => _process is { HasExited: false } || Process.GetProcessesByName("SharpCap").Length > 0;
@@ -59,7 +103,10 @@ public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
         Directory.CreateDirectory(dir);
         var script = Path.Combine(dir, "sharpcap-polar.py");
         await File.WriteAllTextAsync(script, Script(reportUrl), ct);
-        lock (_gate) { _last = null; _commands.Clear(); }
+        lock (_gate) { _last = null; _commands.Clear(); _commandedMs = null; }
+        // 지난번 영상 지우기 (번호가 다시 0부터)
+        foreach (var old in Directory.EnumerateFiles(dir, "sharpcap-view*"))
+            try { File.Delete(old); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         // 켜지는 동안 AA 위로 뜨지 않게 AA 뒤로 (최소화하지 않는다: 최소화하면 창 캡처가 빈다)
         using var behind = Engine.BackgroundWindows.KeepBehind(TimeSpan.FromSeconds(10), "SharpCap");
         try
@@ -144,8 +191,10 @@ public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
         import clr, time, threading
         clr.AddReference("System.Net.WebClient")
         from System.Net import WebClient
+        from System.IO import File
 
         URL = "__URL__"
+        VIEW = r"__VIEW__"
 
         def post(body):
             try:
@@ -167,18 +216,46 @@ public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
             try:
                 cam.Controls.Exposure.ExposureMs = 1000
             except Exception: pass
+            # 처음 게인: 범위가 아주 넓은 카메라(ToupTek 100~17만 등)는 로그 눈금 25%, 아니면 절반 (2026-10-08 실기: 80%면 136500으로 하얗게 포화)
             try:
                 g = cam.Controls.Gain
-                g.Value = g.Minimum + (g.Maximum - g.Minimum) * 0.8
+                if g.Minimum > 0 and g.Maximum / g.Minimum > 100:
+                    g.Value = round(g.Minimum * (g.Maximum / g.Minimum) ** 0.25)
+                else:
+                    g.Value = g.Minimum + (g.Maximum - g.Minimum) * 0.5
             except Exception: pass
             time.sleep(1)
             SharpCap.Transforms.SelectTransform("Polar Align")
             pa = SharpCap.PolarAlignment
+            lastbg = -1
             for n in range(7200):
+                # 배경 밝기 0~1: 히스토그램(첫 채널)의 평균 칸 ÷ 칸 수 (모르면 -1). 비트 수와 상관없게 칸에서 직접 계산
+                bg = -1
+                if n % 2 == 0:
+                    try:
+                        v = list(SharpCap.DisplayStretch.LastHistogram.Values)[0]
+                        tot = float(sum(v))
+                        if tot > 0: bg = sum([i * c for i, c in enumerate(v)]) / tot / len(v)
+                    except Exception: pass
+                    lastbg = bg
+                else:
+                    bg = lastbg
+                gain = -1
+                try: gain = cam.Controls.Gain.Value
+                except Exception: pass
+                # 하늘 화면용: 화면에 보이는 영상만 저장 (창 캡처는 SharpCap 창 전체가 나옴 — 2026-10-08 실기).
+                # 같은 이름이면 SharpCap이 덮어쓸지 묻는 창을 띄우고 멈춘다 → 매번 새 이름, 두 번 전 파일은 지운다 (읽는 중인 최신 파일은 남김)
+                if n % 3 == 0:
+                    k = n / 3
+                    try: cam.SaveAsViewed(VIEW + "-%d.png" % k)
+                    except Exception: pass
+                    for old in [VIEW + "-%d_WithDisplayStretch.png" % (k - 2), VIEW + "-%d_WithDisplayStretch.CameraSettings.txt" % (k - 2)]:
+                        try: File.Delete(old)
+                        except Exception: pass
                 try:
                     o = pa.Offset
-                    body = '{"stage":"%s","active":%s,"canAdvance":%s,"x":%.2f,"y":%.2f,"exp":%.1f,"camera":"%s"}' % (
-                        pa.Stage, str(pa.IsActive).lower(), str(pa.CanAdvance).lower(), o.X, o.Y, cam.Controls.Exposure.ExposureMs, cam.DeviceName)
+                    body = '{"stage":"%s","active":%s,"canAdvance":%s,"x":%.2f,"y":%.2f,"exp":%.1f,"camera":"%s","bg":%.4f,"gain":%.1f}' % (
+                        pa.Stage, str(pa.IsActive).lower(), str(pa.CanAdvance).lower(), o.X, o.Y, cam.Controls.Exposure.ExposureMs, cam.DeviceName, bg, gain)
                 except Exception as e:
                     body = '{"stage":"","camera":"%s"}' % cam.DeviceName
                 reply = post(body) or ""
@@ -194,5 +271,5 @@ public sealed class SharpCapBridge(ILogger<SharpCapBridge> log)
                 time.sleep(0.5)
 
         threading.Thread(target=run).start()
-        """.Replace("__URL__", url);
+        """.Replace("__URL__", url).Replace("__VIEW__", ViewFile);
 }

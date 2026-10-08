@@ -61,6 +61,8 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
   const [plan, setPlan] = useState<Plan>(initial.plan)
   const [chart, setChart] = useState(initial.chart)
   const [busy, setBusy] = useState(false)
+  // AI가 도구를 쓰는 동안 지금 하는 일 (답 글자가 오면 지움)
+  const [working, setWorking] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
@@ -76,6 +78,7 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
       text = text.trim()
       if (!text || busy) return
       setBusy(true)
+      setWorking(null)
       setError(null)
       setDraft('')
       setMessages((list) => {
@@ -90,7 +93,8 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
       let failed: string | null = null
       try {
         await sendChat(text, (e) => {
-          if (e.type === 'text')
+          if (e.type === 'status') setWorking(e.message)
+          else if (e.type === 'text')
             setMessages((list) => {
               const last = list[list.length - 1]
               return [...list.slice(0, -1), { ...last, text: last.text + e.text }]
@@ -126,6 +130,7 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
         .then((c) => c && setChart(c))
         .catch(() => {})
       setBusy(false)
+      setWorking(null)
     },
     [busy],
   )
@@ -167,7 +172,13 @@ function PlanBody({ initial, onContinue }: { initial: PlanState; onContinue: () 
               <div key={i} className={styles.turn}>
                 <div className={styles.message} data-role={m.role}>
                   {m.role === 'assistant' && <span className={styles.who}>{PRODUCT.name}</span>}
-                  {m.text || (busy && i === messages.length - 1 ? <span className={styles.typing} aria-label="답을 쓰는 중" /> : null)}
+                  {m.text ||
+                    (busy && i === messages.length - 1 ? (
+                      <>
+                        <span className={styles.typing} aria-label="답을 쓰는 중" />
+                        {working && <span className={styles.working}>{working}</span>}
+                      </>
+                    ) : null)}
                 </div>
                 {m.role === 'assistant' && m.choices && m.choices.length > 0 && (
                   <div className={styles.choices}>

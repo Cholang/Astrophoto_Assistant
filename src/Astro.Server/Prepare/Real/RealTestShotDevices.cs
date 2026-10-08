@@ -17,7 +17,8 @@ public sealed class RealTestShotDevices(NinaRig rig, LiveImages live) : ITestSho
     public async Task<bool> ExposeAsync(int exposureSeconds, int iso, Action<int> remaining, CancellationToken ct)
     {
         _started = DateTimeOffset.Now;
-        _shot = await rig.CaptureAsync(exposureSeconds, solve: false, save: true, remaining, ct, gain: iso);
+        // 시험 사진은 SNAPSHOT 폴더로 — 촬영 사진(LIGHT)과 섞여 스태킹에 들어가지 않게 (2026-10-08 실기: LIGHT 폴더에 시험 사진 두 장이 남음)
+        _shot = await rig.CaptureAsync(exposureSeconds, solve: false, save: true, remaining, ct, gain: iso, imageType: "SNAPSHOT");
         // 카메라가 촬영을 받지 않았으면 노출 실패. 받았지만 내려받기에서 실패한 것은 DownloadAndAnalyzeAsync가 null로
         return _shot.Started;
     }

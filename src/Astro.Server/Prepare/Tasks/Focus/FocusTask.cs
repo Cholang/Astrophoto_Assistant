@@ -59,6 +59,8 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
 
             run.SubStep(1);
             run.Guide("별 크기 측정", "포커서를 조금씩 옮기며 별 크기를 잽니다. 가장 작아지는 위치를 찾습니다.");
+            // 측정점이 오기 전까지도 지금 하는 일을 보인다 (2026-10-08 실기: "지금 위치에서 시작합니다"에 멈춘 것처럼 보임)
+            run.Status("자동초점 중입니다 · N.I.N.A.가 포커서를 옮기며 별 크기를 재고 있어요 (보통 몇 분)");
             var points = new List<object>();
             var af = await devices.AutofocusAsync((pos, hfr) =>
             {

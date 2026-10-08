@@ -53,7 +53,8 @@
 }
 
 .stage[data-first='true'] .line[data-side='in'],
-.stage[data-last='true'] .line[data-side='out'] {
+.stage[data-last='true'] .line[data-side='out'],
+.item[data-tail='true'] .line[data-side='out'] {
   display: none;
 }
 

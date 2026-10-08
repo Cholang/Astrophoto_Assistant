@@ -243,6 +243,24 @@ public static class AppServer
         prepare.MapPost("/rig/start", async (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow, CancellationToken ct) =>
             await starter.StartRigAsync(ct) is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(flow.Rig.View()));
         // 마무리 (플랫 · 다크 · 장비 정리 — 촬영이 끝난 뒤, 그날 밤 하나)
+        // 장비 준비가 끝나 계획으로 갈 때: 적도의를 홈에 두고 추적을 끈다 (2026-10-08 사용자 결정 — 계획·기다리는 시간이 길어도 한계로 흘러가지 않게).
+        // 기다리지 않는다 — 대상 이동은 적도의 잠금을 기다리므로 홈이 끝난 뒤에 움직인다. Set Home은 쓰지 않는다(Go Home만)
+        prepare.MapPost("/rig/rest", (Prepare.Tasks.Wrap.IWrapDevices wrap, Prepare.Flow.MountLock mount, ILogger<Prepare.Flow.PrepareFlow> log) =>
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await using (await mount.AcquireAsync(CancellationToken.None))
+                    {
+                        if (!await wrap.HomeAsync(CancellationToken.None)) log.LogWarning("장비 준비 뒤 홈으로 보내지 못함");
+                        if (!await wrap.TrackingOffAsync(CancellationToken.None)) log.LogWarning("장비 준비 뒤 추적을 끄지 못함");
+                    }
+                }
+                catch (Exception e) { log.LogWarning(e, "장비 준비 뒤 쉬게 하기 실패"); }
+            });
+            return Results.NoContent();
+        });
         prepare.MapPost("/wrap/start", async (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow, CancellationToken ct) =>
             await starter.StartWrapAsync(ct) is { } problem ? Results.BadRequest(new { error = problem }) : Results.Ok(flow.Wrap.View()));
         prepare.MapPost("/target/start", (Prepare.PrepareStarter starter, Prepare.Flow.PrepareFlow flow) =>

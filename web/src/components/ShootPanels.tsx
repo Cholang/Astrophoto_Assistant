@@ -64,6 +64,11 @@ export function ShootGauges({ v }: { v: ShootView }) {
       <div className={styles.prog}>
         <strong>
           {v.good} <small>/ {v.planned}장</small>
+          {/* 제외(F) 장수: 큰 숫자는 쓸 사진만, 제외는 옆에 작게. 0장이어도 자리를 지켜 숫자가 밀리지 않게 (2026-10-09 사용자 결정) */}
+          <small className={styles.excluded} data-some={v.excluded > 0}>
+            {' '}
+            · 제외 {v.excluded}
+          </small>
         </strong>
         <span className={styles.exp}>{exp}</span>
         <div className={styles.meter}>

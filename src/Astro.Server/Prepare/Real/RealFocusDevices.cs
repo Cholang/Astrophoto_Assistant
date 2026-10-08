@@ -26,7 +26,7 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config) : IFocu
     }
 
     /// <summary>자동초점 측정점 사이 최대 간격 (노출 + 포커서 이동은 보통 수십 초)</summary>
-    public static readonly TimeSpan Stall = TimeSpan.FromMinutes(3);
+    public static readonly TimeSpan Stall = TimeSpan.FromMinutes(2); // 2026-10-08 실기: 포커서 오류 뒤 3분은 길게 느껴짐
 
     public async Task<AutofocusRun> AutofocusAsync(Action<int, double> point, CancellationToken ct)
     {

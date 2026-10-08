@@ -300,7 +300,10 @@ export default function App() {
   // 장비 준비가 끝나면 대상으로: 대상이 장비 준비 작업을 다시 하자고 해 멈춰 둔 것이면 그 대상을 이어서, 아니면 계획부터
   const rigDone = useCallback(async () => {
     const target = await prepareState('target')
-    fadeTo(target?.handoff === 'rig' ? 'target' : 'plan')
+    if (target?.handoff === 'rig') return fadeTo('target')
+    // 계획으로: 그동안 적도의는 홈에서 추적을 끄고 기다린다 (2026-10-08 사용자 결정)
+    void fetch('/api/prepare/rig/rest', { method: 'POST' }).catch(() => null)
+    fadeTo('plan')
   }, [fadeTo])
   const handoff = useCallback((to: PrepGroup) => fadeTo(to === 'rig' ? 'rig' : 'target'), [fadeTo])
   const frame = useFrame()

@@ -15,7 +15,7 @@ public sealed record NightContext(
 /// </summary>
 public sealed class PlanTools(DsoCatalog catalog, Engine.EquipmentChoices equipment)
 {
-    public const double FrameOverheadSeconds = 6; // 사진 한 장마다 저장·디더링 등으로 쉬는 시간 (대략)
+    public const double FrameOverheadSeconds = 40; // 사진 한 장마다 내려받기·저장·디더링으로 쉬는 시간 (2026-10-08 실기 X-T5: 약 38초)
 
     public static readonly IReadOnlyList<ToolSpec> Specs =
     [

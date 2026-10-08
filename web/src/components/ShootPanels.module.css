@@ -58,6 +58,16 @@
   color: var(--sky-muted);
 }
 
+/* 제외 장수: 쓸 사진 숫자보다 한 단계 작게. 있으면 경고색 */
+.prog strong small.excluded {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.prog strong small.excluded[data-some='true'] {
+  color: var(--warn);
+}
+
 .prog span {
   font-size: 16px;
   color: var(--sky-muted);

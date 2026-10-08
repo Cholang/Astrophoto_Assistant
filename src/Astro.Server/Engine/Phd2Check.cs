@@ -32,6 +32,10 @@ public static class Phd2Check
         if (cameraName is null || !cameraOn)
             return new Problem("PHD2에서 가이드 카메라가 연결되지 않았습니다",
                 "PHD2의 장비 연결 창에서 가이드 카메라를 다시 고르고(USB 포트를 바꾸면 다시 골라야 합니다) 연결한 뒤, 다시 연결을 눌러 주세요.");
+        // 가이드 카메라가 PHD2 내장 시뮬레이터인데 N.I.N.A. 적도의는 실제 (2026-10-08 실기: "newbee" 프로필 카메라가 Simulator로 남아 연결은 통과했지만 SharpCap이 카메라를 못 엶)
+        if (IsSimulator(cameraName) && !(ninaMountName is { Length: > 0 } nmc && IsSimulator(nmc)))
+            return new Problem($"PHD2의 가이드 카메라가 시뮬레이터입니다 (PHD2: {cameraName})",
+                "PHD2의 장비 연결 창에서 카메라를 실제 가이드 카메라로 바꿔 연결하고, 창을 닫은 뒤 다시 연결을 눌러 주세요.");
         if (mountName is null || !mountOn)
             return new Problem("PHD2에서 적도의가 연결되지 않았습니다",
                 "PHD2의 장비 연결 창에서 적도의를 연결한 뒤 다시 연결을 눌러 주세요. 가이딩 보정은 이 적도의로 보냅니다.");
