@@ -23,6 +23,7 @@ public class SimulatorRigTests(ITestOutputHelper output)
     {
         if (!Enabled) return;
         var rig = new NinaRig(Api());
+        await Task.Delay(1100); // 앞 시험과 같은 초에 찍으면 이름이 같은 파일이 다른 폴더에 생겨 일부러 못 찾음(후보 둘 → null)
         var since = DateTimeOffset.Now;
         Assert.True((await rig.CaptureAsync(1, solve: false, save: true, null, CancellationToken.None, imageType: "LIGHT")).Ok);
         var saved = await rig.LastSavedAsync(CancellationToken.None);
@@ -166,16 +167,16 @@ public class SimulatorRigTests(ITestOutputHelper output)
         }
 
         var t = DateTime.UtcNow;
-        Assert.True(await rig.FlipAsync(CancellationToken.None));
+        Assert.True((await rig.FlipAsync(CancellationToken.None)).Flipped);
         var after = (await rig.MountAsync(CancellationToken.None))!;
         output.WriteLine($"후: {after.Pier} · {(DateTime.UtcNow - t).TotalSeconds:F0}초 · 이동 중 {after.Slewing}");
         Assert.Equal("pierEast", after.Pier);
         Assert.False(after.Slewing);
         Assert.True(DateTime.UtcNow - t > TimeSpan.FromSeconds(5)); // 움직이기 전에 끝났다고 보지 않음
 
-        // 이미 반전된 쪽이면 명령 없이 바로 성공
+        // 이미 반전된 쪽이면 명령 없이 멈춤만 확인하고 성공 (CX-NIGHT-01)
         t = DateTime.UtcNow;
-        Assert.True(await rig.FlipAsync(CancellationToken.None));
-        Assert.True(DateTime.UtcNow - t < TimeSpan.FromSeconds(3));
+        Assert.True((await rig.FlipAsync(CancellationToken.None)).Flipped);
+        Assert.True(DateTime.UtcNow - t < TimeSpan.FromSeconds(6));
     }
 }

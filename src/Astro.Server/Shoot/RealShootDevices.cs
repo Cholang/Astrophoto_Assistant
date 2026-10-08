@@ -28,7 +28,7 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         (DateTimeOffset Date, string File, double Hfr, int Stars)? saved = null;
         for (var i = 0; i < 10; i++)
         {
-            if (await rig.LastSavedAsync(ct) is { } s && s.Date >= started && s.File.Length > 0) { saved = s; break; }
+            if (await rig.LastSavedAsync(ct) is { } s && s.Date >= started) { saved = s; break; }
             await Task.Delay(1000, ct);
         }
         if (saved is null) return new FrameShot(false, "저장된 사진을 확인하지 못했습니다", null, null);
@@ -36,7 +36,8 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         var hfr = saved is { Hfr: > 0 and var h } && double.IsFinite(h) ? h : stats?.Hfr ?? 0;
         var stars = saved?.Stars ?? stats?.Stars ?? 0;
         double? mean = stats is { Mean: var m } && double.IsFinite(m) ? m : null;
-        return new FrameShot(true, null, saved?.File, new FrameStats(double.IsFinite(hfr) ? hfr : 0, stars, mean, null, null));
+        // 파일 위치를 확실히 모르면 File = null (제외할 때 옮기지 않고 "직접 옮겨 주세요"로 — CX-NIGHT-05)
+        return new FrameShot(true, null, saved is { File.Length: > 0 } sv ? sv.File : null, new FrameStats(double.IsFinite(hfr) ? hfr : 0, stars, mean, null, null));
     }
 
     public Task<double?> GuideRmsAsync(CancellationToken ct) => rig.GuideRmsArcsecAsync(ct);
@@ -283,7 +284,8 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
     {
         step(0);
         if (ctx.HasGuider && !await StopGuidingAsync(ct)) return new FlipOutcome(false, false, false); // 가이딩을 멈추지 못하면 반전하지 않는다
-        if (!await rig.FlipAsync(ct)) return new FlipOutcome(false, false, false);
+        var flip = await rig.FlipAsync(ct);
+        if (!flip.Flipped) return new FlipOutcome(false, false, false, flip.Still);
         step(1);
         var centered = false;
         for (var i = 0; i < 5 && !centered; i++)
@@ -296,10 +298,12 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
         return new FlipOutcome(true, centered, guiding);
     }
 
+    public Task<bool> ConfirmMountStillAsync(CancellationToken ct) => rig.StopSlewAndConfirmAsync(ct);
+
     public async Task<RefocusOutcome> RefocusAsync(Action<int, double> point, CancellationToken ct)
     {
         var af = await focus.AutofocusAsync(point, ct);
-        return new RefocusOutcome(af.Ok && af.StarsFound && af.CurveGood, af.BestPosition, af.Hfr, af.Problem);
+        return new RefocusOutcome(af.Ok && af.StarsFound && af.CurveGood, af.BestPosition, af.Hfr, af.Problem, af.StopUnconfirmed);
     }
 
     public Task<double?> TemperatureAsync(CancellationToken ct) => focus.TemperatureAsync(ct);

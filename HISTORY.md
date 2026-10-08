@@ -8,7 +8,37 @@
 
 ---
 
-## 2026-10-08 · [Claude] AA 전체를 시뮬레이터에 붙여 찾은 문제 고치기
+## 2026-10-08 · [Claude] Codex 리뷰 18절 반영 (CX-NIGHT-01~06)
+
+**요청**: Codex 18절 6건 모두 동의 — 판단을 말한 뒤 사용자 승인으로 적용 (02는 움직이는 동안 최대 4분 기다리기를 더하고, 05의 다크플랫 못 옮김 요약 표시는 다음으로)
+
+**변경**
+- 01·02: `NinaRig.FlipAsync` → `FlipResult(Flipped, Still)` — pierEast로 바뀌어야 반전(pierUnknown은 다시 조회), 이미 pierEast여도 멈춤 확인, 60초에 방향이 그대로여도 움직이는 중이면 최대 4분, 실패하면 `StopAfterFailAsync`(멈춤 명령·확인). `FlipOutcome.MountStill`, `ShootSession` `_mountStill`·`ShootView.MountStopped`, `BlocksNext`·`RecheckStopAsync`가 적도의 정지도, `IShootDevices.ConfirmMountStillAsync`. 화면 문구(적도의 정지 확인)
+- 03: `ShootSession.EndReason`(중단·완료·고도·새벽) — 다음 사진이 필요할 때만 디더링, `WaitUnstableAsync`가 끝 조건·반전 시각이면 그만둠, 안정 관찰을 `_wake`(중단·답이 취소)로
+- 04: `AscomWeather.ReadAsync`가 기다리지 않음 — 뒤에서 하나만 읽고 최근 값(5분 안)·null을 바로
+- 05: `NinaRig.FindSavedFile` — 이미지 폴더 전체에서 이름 + 저장 시각 ±2분, 후보가 하나일 때만. 못 찾으면 빈 경로(이름만 돌려주지 않음) → 촬영은 `File = null`(옮기지 않고 "직접 옮겨 주세요")
+- 06: `RealFocusDevices.CancelAndConfirmAsync`(카메라 쉼·포커서 멈춤 두 번), `AutofocusRun.StopUnconfirmed`·`RefocusOutcome.StopUnconfirmed` → 촬영은 "focus"로 끝냄, 준비 단계 초점은 "장비 상태 다시 확인"
+- 시험: NIGHT02·NIGHT03 2개, `FindSavedFileTests` 3개, 모의 실패 shoot.flipmoving
+
+**확인**: 서버 테스트 129 통과·1 건너뜀(두 번). N.I.N.A. 시뮬레이터(AA_SIM=1): 반전 15초 뒤 끝·pierEast, 저장 경로, DARKFLAT 폴더 통과. 처음엔 저장 경로가 실패 — 다크플랫 시험과 같은 초에 찍혀 같은 이름 파일이 두 폴더에 생겨 후보 둘 → null(의도대로), 시험에 1초 간격. N.I.N.A.가 켜지며 자체 오류 창(SimpleSequenceVM.get_Targets NullReference, 3.2 개발판) — AA 명령 전, API는 계속 동작. 확인 못 함: 실제 OnStepX 반전 시간·방향 갱신 시점, 자동초점 취소 실패 경로(코드·테스트로만), 센서 멈춤
+
+**남은 것**: 다크플랫을 못 옮겼을 때 요약에 표시, 실장비 확인
+
+---
+
+## 2026-10-08 · [Codex] 931c64a 실장비 첫 촬영 전 재리뷰
+
+**요청**: `ed4d353..931c64a`를 실제 장비에서 사고·촬영 중단으로 이어지는 경로 중심으로 검토. 코드 수정 없이 리뷰 18절과 이 기록만 작성.
+
+**변경**: `docs/codex/REVIEW_CODEX.md` 18절 추가. CX-NIGHT-01~06(P1 5건·P2 1건): 반전 성공 판정, 반전 실패 후 정지 확인, 디더링 대기의 종료 조건, 환경 COM 조회 정체, 저장 파일 동일성, AF 취소 확인. 16절 수정의 재검토와 나머지 요청 범위·실기 한계도 기록.
+
+**확인**: HEAD `931c64a`. `AA_REAL=0`, `AA_SIM=0` 서버 테스트 123 통과·1 건너뜀. 저장소 밖 가짜 장비/HTTP·임시 파일로 센서 취소 불응, 반전 판정 2개, 파일 검색 2개, 마지막 장 이후 대기 재현. 실제 장비 접근·앱 실행·실제 사진 이동 및 코드 변경 없음.
+
+**남은 것**: 리뷰 지적 수정과 해당 실패 경계 회귀 검증, 실제 장비 프로필·반전·AF·별 있는 하늘에서의 검수. 커밋·푸시하지 않음.
+
+---
+
+## 2026-10-08 · 931c64a [Claude] AA 전체를 시뮬레이터에 붙여 찾은 문제 고치기
 
 **요청**: 사무실에서 AA 전체를 실장비 모드로 시뮬레이터에 붙여 돌려 보고, 중대한 결정이 아닌 고칠 것·답이 분명한 것은 바로 고치기 (사용자 회의 중)
 

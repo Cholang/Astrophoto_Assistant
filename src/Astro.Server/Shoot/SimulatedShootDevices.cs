@@ -28,6 +28,12 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     private readonly List<double> _snr = [.. Enumerable.Range(0, 10).Select(i => 30.0 + i % 3)], _hfd = [.. Enumerable.Repeat(2.2, 10)];
 
     public string? PhotoUrl => null;
+    private bool _mountMoving;
+
+    /// <summary>모의: 한 번 다시 확인하면 멈춘 것으로</summary>
+    public async Task<bool> ConfirmMountStillAsync(CancellationToken ct) { await sim.Delay(200, ct); var was = _mountMoving; _mountMoving = false; return !was || ConfirmCalls++ > 0; }
+    /// <summary>[테스트] 적도의 정지 확인 횟수</summary>
+    public int ConfirmCalls { get; private set; }
     private int _noStars;
     public int GuideExposureMs => _guideMs;
 
@@ -148,6 +154,7 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
         step(0);
         await sim.Delay(1500, ct);
         if (faults.Take("shoot.flipfail")) return new FlipOutcome(false, false, false);
+        if (faults.Take("shoot.flipmoving")) { _mountMoving = true; return new FlipOutcome(false, false, false, MountStill: false); } // 반전 실패 + 적도의가 멈췄는지 모름
         for (var i = 1; i < 3; i++) { step(i); await sim.Delay(1500, ct); }
         _ha = -Math.Abs(_ha);
         return new FlipOutcome(true, true, true);

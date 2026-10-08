@@ -29,6 +29,7 @@ const ENDED: Record<string, string> = {
   guider: '가이드 카메라(PHD2) 연결이 끊겨 다시 연결하지 못했어요. 연결을 확인해 주세요. ',
   flip: '자오선 반전이 되지 않아 촬영을 멈췄어요. 적도의를 확인해 주세요. ',
   recenter: '다시 가운데로 맞추지 못해 촬영을 멈췄어요. ',
+  focus: '자동초점이 멈췄는지 확인하지 못해 촬영을 멈췄어요. N.I.N.A.를 확인해 주세요. ',
 }
 
 /** 가이드 별을 잃어 멈췄을 때 원인별 안내 (docs/SHOOT_IMPLEMENTATION.md B) */
@@ -58,6 +59,7 @@ const FAULTS: [string, string][] = [
   ['shoot.unstable', '가이딩 불안정 (곧 안정)'],
   ['shoot.unstablelong', '가이딩 불안정 (오래)'],
   ['shoot.nostars', '별 없는 사진 5장 (렌즈 덮개)'],
+  ['shoot.flipmoving', '반전 실패 + 적도의 정지 모름'],
 ]
 
 export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void; onRetarget: () => void }) {
@@ -72,7 +74,7 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
 
   const ended = view?.mode === 'Ended'
   // 중단을 고른 뒤 끝나면 고른 곳으로
-  const stopped = view?.guideStopped ?? true
+  const stopped = (view?.guideStopped ?? true) && (view?.mountStopped ?? true)
   useEffect(() => {
     if (!ended || !then || !stopped) return
     if (then === 'wrap') onWrap()
@@ -162,8 +164,13 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
     ;[title, text] = PAUSE[view.pause ?? 'cloud'] ?? PAUSE.cloud
   } else if (ended && !stopped) {
     // 가이딩 정지를 확인하지 못함: 다시 확인하기 전에는 다음으로 가지 않는다 (CX-SHOOT-01)
-    title = '가이딩이 멈췄는지 확인해 주세요'
-    text = '촬영은 멈췄지만 PHD2 가이딩이 멈췄는지 확인하지 못했어요. 가이딩이 켜진 채로 적도의를 옮기면 위험해요. PHD2를 확인한 뒤 다시 확인을 눌러 주세요.'
+    if (!view.mountStopped) {
+      title = '적도의가 멈췄는지 확인해 주세요'
+      text = '자오선 반전이 되지 않아 촬영을 멈췄는데, 적도의가 아직 움직이는지 확인하지 못했어요. 움직이는 채로 다른 이동을 명령하면 위험해요. 적도의를 확인한 뒤 다시 확인을 눌러 주세요.'
+    } else {
+      title = '가이딩이 멈췄는지 확인해 주세요'
+      text = '촬영은 멈췄지만 PHD2 가이딩이 멈췄는지 확인하지 못했어요. 가이딩이 켜진 채로 적도의를 옮기면 위험해요. PHD2를 확인한 뒤 다시 확인을 눌러 주세요.'
+    }
     actions = [{ id: 'recheck', label: '장비 상태 다시 확인', primary: true }]
   } else if (ended) {
     title = '촬영을 마쳤어요'

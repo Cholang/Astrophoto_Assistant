@@ -21,7 +21,7 @@ public sealed record ShootView(
     double PixelScale, string? LastGrade, IReadOnlyDictionary<string, int> Tally, IReadOnlyDictionary<string, string> Criteria,
     StatusLine? Note, IReadOnlyList<object>? FocusPoints, string? Ended, DateTimeOffset? EndAt, string? PhotoUrl, DateTimeOffset? PhotoAt,
     int Version, bool Simulated, string? Pause = null, int PausedSeconds = 0, int GuideExposureMs = 0, bool GuideStopped = true, string? Ask = null,
-    DewStatus? Dew = null);
+    DewStatus? Dew = null, bool MountStopped = true);
 
 /// <summary>Paused = 가이드 별을 잃어 멈춤 (원인은 ShootView.Pause: light · cloud · jump · guider · unstable)</summary>
 public enum ShootMode { Idle, Shoot, Dither, Flip, Focus, Paused, Finishing, Ended }
@@ -73,6 +73,10 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private bool _windWarned;
     // CX-SHOOT-01: 끝날 때 가이딩 정지를 확인했는가 (확인 전에는 마무리·다른 대상으로 못 감). 가이더 없는 구성은 감시·정지를 건너뜀(07)
     private bool _guideStopped = true, _hasGuider = true;
+    // CX-NIGHT-02: 반전 실패 뒤 적도의가 멈춘 것을 확인했는가 (확인 전에는 다른 대상·마무리로 못 감)
+    private bool _mountStill = true;
+    // CX-NIGHT-03: 가이딩 안정 기다리기를 "촬영 중단"·답이 바로 깨우도록
+    private CancellationTokenSource? _wake;
     private long _seenSteps;
     private int _polling;
     private readonly List<string> _notMoved = [];
@@ -118,7 +122,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             flipAt is { } fa && c is not null ? Math.Max(1, (int)Math.Ceiling((fa - c.Now()).TotalMinutes)) : null, _guide.ToArray(), _hfr.ToArray(), _focusHfr,
             c?.MainPixelScaleArcsec ?? 0, _lastGrade, new Dictionary<string, int>(_tally), ShotGrader.Criteria, _note, _focusPoints?.ToArray(),
             _ended, endAt, devices.PhotoUrl, _photoAt, _version, mode.Simulate,
-            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs, _guideStopped, _ask, _dew);
+            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs, _guideStopped, _ask, _dew, _mountStill);
     }
 
     public async IAsyncEnumerable<ShootView> WatchAsync([EnumeratorCancellation] CancellationToken ct)
@@ -191,7 +195,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _flipped = false; _stopRequested = false; _recordIndex = -1; _hfrRecent.Clear();
             _pause = null; _pausedMinutes.Clear(); _snrSamples.Clear(); _hfdSamples.Clear(); _snrBaseline = _hfdBaseline = 0;
             _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _lastDegrade.Clear(); _windWarned = false;
-            _guideStopped = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
+            _guideStopped = true; _mountStill = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
             _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _excludedRun = 0; _lowHfdWarned = _dewWarned = DateTimeOffset.MinValue; _dew = null;
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
             _mode = ShootMode.Shoot;
@@ -235,6 +239,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
         {
             if (_ctx is null || _mode is ShootMode.Ended or ShootMode.Idle) return "찍고 있지 않습니다.";
             _stopRequested = true;
+            _wake?.Cancel();
             _note = new StatusLine("지금 사진까지 찍고 멈춥니다", Tone.Busy);
             _noteUntil = DateTimeOffset.MaxValue;
             Changed();
@@ -250,6 +255,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             if (_ask is null) return "지금은 묻고 있는 것이 없습니다.";
             if (choice is not ("shoot" or "wait")) return "알 수 없는 답입니다.";
             _answer = choice;
+            _wake?.Cancel();
             Changed();
         }
         return null;
@@ -280,10 +286,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             {
                 ct.ThrowIfCancellationRequested();
                 // 끝 조건
-                if (_stopRequested) { await EndAsync("user", ct); return; }
-                if (_good >= ctx.Plan.EstimatedFrames) { await EndAsync("done", ct); return; }
-                if (!ctx.IgnoreAltitude && devices.TargetAltitude(ctx) < MinAltitude) { await EndAsync("low", ct); return; }
-                if (ctx.Now() >= ctx.Plan.End) { await EndAsync("dawn", ct); return; }
+                if (EndReason(ctx) is { } endWhy) { await EndAsync(endWhy, ct); return; }
 
                 // 자오선 반전 (항상 자동, 한 번)
                 if (!_flipped && devices.HourAngleDeg(ctx) > FlipAfterDeg)
@@ -293,7 +296,8 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                     await using (await ctx.Mount.AcquireAsync(ct)) flip = await devices.FlipAsync(ctx, s => Set(() => _flipStep = s), ct);
                     if (!flip.Flipped)
                     {
-                        // 반전 자체가 안 됨: 자오선 너머로 계속 찍지 않는다 (CX-SHOOT-02)
+                        // 반전 자체가 안 됨: 자오선 너머로 계속 찍지 않는다 (CX-SHOOT-02). 적도의가 멈춘 것을 확인하지 못했으면 다음으로 못 감 (CX-NIGHT-02)
+                        Set(() => _mountStill = flip.MountStill);
                         Note("자오선 반전이 되지 않았어요 · 적도의를 확인해 주세요. 촬영을 멈췄어요", Tone.Fail, 600);
                         await EndAsync("flip", ct);
                         return;
@@ -316,6 +320,14 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                     var points = new List<object>();
                     Set(() => { _mode = ShootMode.Focus; _focusPoints = []; _note = new StatusLine(why, Tone.Warn); _noteUntil = DateTimeOffset.MaxValue; });
                     var r = await devices.RefocusAsync((p, h) => { points.Add(new { pos = p, hfr = h }); Set(() => _focusPoints = [.. points]); }, ct);
+                    if (r.StopUnconfirmed)
+                    {
+                        // 자동초점이 멈췄는지 모르면 다음 사진을 찍지 않는다 — 같은 카메라·포커서를 함께 쓰게 됨 (CX-NIGHT-06)
+                        Set(() => { _mode = ShootMode.Shoot; _focusPoints = null; });
+                        Note("자동초점이 멈췄는지 확인하지 못해 촬영을 멈췄어요 · N.I.N.A.를 확인해 주세요", Tone.Fail, 600);
+                        await EndAsync("focus", ct);
+                        return;
+                    }
                     _lastFocusTemp = temp;
                     _hfrRecent.Clear();
                     Set(() => { _mode = ShootMode.Shoot; _focusPoints = null; _note = null; if (r.Ok) _focusHfr = r.Hfr; });
@@ -381,7 +393,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 Record(ctx);
 
                 // 디더링 (좋은 사진 3장마다)
-                if (_hasGuider && !grade.Excluded && _good % DitherEvery == 0 && !_stopRequested)
+                if (_hasGuider && !grade.Excluded && _good % DitherEvery == 0 && !_stopRequested && EndReason(ctx) is null) // 다음 사진이 필요할 때만 (CX-NIGHT-03)
                 {
                     Set(() => _mode = ShootMode.Dither);
                     var settled = await devices.DitherAsync(ct);
@@ -405,6 +417,14 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     }
 
     private readonly List<double> _hfrRecent = [];
+
+    /// <summary>끝낼 이유: user(중단) · done(계획 장수) · low(고도 30° 아래) · dawn(계획 끝 시각). 아니면 null</summary>
+    private string? EndReason(PrepContext ctx) =>
+        _stopRequested ? "user"
+        : _good >= ctx.Plan.EstimatedFrames ? "done"
+        : !ctx.IgnoreAltitude && devices.TargetAltitude(ctx) < MinAltitude ? "low"
+        : ctx.Now() >= ctx.Plan.End ? "dawn"
+        : null;
 
     /// <summary>
     /// 이슬 여유·열선 상태를 화면에 (한 장마다). 열선은 Empire 자동이 맡으므로 AA는 이상할 때만 알린다(10분에 한 번):
@@ -437,7 +457,8 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
         var askAfter = mode.Simulate ? TimeSpan.FromSeconds(2) : UnstableAsk;
         while (true)
         {
-            if (_stopRequested) { Set(() => _ask = null); Resume(null); return true; } // 끝은 바깥 고리가
+            // 끝 조건(중단·계획 장수·고도·새벽)이나 반전 시각이 되면 기다림을 그만두고 바깥 고리가 처리 (CX-NIGHT-03)
+            if (_stopRequested || EndReason(ctx) is not null || !_flipped && devices.HourAngleDeg(ctx) > FlipAfterDeg) { Set(() => _ask = null); Resume(null); return true; }
             switch (TakeAnswer())
             {
                 case "shoot":
@@ -459,7 +480,15 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                 Resume(null);
                 return await HandleLossAsync(ctx, lost, ct);
             }
-            if (await devices.WaitSettledAsync(hold, hold + (mode.Simulate ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(30)), ct))
+            bool settled;
+            using (var wake = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                lock (_gate) _wake = wake;
+                try { settled = await devices.WaitSettledAsync(hold, hold + (mode.Simulate ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(30)), wake.Token); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { settled = false; } // 중단·답 — 위에서 다시 본다
+                finally { lock (_gate) _wake = null; }
+            }
+            if (settled)
             {
                 _ditherFails = 0;
                 Set(() => _ask = null);
@@ -746,7 +775,8 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _ended = reason;
             _guideStopped = stopped;
             // 끝 이유 알림(실패)이 있으면 그대로, 없으면 가이딩 정지 결과
-            if (!stopped) _note = new StatusLine("가이딩이 멈췄는지 확인하지 못했어요. PHD2를 확인한 뒤 \"장비 상태 다시 확인\"을 눌러 주세요", Tone.Fail);
+            if (!_mountStill) _note = new StatusLine("적도의가 멈췄는지 확인하지 못했어요. 적도의를 확인한 뒤 \"장비 상태 다시 확인\"을 눌러 주세요", Tone.Fail);
+            else if (!stopped) _note = new StatusLine("가이딩이 멈췄는지 확인하지 못했어요. PHD2를 확인한 뒤 \"장비 상태 다시 확인\"을 눌러 주세요", Tone.Fail);
             else if (_note is not { Tone: Tone.Fail }) _note = new StatusLine(_hasGuider ? "가이딩을 멈췄어요" : "촬영을 마쳤어요", Tone.Ok);
             _noteUntil = DateTimeOffset.MaxValue;
         });
@@ -764,9 +794,19 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     /// <summary>"장비 상태 다시 확인": 끝났는데 가이딩 정지를 확인하지 못했을 때 다시 멈추고 확인한다 (CX-SHOOT-01). 확인되면 null</summary>
     public async Task<string?> RecheckStopAsync()
     {
-        lock (_gate) if (_mode != ShootMode.Ended || _guideStopped) return null;
-        if (!await TryStopGuidingAsync(CancellationToken.None)) return "아직 가이딩이 멈췄는지 확인하지 못했습니다. PHD2를 확인해 주세요.";
-        Set(() => { _guideStopped = true; _note = new StatusLine("가이딩이 멈춘 것을 확인했어요", Tone.Ok); _noteUntil = DateTimeOffset.MaxValue; });
+        bool guide, mount;
+        lock (_gate) { if (_mode != ShootMode.Ended) return null; guide = _guideStopped; mount = _mountStill; }
+        if (guide && mount) return null;
+        if (!mount)
+        {
+            bool still;
+            try { still = await devices.ConfirmMountStillAsync(CancellationToken.None); }
+            catch (Exception e) { log.LogWarning(e, "적도의 정지 확인 실패"); still = false; }
+            if (!still) return "아직 적도의가 멈췄는지 확인하지 못했습니다. 적도의를 확인해 주세요.";
+            Set(() => _mountStill = true);
+        }
+        if (!guide && !await TryStopGuidingAsync(CancellationToken.None)) return "아직 가이딩이 멈췄는지 확인하지 못했습니다. PHD2를 확인해 주세요.";
+        Set(() => { _guideStopped = true; _note = new StatusLine("장비가 멈춘 것을 확인했어요", Tone.Ok); _noteUntil = DateTimeOffset.MaxValue; });
         return null;
     }
 
@@ -777,6 +817,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
         {
             if (_ctx is null || _mode == ShootMode.Idle) return null;
             if (_mode != ShootMode.Ended) return "아직 촬영 중입니다. \"촬영 중단\"으로 멈춘 뒤 진행해 주세요.";
+            if (!_mountStill) return "적도의가 멈췄는지 확인되지 않았습니다. 촬영 화면에서 \"장비 상태 다시 확인\"을 눌러 주세요.";
             if (!_guideStopped) return "가이딩이 멈췄는지 확인되지 않았습니다. 촬영 화면에서 \"장비 상태 다시 확인\"을 눌러 주세요.";
             return null;
         }

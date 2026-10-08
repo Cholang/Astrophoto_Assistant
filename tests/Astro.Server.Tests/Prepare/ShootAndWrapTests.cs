@@ -34,14 +34,15 @@ public class ShootAndWrapTests
 
     private sealed record Rig(ShootSession Session, SimFaults Faults, PrepContext Ctx);
 
-    private static Rig NewShoot(int frames)
+    /// <summary>exposure: 모의 대상은 한 장마다 노출만큼 서쪽으로 감 — 120초면 9장쯤에서 반전 시각이 됨</summary>
+    private static Rig NewShoot(int frames, int exposure = 120)
     {
         var sim = new SimOptions { Speed = 0 };
         var faults = new SimFaults();
         var session = new ShootSession(new SimulatedShootDevices(sim, faults), new PrepareMode(true), NullLogger<ShootSession>.Instance);
         var results = new PrepResults();
         results.Set(new FocusResult(false, 12340, 2.1, 12.4, DateTimeOffset.Now));
-        var ctx = Harness.TargetContext(results, new InMemoryPrepMemory(), Harness.Plan() with { EstimatedFrames = frames });
+        var ctx = Harness.TargetContext(results, new InMemoryPrepMemory(), Harness.Plan() with { EstimatedFrames = frames, ExposureSeconds = exposure });
         return new Rig(session, faults, ctx);
     }
 
@@ -366,6 +367,54 @@ public class ShootAndWrapTests
         Assert.Equal(3, v.Good); // 알림만 — 그 뒤 계속 찍어 계획 장수를 채움
     }
 
+    // ── Codex 리뷰 18절 (CX-NIGHT) ─────────
+
+    [Fact]
+    public async Task NIGHT03_마지막_장_뒤에는_디더링하지_않아_불안정_대기에_갇히지_않는다()
+    {
+        var r = NewShoot(9); // 3·6장 뒤 디더링 실패 2번, 9장 뒤에는 디더링 안 함
+        r.Faults.Arm("shoot.unstablelong");
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal("done", v.Ended);
+        Assert.Equal(9, v.Good);
+    }
+
+    [Fact]
+    public async Task NIGHT03_불안정_대기_중_계획_끝_시각이_되면_끝낸다()
+    {
+        var r = NewShoot(30);
+        var end = DateTimeOffset.Now.AddSeconds(4);
+        var ctx = Harness.TargetContext(r.Ctx.Results, new InMemoryPrepMemory(), Harness.Plan() with { EstimatedFrames = 30, End = end, ExposureSeconds = 30 });
+        r.Faults.Arm("shoot.unstablelong");
+        r.Session.Start(ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal("dawn", v.Ended);
+        Assert.Null(v.Ask);
+    }
+
+    [Fact]
+    public async Task NIGHT02_반전_실패_뒤_적도의_정지를_확인하기_전에는_다음으로_못_간다()
+    {
+        var sim = new SimOptions { Speed = 0 };
+        var faults = new SimFaults();
+        var dev = new SimulatedShootDevices(sim, faults);
+        var session = new ShootSession(dev, new PrepareMode(true), NullLogger<ShootSession>.Instance);
+        var results = new PrepResults();
+        results.Set(new FocusResult(false, 12340, 2.1, 12.4, DateTimeOffset.Now));
+        faults.Arm("shoot.flip");
+        faults.Arm("shoot.flipmoving");
+        session.Start(Harness.TargetContext(results, new InMemoryPrepMemory(), Harness.Plan() with { EstimatedFrames = 6 }));
+        var v = await UntilEnded(session);
+        Assert.Equal("flip", v.Ended);
+        Assert.False(v.MountStopped);
+        Assert.NotNull(session.BlocksNext());
+        Assert.NotNull(await session.RecheckStopAsync()); // 첫 확인은 아직 움직임
+        Assert.Null(await session.RecheckStopAsync());
+        Assert.True(session.View().MountStopped);
+        Assert.Null(session.BlocksNext());
+    }
+
     // ── 디더링 안정화 실패 (2026-10-06 시뮬레이터 확인 · 사용자 결정) ─────────
 
     [Fact]
@@ -384,7 +433,7 @@ public class ShootAndWrapTests
     [Fact]
     public async Task 가이딩_불안정이_오래가면_그대로_찍을지_묻고_답하면_이어서_찍는다()
     {
-        var r = NewShoot(12);
+        var r = NewShoot(12, exposure: 30); // 반전과 겹치지 않게
         r.Faults.Arm("shoot.unstablelong");
         Assert.NotNull(r.Session.Answer("shoot")); // 묻기 전에는 답을 받지 않는다
         r.Session.Start(r.Ctx);

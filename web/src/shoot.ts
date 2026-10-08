@@ -46,6 +46,8 @@ export interface ShootView {
   ask: string | null
   /** 이슬: 기온 − 이슬점(°C) · 열선 세기 0~1 · WandererEmpire 자동 제어 중 (모르면 null) */
   dew: { marginC: number | null; heaterPower: number | null; heaterAuto: boolean } | null
+  /** 반전 실패 뒤 적도의가 멈춘 것을 확인했는가 — false면 마무리·다른 대상으로 못 감 (CX-NIGHT-02) */
+  mountStopped: boolean
 }
 
 /** 촬영을 시작하고(찍는 중이면 이어서) 상태가 바뀔 때마다 onState. 끝내려면 돌려준 함수를 부른다 */

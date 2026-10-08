@@ -163,7 +163,8 @@ public sealed class NinaRig(NinaApiClient nina)
 
     /// <summary>
     /// 가장 최근에 저장된 사진 기록 (save=true로 찍은 것). 없으면 null.
-    /// File은 디스크의 전체 경로 — image-history의 Filename은 이름만이라(2026-10-06 시뮬레이터 확인) N.I.N.A. 이미지 폴더에서 찾는다. 못 찾으면 이름만
+    /// File은 디스크의 전체 경로 — image-history의 Filename은 이름만이라(2026-10-06 시뮬레이터 확인) N.I.N.A. 이미지 폴더에서 찾는다.
+    /// 확실하지 않으면(못 찾음·여럿) 빈 문자열 — 이름만 돌려주지 않는다(옮기면 안 되는 파일을 옮기지 않게, CX-NIGHT-05)
     /// </summary>
     public async Task<(DateTimeOffset Date, string File, double Hfr, int Stars)?> LastSavedAsync(CancellationToken ct)
     {
@@ -172,7 +173,7 @@ public sealed class NinaRig(NinaApiClient nina)
         var e = list[list.GetArrayLength() - 1];
         var date = e.TryGetProperty("Date", out var d) && DateTimeOffset.TryParse(d.GetString(), Inv, DateTimeStyles.AssumeLocal, out var dt) ? dt : DateTimeOffset.MinValue;
         var name = e.TryGetProperty("Filename", out var f) ? f.GetString() ?? "" : "";
-        return (date, name.Length > 0 ? await FindSavedFileAsync(name, ct) ?? name : name, Num(e, "HFR"), (int)Num(e, "Stars"));
+        return (date, name.Length > 0 ? await FindSavedFileAsync(name, date, ct) ?? "" : "", Num(e, "HFR"), (int)Num(e, "Stars"));
     }
 
     /// <summary>N.I.N.A. 프로필의 이미지 폴더(ImageFileSettings.FilePath). 모르면 null</summary>
@@ -184,19 +185,24 @@ public sealed class NinaRig(NinaApiClient nina)
     }
 
     /// <summary>
-    /// 저장된 사진의 전체 경로: 이미지 폴더 아래(파일 이름 규칙 $$DATEMINUS12$$\$$IMAGETYPE$$\… 등) 최근에 바뀐 하위 폴더 3개와 폴더 바로 아래에서 찾는다.
-    /// 같은 이름이 여럿이면 가장 최근 것
+    /// 저장된 사진의 전체 경로: 이미지 폴더 아래 전체에서 이름으로 찾고, 저장 시각(savedAt) 앞뒤 2분 안에 쓰인 파일이 **하나뿐일 때만** 돌려준다.
+    /// 폴더 구조(날짜·대상·종류 폴더 등)에 기대지 않는다. 못 찾거나 여럿이면 null (CX-NIGHT-05)
     /// </summary>
-    public async Task<string?> FindSavedFileAsync(string name, CancellationToken ct)
+    public async Task<string?> FindSavedFileAsync(string name, DateTimeOffset savedAt, CancellationToken ct)
     {
-        if (Path.IsPathRooted(name)) return File.Exists(name) ? name : null;
         if (await ImageFolderAsync(ct) is not { } root || !Directory.Exists(root)) return null;
+        return FindSavedFile(root, name, savedAt);
+    }
+
+    internal static string? FindSavedFile(string root, string name, DateTimeOffset savedAt)
+    {
         try
         {
-            var places = new DirectoryInfo(root).EnumerateDirectories().OrderByDescending(x => x.LastWriteTimeUtc).Take(3)
-                .SelectMany(x => x.EnumerateFiles(name, SearchOption.AllDirectories))
-                .Concat(new DirectoryInfo(root).EnumerateFiles(name, SearchOption.TopDirectoryOnly));
-            return places.OrderByDescending(x => x.LastWriteTimeUtc).FirstOrDefault()?.FullName;
+            var window = TimeSpan.FromMinutes(2);
+            var hits = new DirectoryInfo(root).EnumerateFiles(name, new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true })
+                .Where(x => (new DateTimeOffset(x.LastWriteTimeUtc) - savedAt).Duration() <= window)
+                .Take(2).ToList();
+            return hits.Count == 1 ? hits[0].FullName : null;
         }
         catch (Exception x) when (x is IOException or UnauthorizedAccessException) { return null; }
     }
@@ -286,23 +292,34 @@ public sealed class NinaRig(NinaApiClient nina)
     /// 자오선 서쪽을 보는 정상 자세는 pierEast(ASCOM 규약 — 시뮬레이터도 자오선을 지난 대상으로 가면 pierEast)라 이미 그쪽이면 반전할 것이 없음.
     /// 방향을 모르는 적도의(pierUnknown)는 움직이기 시작한 것(Slewing)을 본 뒤 멈춤으로 확인
     /// </summary>
-    public async Task<bool> FlipAsync(CancellationToken ct)
+    /// <summary>반전 결과: Flipped = 반전 확인(정상 자세 + 멈춤), Still = 적도의가 멈춘 것을 확인 (실패여도 Still이면 다음 작업을 해도 됨)</summary>
+    public sealed record FlipResult(bool Flipped, bool Still);
+
+    public async Task<FlipResult> FlipAsync(CancellationToken ct)
     {
-        if (await MountAsync(ct) is not { } before) return false;
-        if (before.Pier == "pierEast") return true; // 이미 반전된 쪽
+        if (await MountAsync(ct) is not { } before) return new FlipResult(false, false);
+        // 이미 반전된 쪽: 그래도 멈춰 있는지 확인한 뒤 성공 (CX-NIGHT-01)
+        if (before.Pier == "pierEast") { var s = await WaitStillAsync(TimeSpan.FromMinutes(1), ct); return s ? new FlipResult(true, true) : await StopAfterFailAsync(ct); }
         var r = await nina.RequestAsync("equipment/mount/flip", Long, ct);
-        if (!r.Ok) return false;
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
-        var moved = false;
-        while (!moved && DateTime.UtcNow < deadline)
+        if (!r.Ok) return await StopAfterFailAsync(ct);
+        // 방향이 pierEast로 바뀌어야 반전(pierUnknown은 아직 모름 — 다시 조회). 60초 안에 바뀌지 않아도 움직이는 중이면
+        // 끝날 때까지 기다린다 (방향을 반전이 끝나야 바꾸는 장비 — CX-NIGHT-02). 방향을 아예 모르는 적도의는 움직였다가 멈춤으로
+        var start = DateTime.UtcNow;
+        var slewed = false;
+        while (true)
         {
             await Task.Delay(1000, ct);
-            if (await MountAsync(ct) is not { } m) return false;
-            moved = before.Pier == "pierUnknown" ? m.Slewing : m.Pier != before.Pier;
+            if (await MountAsync(ct) is not { } m) return await StopAfterFailAsync(ct);
+            slewed |= m.Slewing;
+            if (m.Pier == "pierEast" || before.Pier == "pierUnknown" && slewed && !m.Slewing) break;
+            var waited = DateTime.UtcNow - start;
+            if (waited > TimeSpan.FromSeconds(60) && !m.Slewing || waited > TimeSpan.FromMinutes(4)) return await StopAfterFailAsync(ct);
         }
-        if (!moved) return false; // 60초 안에 방향이 바뀌지 않음
-        return await WaitStillAsync(TimeSpan.FromMinutes(4), ct);
+        return await WaitStillAsync(TimeSpan.FromMinutes(4), ct) ? new FlipResult(true, true) : await StopAfterFailAsync(ct);
     }
+
+    /// <summary>반전 실패: 이동을 멈추고 멈춘 것을 확인 (CX-NIGHT-02 — 실패를 정지로 보지 않는다)</summary>
+    private async Task<FlipResult> StopAfterFailAsync(CancellationToken ct) => new(false, await StopSlewAndConfirmAsync(ct));
 
     /// <summary>장비 연결 (가이더를 다시 잡을 때 등)</summary>
     public async Task<bool> ConnectAsync(string device, CancellationToken ct) =>

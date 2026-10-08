@@ -48,7 +48,9 @@ public class RealDeviceTests(ITestOutputHelper output)
     {
         if (!Enabled) return;
         var w = new AscomWeather(NullLogger<AscomWeather>.Instance);
-        var r = await w.ReadAsync(CancellationToken.None);
+        // 기다리지 않는 조회 (CX-NIGHT-04): 처음엔 null, 뒤에서 읽힌 뒤 값
+        AscomWeather.Reading? r = null;
+        for (var i = 0; i < 40 && r is null; i++) { r = await w.ReadAsync(CancellationToken.None); if (r is null) await Task.Delay(250); }
         output.WriteLine($"{r} · 여유 {r?.MarginC:F1}°C");
         Assert.NotNull(r);
         Assert.InRange(r.HumidityPercent, 1, 100);

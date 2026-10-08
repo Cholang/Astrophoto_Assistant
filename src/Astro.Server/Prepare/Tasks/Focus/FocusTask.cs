@@ -21,7 +21,8 @@ public interface IFocusDevices
 
 /// <summary>포커서 이동 결과. Stalled = 제조사 멈춤 감지(끝에 닿음)</summary>
 public sealed record FocuserMove(bool Ok, bool Stalled = false, string? Problem = null);
-public sealed record AutofocusRun(bool Ok, bool StarsFound, int BestPosition, double Hfr, bool CurveGood, bool Stalled = false, string? Problem = null);
+/// <summary>StopUnconfirmed = 자동초점을 취소했지만 멈춘 것(카메라·포커서 쉼)을 확인하지 못함 — 이 상태로 다시 찍거나 자동초점을 하지 않는다 (CX-NIGHT-06)</summary>
+public sealed record AutofocusRun(bool Ok, bool StarsFound, int BestPosition, double Hfr, bool CurveGood, bool Stalled = false, string? Problem = null, bool StopUnconfirmed = false);
 public sealed record FocusEndState(bool Moving, int Position, bool Error);
 
 /// <summary>
@@ -66,6 +67,13 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
                 run.Live("focus-curve", data: new { points = points.ToArray(), last = ctx.Memory.LastFocus?.Position });
                 run.Status($"자동초점 중입니다 · {points.Count} / 9 지점 · AA 추천값");
             }, ct);
+            // 자동초점이 멈췄는지 모르면 다시 자동초점·사진을 하지 않고 멈춤 확인부터 (CX-NIGHT-06)
+            while (af.StopUnconfirmed)
+            {
+                run.Status($"{af.Problem}. N.I.N.A.에서 자동초점이 멈췄는지 확인한 뒤 눌러 주세요", Tone.Fail);
+                await run.AskAsync([new("recheck-stop", "장비 상태 다시 확인", true)], ct);
+                if (await devices.StopAsync(ct)) af = af with { StopUnconfirmed = false };
+            }
             if (af.Stalled) { await FocuserErrorAsync(run, true, af.Problem, ct); continue; }
             if (!af.StarsFound)
             {

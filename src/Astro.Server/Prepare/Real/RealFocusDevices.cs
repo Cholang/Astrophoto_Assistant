@@ -41,8 +41,10 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config) : IFocu
             var progress = await rig.LastEventAtAsync("AUTOFOCUS", since, ct) ?? since;
             if (DateTimeOffset.Now - progress > Stall)
             {
-                await rig.CancelAutofocusAsync(ct);
-                return new AutofocusRun(false, true, 0, 0, false, Problem: $"자동초점이 {Stall.TotalMinutes:0}분 넘게 진행되지 않아 멈췄습니다");
+                var stopped = await CancelAndConfirmAsync(ct);
+                return new AutofocusRun(false, true, 0, 0, false,
+                    Problem: stopped ? $"자동초점이 {Stall.TotalMinutes:0}분 넘게 진행되지 않아 멈췄습니다" : "자동초점이 진행되지 않아 취소했지만 멈췄는지 확인하지 못했습니다",
+                    StopUnconfirmed: !stopped);
             }
             var events = await rig.EventsSinceAsync(since, ct);
             if (events.Contains("ERROR-AF"))
@@ -60,8 +62,24 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config) : IFocu
             return new AutofocusRun(true, points.Count > 0, (int)NinaRig.Num(best, "Position"), NinaRig.Num(best, "Value"),
                 CurveGood: !double.IsFinite(r2) || r2 >= 0.7, Problem: double.IsFinite(r2) && r2 < 0.7 ? $"곡선이 고르지 않습니다 (R² {r2:F2})" : null);
         }
+        var done = await CancelAndConfirmAsync(ct);
+        return new AutofocusRun(false, true, 0, 0, false, Problem: done ? "자동초점이 끝나지 않았습니다" : "자동초점이 끝나지 않아 취소했지만 멈췄는지 확인하지 못했습니다", StopUnconfirmed: !done);
+    }
+
+    /// <summary>
+    /// 자동초점 취소 + 멈춤 확인 (CX-NIGHT-06): 취소 응답만 믿지 않고, 카메라가 노출 중이 아니고 포커서가 멈춘 상태가 두 번 이어지면 멈춘 것으로 본다(최대 30초)
+    /// </summary>
+    private async Task<bool> CancelAndConfirmAsync(CancellationToken ct)
+    {
         await rig.CancelAutofocusAsync(ct);
-        return new AutofocusRun(false, true, 0, 0, false, Problem: "자동초점이 끝나지 않았습니다");
+        var quiet = 0;
+        for (var i = 0; i < 15 && quiet < 2; i++)
+        {
+            await Task.Delay(2000, ct);
+            var idle = !await rig.CameraExposingAsync(ct) && await rig.FocuserAsync(ct) is { Moving: false };
+            quiet = idle ? quiet + 1 : 0;
+        }
+        return quiet >= 2;
     }
 
     /// <summary>범위 안에서 넓은 간격으로 사진을 찍어 별이 보이는 위치를 찾는다 (2초 노출, 별 5개 이상)</summary>

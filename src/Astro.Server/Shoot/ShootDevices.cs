@@ -37,6 +37,8 @@ public interface IShootDevices
     Task<bool> ResumeGuidingAsync(CancellationToken ct);
     /// <summary>가이딩을 멈추고 멈춘 것을 확인한다 — PHD2가 Stopped·Looping일 때만 true (LostLock·조회 실패는 멈춤이 아님, CX-SHOOT-01)</summary>
     Task<bool> StopGuidingAsync(CancellationToken ct);
+    /// <summary>적도의 이동을 멈추고 멈춘 것을 확인 (반전 실패 뒤 "장비 상태 다시 확인")</summary>
+    Task<bool> ConfirmMountStillAsync(CancellationToken ct);
     /// <summary>디더링하고 가이딩이 안정될 때까지. PHD2 안정화가 시간 초과면 최대 30초 더 지켜보고(기준 안에 10초 머물면 성공), 그래도 안 되면 false</summary>
     Task<bool> DitherAsync(CancellationToken ct);
     /// <summary>가이드 오차가 기준(1.5픽셀) 안에 hold 동안 계속 머물면 true. 별을 잃은 프레임은 처음부터 다시. timeout까지 안 되면 false</summary>
@@ -61,5 +63,7 @@ public sealed record DewStatus(double? MarginC, double? HeaterPower, bool Heater
 
 public sealed record FrameShot(bool Ok, string? Problem, string? File, FrameStats? Stats);
 /// <summary>자오선 반전 결과: 반전(필수) · 다시 가운데 · 가이딩 재개</summary>
-public sealed record FlipOutcome(bool Flipped, bool Centered, bool Guiding);
-public sealed record RefocusOutcome(bool Ok, int Position, double Hfr, string? Problem = null);
+/// <summary>MountStill = 적도의가 멈춘 것을 확인 (반전 실패 뒤 확인하지 못하면 다른 대상·마무리로 못 감 — CX-NIGHT-02)</summary>
+public sealed record FlipOutcome(bool Flipped, bool Centered, bool Guiding, bool MountStill = true);
+/// <summary>StopUnconfirmed = 자동초점이 멈췄는지 확인하지 못함 → 촬영을 이어 가지 않는다 (CX-NIGHT-06)</summary>
+public sealed record RefocusOutcome(bool Ok, int Position, double Hfr, string? Problem = null, bool StopUnconfirmed = false);
