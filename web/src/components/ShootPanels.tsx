@@ -31,6 +31,15 @@ function guideWord(rms: number, pixel: number) {
   return rms <= pixel ? '충분해요' : rms <= pixel * 1.5 ? '지켜볼게요' : '아쉬워요'
 }
 
+/** 이슬 여유와 열선 (열선은 WandererEmpire 자동이 맡음): "이슬 여유 16°C · 열선 0% (자동)" */
+function dewText(d: ShootView['dew']) {
+  if (!d) return null
+  const parts: string[] = []
+  if (d.marginC !== null) parts.push(`이슬 여유 ${d.marginC.toFixed(0)}°C`)
+  if (d.heaterPower !== null) parts.push(`열선 ${Math.round(d.heaterPower * 100)}%${d.heaterAuto ? ' (자동)' : ''}`)
+  return parts.length ? parts.join(' · ') : null
+}
+
 export function ShootGauges({ v }: { v: ShootView }) {
   const g = v.guide.at(-1)
   const h = v.hfr.at(-1)
@@ -44,6 +53,7 @@ export function ShootGauges({ v }: { v: ShootView }) {
           ? `촬영 멈춤 · ${Math.floor(v.pausedSeconds / 60)}분 ${v.pausedSeconds % 60}초째`
           : '촬영 멈춤'
   const flip = v.flipAt && v.flipInMinutes ? `자오선 반전 ${clock(v.flipAt)} (${v.flipInMinutes}분 뒤, 자동)` : null
+  const dew = dewText(v.dew)
   return (
     <div className={styles.gauges}>
       <div className={styles.gauge}>
@@ -63,6 +73,7 @@ export function ShootGauges({ v }: { v: ShootView }) {
           누적 {hm(v.good * v.exposureSeconds)}
           {v.endAt ? ` · 끝 예상 ${clock(v.endAt)}` : ''}
           {flip ? ` · ${flip}` : ''}
+          {dew ? ` · ${dew}` : ''}
         </span>
       </div>
       <div className={styles.gauge}>

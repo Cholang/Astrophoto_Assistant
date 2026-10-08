@@ -44,6 +44,8 @@ export interface ShootView {
   guideStopped: boolean
   /** 촬영 중 질문: unstable = 가이딩 불안정이 15분 넘게 이어짐 → 그대로 찍을까요? (없으면 null) */
   ask: string | null
+  /** 이슬: 기온 − 이슬점(°C) · 열선 세기 0~1 · WandererEmpire 자동 제어 중 (모르면 null) */
+  dew: { marginC: number | null; heaterPower: number | null; heaterAuto: boolean } | null
 }
 
 /** 촬영을 시작하고(찍는 중이면 이어서) 상태가 바뀔 때마다 onState. 끝내려면 돌려준 함수를 부른다 */

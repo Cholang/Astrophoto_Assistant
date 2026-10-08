@@ -104,6 +104,9 @@ public sealed class SimulatedShootDevices(SimOptions sim, SimFaults faults) : IS
     public async Task<bool> RecenterAsync(PrepContext ctx, CancellationToken ct) { await sim.Delay(1500, ct); Calls.Add("recenter"); _lostChecks = 0; return true; }
     public async Task<bool> AbortExposureAsync(CancellationToken ct) { await sim.Delay(100, ct); return !_abortScenario; }
     public Task<bool> DewHeaterBoostAsync(CancellationToken ct) => Task.FromResult(false);
+    // 모의: 평소 여유 16°C·열선 꺼짐(자동), 이슬 상황(shoot.dew)이면 여유 1.2°C·열선 최대
+    public Task<DewStatus?> DewAsync(CancellationToken ct) =>
+        Task.FromResult<DewStatus?>(_dewChecks > 0 ? new DewStatus(1.2, 1, true) : new DewStatus(16, 0, true));
     public async Task<bool> ResumeGuidingAsync(CancellationToken ct) { await sim.Delay(600, ct); Calls.Add("resume"); return !_mountStopped && !_disconnected; }
     public async Task<bool> StopGuidingAsync(CancellationToken ct) { await sim.Delay(200, ct); Calls.Add("stop"); return !faults.Take("stop.fail") && !faults.Take("shoot.stopfail"); }
     public Task<bool> MountTrackingAsync(CancellationToken ct) => Task.FromResult(!_mountStopped && !faults.Take("shoot.mount"));

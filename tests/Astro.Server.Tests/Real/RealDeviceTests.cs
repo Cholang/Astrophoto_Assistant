@@ -56,6 +56,17 @@ public class RealDeviceTests(ITestOutputHelper output)
         Assert.Same(r, await w.ReadAsync(CancellationToken.None)); // 1분 안에는 다시 읽지 않음
     }
 
+    /// <summary>WandererBox 열선(DC3 PWM) 세기·자동 여부 — N.I.N.A. 스위치를 연결해 둔 상태에서 (읽기만, 2026-10-08)</summary>
+    [Fact]
+    public async Task 실장비_열선_상태()
+    {
+        if (!Enabled) return;
+        var h = await Rig().DewHeaterAsync(CancellationToken.None);
+        output.WriteLine($"{h}");
+        Assert.NotNull(h);
+        Assert.InRange(h.Value.Power, 0, 1);
+    }
+
     [Fact]
     public async Task 실장비_포커서_300걸음_갔다_돌아오기()
     {

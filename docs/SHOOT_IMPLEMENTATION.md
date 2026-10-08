@@ -74,7 +74,7 @@
 - PHD2 이벤트: GuideStep(SNR · StarMass · HFD · 오차), StarLost(SNR · StarMass), Alert, 앱 상태(Guiding · LostLock · Looping), 연결 상태
 - N.I.N.A.: 적도의 추적·한계(at park/limit), 장비 연결, 이벤트(`*-DISCONNECTED`)
 - 주 카메라 사진: 별 수·배경(등급 계산에서 이미 잼)
-- 온습도: WandererBox의 기온·습도 → 이슬점. **2026-10-08 실기**: `AscomWeather`가 ASCOM `WandererBoxEnvironment.ObservingConditions`를 직접 읽음(N.I.N.A.가 같은 상자 스위치를 잡고 있어도 됨, 이슬점은 드라이버가 계산). N.I.N.A. 날씨 장비는 사용자 프로필에 없어 쓰지 않음. 렌즈 프로브 온도는 이 드라이버에 없음(허브 상태 줄에만). 열선(DC3)은 Empire 자동 모드(이슬점 온도 차이, 사용자 5°C로 설정)에 맡김 — 자동 중에는 ASCOM·N.I.N.A.에서 DC3 읽기 전용(값 0~255는 읽힘, 설정을 15→5°C로 바꾸자 255→0). 설정값은 상자에 저장되는 듯(파일·레지스트리 없음). 다음: 이슬 여유·DC3 세기·자동 여부를 화면에 보여 주고 이상하면 알리기
+- 온습도: WandererBox의 기온·습도 → 이슬점. **2026-10-08 실기**: `AscomWeather`가 ASCOM `WandererBoxEnvironment.ObservingConditions`를 직접 읽음(N.I.N.A.가 같은 상자 스위치를 잡고 있어도 됨, 이슬점은 드라이버가 계산). N.I.N.A. 날씨 장비는 사용자 프로필에 없어 쓰지 않음. 렌즈 프로브 온도는 이 드라이버에 없음(허브 상태 줄에만). 열선(DC3)은 Empire 자동 모드(이슬점 온도 차이, 사용자 5°C로 설정)에 맡김 — 자동 중에는 ASCOM·N.I.N.A.에서 DC3 읽기 전용(값 0~255는 읽힘, 설정을 15→5°C로 바꾸자 255→0). 설정값은 상자에 저장되는 듯(파일·레지스트리 없음). Empire 화면 확인(사용자): DC3 ON/OFF는 표시 — 자동이 데워야 하면 저절로 ON·255(기준 20°C로 올려 확인, 켜고 끄는 방식으로 보임), Empire 자동은 렌즈 프로브 온도 − 이슬점으로 판단(기준 19°C일 때 프로브 28.8°C·이슬점 9.9°C → 차이 18.9°C에서 0↔255 반복, 5°C로 바꾸자 0 유지), 자동 모드에서 DC3 슬라이더+OK는 Empire가 막음("Manual control is not available under Temperature Difference Mode…"). 다음: 이슬 여유·DC3 세기·자동 여부를 화면에 보여 주고 이상하면 알리기
 
 **원인 가르기 → 대응**
 

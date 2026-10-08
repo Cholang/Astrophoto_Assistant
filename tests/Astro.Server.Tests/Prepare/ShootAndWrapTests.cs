@@ -343,6 +343,17 @@ public class ShootAndWrapTests
         await flow.Target.Until(v => v.Current?.TaskId == "slew" && v.Handoff is null, "이동부터");
     }
 
+    [Fact]
+    public async Task 이슬_여유와_열선_상태가_화면에_있다()
+    {
+        var r = NewShoot(2);
+        r.Session.Start(r.Ctx);
+        var v = await UntilEnded(r.Session);
+        Assert.Equal(16, v.Dew!.MarginC);
+        Assert.Equal(0, v.Dew.HeaterPower);
+        Assert.True(v.Dew.HeaterAuto);
+    }
+
     // ── 디더링 안정화 실패 (2026-10-06 시뮬레이터 확인 · 사용자 결정) ─────────
 
     [Fact]

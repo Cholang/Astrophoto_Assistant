@@ -20,7 +20,8 @@ public sealed record ShootView(
     int FlipStep, DateTimeOffset? FlipAt, int? FlipInMinutes, IReadOnlyList<double> Guide, IReadOnlyList<double> Hfr, double FocusHfr,
     double PixelScale, string? LastGrade, IReadOnlyDictionary<string, int> Tally, IReadOnlyDictionary<string, string> Criteria,
     StatusLine? Note, IReadOnlyList<object>? FocusPoints, string? Ended, DateTimeOffset? EndAt, string? PhotoUrl, DateTimeOffset? PhotoAt,
-    int Version, bool Simulated, string? Pause = null, int PausedSeconds = 0, int GuideExposureMs = 0, bool GuideStopped = true, string? Ask = null);
+    int Version, bool Simulated, string? Pause = null, int PausedSeconds = 0, int GuideExposureMs = 0, bool GuideStopped = true, string? Ask = null,
+    DewStatus? Dew = null);
 
 /// <summary>Paused = 가이드 별을 잃어 멈춤 (원인은 ShootView.Pause: light · cloud · jump · guider · unstable)</summary>
 public enum ShootMode { Idle, Shoot, Dither, Flip, Focus, Paused, Finishing, Ended }
@@ -79,7 +80,8 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     private int _ditherFails;
     private string? _ask, _answer;
     private bool _unstableAccepted;
-    private DateTimeOffset _lowHfdWarned;
+    private DateTimeOffset _lowHfdWarned, _dewWarned;
+    private DewStatus? _dew;
     public const int UnstableAfter = 3;
     public static readonly TimeSpan UnstableHold = TimeSpan.FromMinutes(1), UnstableAsk = TimeSpan.FromMinutes(15);
 
@@ -111,7 +113,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             flipAt is { } fa && c is not null ? Math.Max(1, (int)Math.Ceiling((fa - c.Now()).TotalMinutes)) : null, _guide.ToArray(), _hfr.ToArray(), _focusHfr,
             c?.MainPixelScaleArcsec ?? 0, _lastGrade, new Dictionary<string, int>(_tally), ShotGrader.Criteria, _note, _focusPoints?.ToArray(),
             _ended, endAt, devices.PhotoUrl, _photoAt, _version, mode.Simulate,
-            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs, _guideStopped, _ask);
+            _pause, _pause is null ? 0 : (int)(DateTimeOffset.Now - _pausedSince).TotalSeconds, devices.GuideExposureMs, _guideStopped, _ask, _dew);
     }
 
     public async IAsyncEnumerable<ShootView> WatchAsync([EnumeratorCancellation] CancellationToken ct)
@@ -185,7 +187,7 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
             _pause = null; _pausedMinutes.Clear(); _snrSamples.Clear(); _hfdSamples.Clear(); _snrBaseline = _hfdBaseline = 0;
             _mainStarsRatio = _mainMeanRatio = null; _jumps.Clear(); _lastDegrade.Clear(); _windWarned = false;
             _guideStopped = true; _hasGuider = ctx.HasGuider; _seenSteps = 0; _notMoved.Clear();
-            _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _lowHfdWarned = DateTimeOffset.MinValue;
+            _ditherFails = 0; _ask = _answer = null; _unstableAccepted = false; _lowHfdWarned = _dewWarned = DateTimeOffset.MinValue; _dew = null;
             _focusHfr = ctx.Results.Get<FocusCheckResult>() is { Refocused: true, Hfr: { } rh } ? rh : ctx.Results.Get<FocusResult>()?.Hfr ?? 2;
             _mode = ShootMode.Shoot;
             Changed();
@@ -297,6 +299,8 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
                     // 가이딩 재개 실패는 아래 가이드 별 확인이 원인별로 처리
                 }
 
+                await CheckDewAsync(ct);
+
                 // 초점 다시 맞추기: 기온 2°C 이상, 또는 최근 좋은 사진의 별 크기가 초점 때보다 30% 넘게 큼
                 var temp = await devices.TemperatureAsync(ct);
                 var recent = _hfrRecent.Count >= 3 ? _hfrRecent.TakeLast(3).Average() : (double?)null;
@@ -390,6 +394,25 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
     }
 
     private readonly List<double> _hfrRecent = [];
+
+    /// <summary>
+    /// 이슬 여유·열선 상태를 화면에 (한 장마다). 열선은 Empire 자동이 맡으므로 AA는 이상할 때만 알린다(10분에 한 번):
+    /// 여유가 2°C 아래인데 열선이 꺼져 있음 · 여유가 3°C 아래인데 자동 제어가 아님
+    /// </summary>
+    private async Task CheckDewAsync(CancellationToken ct)
+    {
+        DewStatus? dew;
+        try { dew = await devices.DewAsync(ct); }
+        catch (Exception e) when (e is not OperationCanceledException) { log.LogWarning(e, "이슬 상태를 읽지 못함"); return; }
+        Set(() => _dew = dew);
+        if (dew is not { MarginC: { } m } || DateTimeOffset.Now - _dewWarned < TimeSpan.FromMinutes(10)) return;
+        string? warn = null;
+        if (m < GuideWatch.DewMarginC && dew.HeaterPower is 0) warn = $"이슬 여유가 {m:F1}°C인데 열선이 꺼져 있어요 · 열선 연결과 Empire 설정을 확인해 주세요";
+        else if (m < 3 && dew.HeaterPower is not null && !dew.HeaterAuto) warn = $"이슬 여유가 {m:F1}°C예요 · 열선이 Empire 자동 모드가 아니에요";
+        if (warn is null) return;
+        _dewWarned = DateTimeOffset.Now;
+        Note(warn, Tone.Warn, 20);
+    }
 
     /// <summary>
     /// 디더링 안정화가 연속으로 실패: 촬영을 멈추고 가이드 오차가 기준 안에 1분 머물면 자동으로 이어서 찍는다.

@@ -338,6 +338,31 @@ public sealed class NinaRig(NinaApiClient nina)
         return double.IsFinite(total) && double.IsFinite(scale) && Num(rms, "DataPoints") > 0 ? total * scale : null;
     }
 
+    /// <summary>
+    /// 이슬 열선 (WandererBox DC3 PWM — N.I.N.A. 스위치). Power = 0~1, Auto = WandererEmpire 자동 제어 중
+    /// (2026-10-08 실기: 자동이면 읽기 전용 스위치 "PWM DC3: DC3", 설명 "Automatic control in progress…", 값 0~255 — 기준 15→5°C로 바꾸자 255→0).
+    /// 스위치가 연결되지 않았거나 PWM 열선이 없으면 null
+    /// </summary>
+    public async Task<(double Power, bool Auto)?> DewHeaterAsync(CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("equipment/switch/info", Short, ct);
+        if (r.Response is not { ValueKind: JsonValueKind.Object } s || !Bool(s, "Connected")) return null;
+        foreach (var group in new[] { "ReadonlySwitches", "WritableSwitches" })
+        {
+            if (!s.TryGetProperty(group, out var list) || list.ValueKind != JsonValueKind.Array) continue;
+            foreach (var w in list.EnumerateArray())
+            {
+                var name = w.TryGetProperty("Name", out var n) ? n.GetString() ?? "" : "";
+                if (!name.Contains("PWM", StringComparison.OrdinalIgnoreCase)) continue;
+                var desc = w.TryGetProperty("Description", out var d) ? d.GetString() ?? "" : "";
+                var max = Num(w, "Maximum");
+                var value = Num(w, "Value");
+                return (Math.Clamp(value / (max > 1 ? max : 255), 0, 1), desc.Contains("Automatic control", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+        return null;
+    }
+
     public async Task<bool> GuiderConnectedAsync(CancellationToken ct) =>
         (await nina.RequestAsync("equipment/guider/info", Short, ct)).Response is { ValueKind: JsonValueKind.Object } g && Bool(g, "Connected");
 

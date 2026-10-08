@@ -41,6 +41,13 @@ public sealed class RealShootDevices(NinaRig rig, Phd2Client phd2, LiveImages li
 
     public Task<double?> GuideRmsAsync(CancellationToken ct) => rig.GuideRmsArcsecAsync(ct);
 
+    public async Task<DewStatus?> DewAsync(CancellationToken ct)
+    {
+        var air = await weather.ReadAsync(ct);
+        var heater = await rig.DewHeaterAsync(ct);
+        return air is null && heater is null ? null : new DewStatus(air?.MarginC, heater?.Power, heater?.Auto ?? false);
+    }
+
     // ── 가이드 별 지켜보기: PHD2 이벤트(GuideStep·StarLost)를 계속 받아 최근 SNR·HFD·튐을 모은다 ─────────
 
     private readonly Lock _gate = new();

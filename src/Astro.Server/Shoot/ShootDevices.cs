@@ -30,6 +30,8 @@ public interface IShootDevices
     Task<bool> RecenterAsync(PrepContext ctx, CancellationToken ct);
     /// <summary>지금 노출 멈추기 (그 장은 버림)</summary>
     Task<bool> AbortExposureAsync(CancellationToken ct);
+    /// <summary>이슬: 기온 − 이슬점과 열선 상태 (열선은 WandererEmpire 자동에 맡김 — 사용자 결정 2026-10-08). 모르면 null</summary>
+    Task<DewStatus?> DewAsync(CancellationToken ct);
     /// <summary>이슬 열선 올리기. 열선을 다룰 수 없으면 false (알림만)</summary>
     Task<bool> DewHeaterBoostAsync(CancellationToken ct);
     Task<bool> ResumeGuidingAsync(CancellationToken ct);
@@ -53,6 +55,9 @@ public interface IShootDevices
     /// <summary>방금 찍은 사진 주소 (실장비). 모의면 null — 화면이 그림으로 흉내</summary>
     string? PhotoUrl { get; }
 }
+
+/// <summary>MarginC = 기온 − 이슬점(모르면 null), HeaterPower = 열선 세기 0~1(모르면 null), HeaterAuto = Empire 자동 제어 중</summary>
+public sealed record DewStatus(double? MarginC, double? HeaterPower, bool HeaterAuto);
 
 public sealed record FrameShot(bool Ok, string? Problem, string? File, FrameStats? Stats);
 /// <summary>자오선 반전 결과: 반전(필수) · 다시 가운데 · 가이딩 재개</summary>
