@@ -3,6 +3,7 @@ import { useFrame } from './frame'
 import { ScreenReady } from './screenReady'
 import StatusBar, { type DeviceState } from './components/StatusBar'
 import NinaLostCard, { type NinaState } from './components/NinaLostCard'
+import NinaNoticeCard from './components/NinaNoticeCard'
 import StepRail, { RailProvider, type RailExtra, type Stage } from './components/StepRail'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
@@ -45,6 +46,19 @@ const STAGE_OF: Partial<Record<Phase, Stage>> = {
   wrap: '마무리',
   summary: '마무리',
 }
+
+/**
+ * N.I.N.A. 오류 알림 중 그 화면이 스스로 보여 주는 종류 (겹쳐 띄우지 않음): 장비 연결 화면은 연결 실패를 장비 원에,
+ * 준비·대상·촬영은 솔빙·가이딩 실패를 작업 안내에서 보여 준다. 마무리는 아이라가 일부러 연결을 끊어 생기는 적도의·가이더 오류
+ */
+const NOTICE_HIDE: Partial<Record<Phase, string[]>> = {
+  equipment: ['connect'],
+  rig: ['solve', 'guide'],
+  target: ['solve', 'guide'],
+  shoot: ['solve', 'guide'],
+  wrap: ['mount', 'guide'],
+}
+const NO_HIDE: string[] = []
 
 /** N.I.N.A.가 켜져 있어야 하는 화면 (1단계 엔진 켜기 이후). 여기서 N.I.N.A.가 꺼지면 알린다 */
 const WATCHED: Phase[] = ['equipment', 'site', 'preflight', 'rig', 'plan', 'target', 'shoot', 'wrap']
@@ -417,6 +431,8 @@ export default function App() {
       )}
       </div>
       {ninaLost && <NinaLostCard state={nina} onRestart={() => void restartNina()} />}
+      {/* N.I.N.A. 오류를 풀어 쓴 알림. 지금 화면이 스스로 보여 주는 종류는 겹쳐 띄우지 않는다, N.I.N.A.가 꺼졌을 때는 그 카드만 */}
+      <NinaNoticeCard hide={NOTICE_HIDE[phase] ?? NO_HIDE} paused={ninaLost} />
       <ConfirmDialog
         open={pending !== null}
         message={

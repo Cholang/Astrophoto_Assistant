@@ -78,6 +78,10 @@ public static class AppServer
         // 그날 밤 진행 기록: 중간에 꺼져도 다시 켜면 이어서 할지 묻는다 (2026-10-08)
         builder.Services.AddSingleton(new Session.NightSessionStore(builder.Configuration["App:DataDir"]));
         builder.Services.AddHostedService<Session.NightSessionRecorder>();
+        // N.I.N.A. 오류를 아이라 말로 (로그를 따라 읽음) · N.I.N.A. 알림 창은 아이라가 앞에 있을 때 숨김
+        builder.Services.AddSingleton<NinaNotices>();
+        builder.Services.AddHostedService<NinaLogWatcher>();
+        builder.Services.AddHostedService<NinaToastHider>();
         builder.Services.AddTransient<SiteService>();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -101,6 +105,8 @@ public static class AppServer
         api.MapGet("/setup/check", (SetupChecker checker, CancellationToken ct) =>
             TypedResults.ServerSentEvents(checker.RunAsync(ct), eventType: "check"));
         // N.I.N.A. 감시: 지금 상태를 먼저, 바뀔 때마다 (Running · Exited · NotResponding)
+        // N.I.N.A. 오류·경고를 풀어 쓴 알림 (after보다 뒤의 것 — 화면이 2초마다 묻는다)
+        api.MapGet("/nina/notices", (long? after, NinaNotices notices) => notices.Since(after ?? 0));
         api.MapGet("/nina/watch", (NinaWatcher watcher, CancellationToken ct) =>
             TypedResults.ServerSentEvents(watcher.WatchAsync(ct).Select(s => s.ToString()), eventType: "nina"));
         // [임시] 화면 설계용: N.I.N.A.가 꺼진 것처럼 (Equipment:Simulate일 때만)

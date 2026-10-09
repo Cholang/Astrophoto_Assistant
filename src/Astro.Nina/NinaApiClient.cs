@@ -70,7 +70,9 @@ public sealed class NinaApiClient(HttpClient http)
         {
             using var res = await http.GetAsync(path, cts.Token);
             var body = await res.Content.ReadFromJsonAsync<JsonElement>(cts.Token);
-            var ok = res.IsSuccessStatusCode && !(body.TryGetProperty("Success", out var s) && s.ValueKind == JsonValueKind.False);
+            // N.I.N.A. 응답은 항상 Success가 있는 객체 — 객체가 아니거나(null) Success가 없으면 N.I.N.A. 응답이 아니므로 실패 (Codex A04, 2026-10-09)
+            if (body.ValueKind != JsonValueKind.Object) return new NinaReply(false, null, null);
+            var ok = res.IsSuccessStatusCode && body.TryGetProperty("Success", out var s) && s.ValueKind == JsonValueKind.True;
             var error = body.TryGetProperty("Error", out var e) && e.ValueKind == JsonValueKind.String && e.GetString() is { Length: > 0 } msg ? msg : null;
             return new NinaReply(ok, body.TryGetProperty("Response", out var r) ? r.Clone() : null, error);
         }
@@ -93,7 +95,8 @@ public sealed class NinaApiClient(HttpClient http)
             using var res = await http.GetAsync(path, cts.Token);
             if (!res.IsSuccessStatusCode) return null;
             var body = await res.Content.ReadFromJsonAsync<JsonElement>(cts.Token);
-            if (body.TryGetProperty("Success", out var ok) && ok.ValueKind == JsonValueKind.False) return null;
+            // Success=true인 객체만 (Codex A04 — Success가 없거나 객체가 아니면 응답 없음과 같게)
+            if (body.ValueKind != JsonValueKind.Object || !(body.TryGetProperty("Success", out var ok) && ok.ValueKind == JsonValueKind.True)) return null;
             return body.TryGetProperty("Response", out var response) ? response.Clone() : null;
         }
         // 대기 시간 초과는 "응답 없음"으로. 부른 쪽이 취소한 것(화면을 떠남 등)은 그대로 알린다
