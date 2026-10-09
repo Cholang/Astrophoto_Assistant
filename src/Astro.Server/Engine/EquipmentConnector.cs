@@ -94,7 +94,7 @@ public sealed class EquipmentChoices
 ///   단 전원 허브는 다른 장비에 전원을 주므로, 있으면 맨 먼저 연결하고 실패하면 뒤 장비는 보류한다
 /// 돔·안전 모니터·날씨 장치는 다루지 않는다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics, EquipmentRun state, DevicePrecheck.IHostDevices host, ILogger<EquipmentConnector> log)
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics, EquipmentRun state, DevicePrecheck.IHostDevices host, CameraPowerStore cameraPower, ILogger<EquipmentConnector> log)
 {
     private const CheckSeverity Required = CheckSeverity.Required;
     private const CheckSeverity Recommended = CheckSeverity.Recommended;
@@ -355,6 +355,17 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                         await Task.Run(host.CloseEmpire, ct);
                     }
                     var pre = await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(10), ct);
+                    // 카메라 전원을 허브 출력에서 받으면(장비 변경에서 고르고 전압을 확인받음) 그 출력을 켜고 카메라가 나타나기를 30초 기다린다 (J05, 10/09 실기: 14초)
+                    if (!pre.Ok && kind == "camera" && cameraPower.Outlet is { } outlet && await nina.IsConnectedAsync(Hub, ct))
+                    {
+                        var turned = await SetHubOutputAsync(n => n == outlet, true, ct);
+                        pre = turned == true
+                            ? await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(30), ct) is { Ok: true } p ? p
+                                : new(false, $"카메라 전원(허브 {ShortOutlet(outlet)})을 켰지만 카메라가 PC에 보이지 않습니다",
+                                    $"카메라 전원 스위치가 ON인지, 전원 어댑터가 허브 {ShortOutlet(outlet)}에 꽂혀 있는지, USB 케이블을 확인해 주세요.")
+                            : new(false, $"카메라 전원(허브 {ShortOutlet(outlet)})을 켜지 못했습니다",
+                                turned is null ? $"전원 허브에 {ShortOutlet(outlet)} 출력이 없습니다. 장비 변경에서 카메라 전원을 다시 골라 주세요." : "Wanderer Empire에서 출력이 켜지는지 확인해 주세요.");
+                    }
                     if (!pre.Ok)
                     {
                         live.Forget(kind);
@@ -396,25 +407,47 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     /// 허브의 "USB" 출력이 꺼져 있으면 켠다. N.I.N.A. 출력 바꾸기의 index는 출력 Id가 아니라 쓰기 가능한 출력 목록의 순서(10/09 실기 —
     /// Id를 넣으면 "Switch value updated"라고 답하고 실제로는 안 바뀜) → 순서로 바꾸고 다시 읽어 확인한다. 못 켜도 연결은 그대로 (뒤 장비 점검이 알린다)
     /// </summary>
+    /// <summary>"Regulated 0-13.2V adjustable DC2: DC2" → "DC2"</summary>
+    internal static string ShortOutlet(string name) => name.Contains(':') ? name[(name.LastIndexOf(':') + 1)..].Trim() : name;
+
     private async Task EnsureHubUsbOnAsync(CancellationToken ct)
     {
+        var on = await SetHubOutputAsync(n => Regex.IsMatch(n, @"(^|:\s*)USB\s*$|^USB\b", RegexOptions.IgnoreCase), true, ct);
+        if (on is { } done) log.LogInformation(done ? "허브 USB 출력이 켜져 있습니다" : "허브 USB 출력을 켜지 못했습니다 (다시 읽은 값이 꺼짐)");
+    }
+
+    /// <summary>허브의 쓰기 가능한 출력 이름들 (장비 변경의 카메라 전원 고르기). 허브가 연결되지 않았으면 빈 목록</summary>
+    public async Task<IReadOnlyList<string>> HubOutputsAsync(CancellationToken ct)
+    {
         var info = await nina.RequestAsync("equipment/switch/info", TimeSpan.FromSeconds(10), ct);
-        if (!info.Ok || info.Response is not { ValueKind: JsonValueKind.Object } r || !r.TryGetProperty("WritableSwitches", out var ws) || ws.ValueKind != JsonValueKind.Array) return;
+        if (!info.Ok || info.Response is not { ValueKind: JsonValueKind.Object } r || !r.TryGetProperty("Connected", out var c) || c.ValueKind != JsonValueKind.True
+            || !r.TryGetProperty("WritableSwitches", out var ws) || ws.ValueKind != JsonValueKind.Array) return [];
+        return ws.EnumerateArray().Select(x => Text(x, "Name")).OfType<string>().ToList();
+    }
+
+    /// <summary>
+    /// 허브 출력 하나를 켜거나 끈다. N.I.N.A.의 index는 출력 Id가 아니라 쓰기 가능한 출력 목록의 순서(10/09 실기 — Id를 넣으면 "Switch value updated"라고 답하고
+    /// 실제로는 안 바뀜). N.I.N.A.는 출력 값을 몇 초마다 새로 읽어서(켠 뒤 2초에는 아직 0) 10초까지 1초마다 다시 읽어 확인한다.
+    /// 결과: true = 원하는 상태, false = 바꾸지 못함, null = 그 출력이 없음
+    /// </summary>
+    private async Task<bool?> SetHubOutputAsync(Func<string, bool> match, bool on, CancellationToken ct)
+    {
+        var info = await nina.RequestAsync("equipment/switch/info", TimeSpan.FromSeconds(10), ct);
+        if (!info.Ok || info.Response is not { ValueKind: JsonValueKind.Object } r || !r.TryGetProperty("WritableSwitches", out var ws) || ws.ValueKind != JsonValueKind.Array) return null;
         var list = ws.EnumerateArray().ToList();
-        var index = list.FindIndex(s => Text(s, "Name") is { } n && Regex.IsMatch(n, @"(^|:\s*)USB\s*$|^USB\b", RegexOptions.IgnoreCase));
-        if (index < 0) return;
-        if (list[index].TryGetProperty("Value", out var v) && v.TryGetDouble(out var value) && value >= 1) return;
-        await nina.RequestAsync($"equipment/switch/set?index={index}&value=1", TimeSpan.FromSeconds(10), ct);
-        // N.I.N.A.는 출력 값을 몇 초마다 새로 읽는다(10/09 실기: 켠 뒤 2초에는 아직 0) → 10초까지 1초마다 다시 읽는다
-        var on = false;
-        for (var i = 0; i < 10 && !on; i++)
+        var index = list.FindIndex(x => Text(x, "Name") is { } n && match(n));
+        if (index < 0) return null;
+        static bool IsOn(JsonElement x) => x.TryGetProperty("Value", out var v) && v.TryGetDouble(out var d) && d >= 1;
+        if (IsOn(list[index]) == on) return true;
+        await nina.RequestAsync($"equipment/switch/set?index={index}&value={(on ? 1 : 0)}", TimeSpan.FromSeconds(10), ct);
+        for (var i = 0; i < 10; i++)
         {
             await Task.Delay(1000, ct);
             var after = await nina.RequestAsync("equipment/switch/info", TimeSpan.FromSeconds(10), ct);
-            on = after.Response is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("WritableSwitches", out var w2) && w2.ValueKind == JsonValueKind.Array
-                && w2.EnumerateArray().ElementAtOrDefault(index) is { ValueKind: JsonValueKind.Object } sw && sw.TryGetProperty("Value", out var v2) && v2.TryGetDouble(out var val2) && val2 >= 1;
+            if (after.Response is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("WritableSwitches", out var w2) && w2.ValueKind == JsonValueKind.Array
+                && w2.EnumerateArray().ElementAtOrDefault(index) is { ValueKind: JsonValueKind.Object } sw && IsOn(sw) == on) return true;
         }
-        log.LogInformation(on ? "허브 USB 출력을 켰습니다" : "허브 USB 출력을 켜지 못했습니다 (다시 읽은 값이 꺼짐)");
+        return false;
     }
 
     /// <summary>PHD2 주소는 N.I.N.A. 프로필의 가이더 설정에서(없으면 localhost:4400), 비교할 적도의 이름은 N.I.N.A.가 연결한 적도의</summary>
@@ -444,7 +477,15 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         }
         var mount = await nina.GetInfoAsync("mount", ct) is { ValueKind: JsonValueKind.Object } m
             && m.TryGetProperty("Connected", out var c) && c.ValueKind == JsonValueKind.True ? Text(m, "Name") : null;
-        return await Phd2Check.CheckAsync(host, port, mount, ct);
+        var problem = await Phd2Check.CheckAsync(host, port, mount, ct);
+        if (problem is not { CameraOff: true }) return problem;
+        // PHD2 안의 가이드 카메라가 꺼져 있음 → PHD2에 장비 연결을 시키고 알림으로 원인을 본다 (N.I.N.A.가 이미 시켰어도 원인 문장은 받지 못함)
+        var (ok, alert) = await Phd2Check.ConnectEquipmentAsync(host, port, ct);
+        if (ok) return await Phd2Check.CheckAsync(host, port, mount, ct);
+        if (Phd2Check.CameraNotFound(alert))
+            return new Phd2Check.Problem("PHD2가 기억해 둔 가이드 카메라를 찾지 못했습니다",
+                "가이드 카메라를 다른 USB 자리에 꽂으면 PHD2가 카메라를 다시 골라야 합니다(PHD2의 동작). PHD2의 장비 연결 창에서 카메라 줄 옆 선택 버튼으로 가이드 카메라를 고른 뒤 연결하고, 창을 닫은 다음 다시 연결을 눌러 주세요.");
+        return alert is { Length: > 0 } ? problem with { Fix = $"PHD2 알림: \"{alert}\". {problem.Fix}" } : problem;
     }
 
     /// <summary>Id가 null이면 등록되지 않은 장비. 필수 장비면 실패, 나머지는 Absent(작은 원)</summary>

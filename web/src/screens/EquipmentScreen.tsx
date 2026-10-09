@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, RotateCw } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import ConfirmDialog from '../components/ConfirmDialog'
 import DeviceIcon from '../components/DeviceIcon'
 import ScopeList from '../components/ScopeList'
 import JarvisRing from '../components/JarvisRing'
@@ -649,6 +650,55 @@ function DeviceList({
           새로고침
         </button>
       </p>
+      {kind === 'camera' && <CameraPower />}
+    </div>
+  )
+}
+
+/** "Regulated 0-13.2V adjustable DC2: DC2" → "DC2" */
+const shortOutlet = (name: string) => (name.includes(':') ? name.slice(name.lastIndexOf(':') + 1).trim() : name)
+
+/**
+ * 카메라 전원 (docs/PRECHECK_DESIGN.md J05, 2026-10-09): 배터리 또는 전원 허브 출력. 출력을 고르면 장비 연결 때 카메라가 안 보이면 아이라가 그 출력을 켠다.
+ * 아이라는 출력 전압을 읽거나 바꾸지 못하므로, 고를 때 Empire에서 전압을 맞췄는지 한 번 확인받는다 (실기: 7~8.4V 어댑터를 12V 출력에 꽂아 켜지지 않음)
+ */
+function CameraPower() {
+  const [state, setState] = useState<{ outlet: string | null; outlets: string[] } | null>(null)
+  const [asking, setAsking] = useState<string | null>(null)
+  useEffect(() => {
+    fetch('/api/equipment/camera-power')
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setState, () => setState(null))
+  }, [])
+  const save = (outlet: string | null) =>
+    void fetch('/api/equipment/camera-power', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ outlet }) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { outlet: string | null } | null) => b && setState((s) => (s ? { ...s, outlet: b.outlet } : s)))
+  if (!state) return null
+  return (
+    <div className={styles.powerPick}>
+      <p className={styles.listNote}>카메라 전원</p>
+      <div className={styles.powerChoices} role="radiogroup" aria-label="카메라 전원">
+        <button type="button" role="radio" aria-checked={state.outlet === null} onClick={() => save(null)}>
+          배터리
+        </button>
+        {state.outlets.map((o) => (
+          <button key={o} type="button" role="radio" aria-checked={state.outlet === o} onClick={() => state.outlet !== o && setAsking(o)}>
+            허브 {shortOutlet(o)}
+          </button>
+        ))}
+      </div>
+      {state.outlets.length === 0 && <p className={styles.listNote}>전원 허브가 연결되면 허브 출력도 고를 수 있습니다</p>}
+      <ConfirmDialog
+        open={asking !== null}
+        message={`Wanderer Empire에서 ${asking ? shortOutlet(asking) : ''} 출력 전압을 카메라 전원 어댑터에 맞게(어댑터에 적힌 입력 범위 안, 예: 8V) 맞췄나요? 전압이 맞지 않으면 카메라나 어댑터가 상할 수 있습니다. 아이라는 전압을 바꾸지 않고 켜고 끄기만 합니다.`}
+        confirmLabel="맞췄어요"
+        onConfirm={() => {
+          save(asking)
+          setAsking(null)
+        }}
+        onCancel={() => setAsking(null)}
+      />
     </div>
   )
 }

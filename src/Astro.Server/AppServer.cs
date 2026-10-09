@@ -56,6 +56,7 @@ public static class AppServer
         builder.Services.AddTransient<EquipmentConnector>();
         builder.Services.AddSingleton<EquipmentRun>();
         builder.Services.AddSingleton<DevicePrecheck.IHostDevices, DevicePrecheck.WindowsHost>();
+        builder.Services.AddSingleton<CameraPowerStore>();
         builder.Services.AddSingleton<EquipmentSimulation>();
         builder.Services.AddSingleton<EquipmentChoices>();
         builder.Services.AddSingleton(new RigOverrides(builder.Configuration["App:DataDir"]));
@@ -144,6 +145,15 @@ public static class AppServer
         {
             zero.Pending = true;
             return Results.NoContent();
+        });
+        // 카메라 전원: 배터리(outlet=null) 또는 전원 허브 출력. 고를 수 있는 출력은 허브가 연결돼 있을 때의 쓰기 가능한 출력들
+        api.MapGet("/equipment/camera-power", async (CameraPowerStore power, EquipmentConnector connector, CancellationToken ct) =>
+            Results.Ok(new { outlet = power.Outlet, outlets = await connector.HubOutputsAsync(ct) }));
+        // 출력을 고르는 것은 화면이 "Empire에서 그 출력 전압을 카메라 어댑터에 맞췄나요?"를 확인받은 뒤에만
+        api.MapPost("/equipment/camera-power", (CameraPowerChoice input, CameraPowerStore power) =>
+        {
+            power.Set(string.IsNullOrWhiteSpace(input.Outlet) ? null : input.Outlet);
+            return Results.Ok(new { outlet = power.Outlet });
         });
         // 종료 전: 장비 연결 중이면 멈추고 이번에 연결하던 장비를 끊은 것을 확인 (끊지 못한 장비 이름 목록 — 비면 정상)
         api.MapPost("/equipment/abort", async (EquipmentConnector connector, CancellationToken ct) =>
@@ -373,6 +383,7 @@ public static class AppServer
     private sealed record ChatInput(string Text);
 
     private sealed record RigSelect(string Kind, string? DeviceId, string? Name);
+    private sealed record CameraPowerChoice(string? Outlet);
 
     private sealed record UpdateDismiss(string Id, string Version);
 

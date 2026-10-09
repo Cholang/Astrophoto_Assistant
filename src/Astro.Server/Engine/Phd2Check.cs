@@ -11,7 +11,8 @@ namespace Astro.Server.Engine;
 /// </summary>
 public static class Phd2Check
 {
-    public sealed record Problem(string Message, string Fix);
+    /// <summary>CameraOff = PHD2 안의 가이드 카메라가 연결되지 않음 (PHD2에 장비 연결을 시켜 원인을 더 볼 수 있다)</summary>
+    public sealed record Problem(string Message, string Fix, bool CameraOff = false);
 
     /// <summary>문제가 없거나 PHD2에 직접 물을 수 없으면 null (물을 수 없을 때는 막지 않는다 — N.I.N.A.는 붙었으므로)</summary>
     public static async Task<Problem?> CheckAsync(string host, int port, string? ninaMountName, CancellationToken ct)
@@ -31,7 +32,7 @@ public static class Phd2Check
         var (mountName, mountOn) = Part(eq, "mount");
         if (cameraName is null || !cameraOn)
             return new Problem("PHD2에서 가이드 카메라가 연결되지 않았습니다",
-                "PHD2의 장비 연결 창에서 가이드 카메라를 다시 고르고(USB 포트를 바꾸면 다시 골라야 합니다) 연결한 뒤, 다시 연결을 눌러 주세요.");
+                "PHD2의 장비 연결 창에서 가이드 카메라를 다시 고르고(USB 포트를 바꾸면 다시 골라야 합니다) 연결한 뒤, 다시 연결을 눌러 주세요.", CameraOff: true);
         // 가이드 카메라가 PHD2 내장 시뮬레이터인데 N.I.N.A. 적도의는 실제 (2026-10-08 실기: "newbee" 프로필 카메라가 Simulator로 남아 연결은 통과했지만 SharpCap이 카메라를 못 엶)
         if (IsSimulator(cameraName) && !(ninaMountName is { Length: > 0 } nmc && IsSimulator(nmc)))
             return new Problem($"PHD2의 가이드 카메라가 시뮬레이터입니다 (PHD2: {cameraName})",
@@ -66,6 +67,44 @@ public static class Phd2Check
         eq.TryGetProperty(key, out var p) && p.ValueKind == JsonValueKind.Object
             ? (p.TryGetProperty("name", out var n) ? n.GetString() : null, p.TryGetProperty("connected", out var c) && c.ValueKind == JsonValueKind.True)
             : (null, false);
+
+    /// <summary>
+    /// PHD2에 장비 연결을 시키고(set_connected) 그 사이 PHD2가 보낸 알림(Alert)을 모은다. 연결되면 (true, null).
+    /// 실패하면 PHD2의 알림 문장 — 예: "선택한 ToupTek 카메라를 찾을 수 없습니다"(10/09 실기: USB를 다시 꽂아 PHD2가 기억한 카메라 정보가 바뀜)
+    /// </summary>
+    public static async Task<(bool Ok, string? Alert)> ConnectEquipmentAsync(string host, int port, CancellationToken ct)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(20));
+            using var client = new TcpClient();
+            await client.ConnectAsync(host, port, cts.Token);
+            await using var stream = client.GetStream();
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { method = "set_connected", @params = new[] { true }, id = 2 }) + "\r\n"), cts.Token);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            string? alert = null;
+            while (await reader.ReadLineAsync(cts.Token) is { } line)
+            {
+                if (line.Length == 0) continue;
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("Event", out var ev) && ev.GetString() == "Alert" && root.TryGetProperty("Msg", out var msg)) alert = msg.GetString();
+                if (root.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.GetInt32() == 2)
+                    return (!root.TryGetProperty("error", out _), alert);
+            }
+            return (false, alert);
+        }
+        catch (Exception e) when (e is SocketException or IOException or JsonException or OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            return (false, null);
+        }
+    }
+
+    /// <summary>PHD2 알림이 "기억한 카메라를 찾을 수 없음"인가 (한국어·영어)</summary>
+    public static bool CameraNotFound(string? alert) =>
+        alert is not null && (alert.Contains("찾을 수 없", StringComparison.Ordinal) || alert.Contains("not found", StringComparison.OrdinalIgnoreCase)
+            || alert.Contains("could not find", StringComparison.OrdinalIgnoreCase) || alert.Contains("cannot find", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>요청 하나 보내고 같은 id의 답을 기다린다. PHD2는 이벤트(Version·AppState …)를 먼저 줄줄이 보내므로 건너뛴다</summary>
     private static async Task<JsonElement?> CallAsync(string host, int port, string method, CancellationToken ct)
