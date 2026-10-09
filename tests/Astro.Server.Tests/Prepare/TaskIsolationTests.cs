@@ -20,8 +20,9 @@ public class TaskIsolationTests
         public int RunId => 1;
         public List<string> Statuses { get; } = [];
         public List<string> Asked { get; } = [];
+        public List<string> Guides { get; } = [];
         public void SubStep(int index) { }
-        public void Guide(string title, string text) { }
+        public void Guide(string title, string text) => Guides.Add(text);
         public void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false, DateTimeOffset? observedAt = null) { }
         public void ClearReadout() { }
         public void Status(string? text, Tone tone = Tone.Busy) { if (text is not null) Statuses.Add(text); }
@@ -63,6 +64,40 @@ public class TaskIsolationTests
         var (_, run) = await RunAlone(new PolarTask(new SimulatedPolarDevices(Fast, faults)), Harness.Context());
         Assert.Contains(run.Statuses, s => s.Contains("(3/3)"));
         Assert.Contains("retry", run.Asked[0]);
+    }
+
+    [Fact]
+    public async Task 극축_정렬_PHD2_장비_연결_창이_열려_있으면_넘겨받기_전에_닫게_한다()
+    {
+        var faults = new SimFaults();
+        faults.Arm("polar.dialog");
+        var (_, run) = await RunAlone(new PolarTask(new SimulatedPolarDevices(Fast, faults)), Harness.Context());
+        Assert.Contains(run.Statuses, s => s.Contains("장비 연결 창이 열려 있습니다"));
+        Assert.Equal("retry,skip", run.Asked[0]); // 다시 확인하면 닫혀 있어 이어서 정렬까지
+        Assert.DoesNotContain(run.Statuses, s => s.Contains("(2/3)"));
+    }
+
+    [Fact]
+    public async Task 구름_예보가_많으면_극축_정렬과_캘리브레이션_버튼_앞에서_알린다()
+    {
+        var now = DateTimeOffset.Now;
+        IReadOnlyList<Astro.Server.Sky.CloudHour> cloudy = [new(now.AddMinutes(-now.Minute), 90)];
+        var ctx = Harness.Context();
+        ctx = new PrepContext(ctx.Plan, ctx.Site, 2.41, true, true, new PrepResults(), new MountLock(), new InMemoryPrepMemory(), () => now)
+            { Clouds = _ => Task.FromResult(cloudy) };
+        var (done, run) = await RunAlone(new PolarTask(new SimulatedPolarDevices(Fast, new SimFaults())), ctx);
+        Assert.Contains(run.Guides, g => g.Contains("구름이 90%"));
+        Assert.Contains("구름이 90%", done.GuideText); // 캘리브레이션 시작 · 가이딩 없이 진행 버튼과 함께 보임
+    }
+
+    [Fact]
+    public void 구름_알림은_지금_시각의_예보가_많을_때만()
+    {
+        var hour = new DateTimeOffset(2026, 10, 9, 21, 0, 0, TimeSpan.FromHours(9));
+        IReadOnlyList<Astro.Server.Sky.CloudHour> hours = [new(hour, 40), new(hour.AddHours(1), 85)];
+        Assert.Null(CloudNotice.Text(hours, hour.AddMinutes(59)));
+        Assert.Contains("85%", CloudNotice.Text(hours, hour.AddHours(1)));
+        Assert.Null(CloudNotice.Text(hours, hour.AddHours(3))); // 예보 없는 시각
     }
 
     [Fact]

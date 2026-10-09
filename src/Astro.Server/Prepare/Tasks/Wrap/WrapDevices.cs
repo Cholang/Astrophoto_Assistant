@@ -55,7 +55,7 @@ public sealed class SimulatedWrapDevices(SimOptions sim, SimFaults faults) : IWr
 /// 플랫 노출은 AA가 찾는다: 저장하지 않는 사진으로 평균 밝기를 재며 50% 근처까지 (카메라 비트 수 기준, 없으면 14비트 — X-T5).
 /// 1/250초보다 짧으면 셔터 그림자 위험으로 보고 패널을 어둡게 하자고 한다. 프로그램 닫기는 창 닫기(강제 종료 없음).
 /// </summary>
-public sealed class RealWrapDevices(NinaRig rig, Engine.NinaWatcher watcher, ILogger<RealWrapDevices> log) : IWrapDevices
+public sealed class RealWrapDevices(NinaRig rig, Engine.NinaWatcher watcher, ILogger<RealWrapDevices> log, Engine.ProgramCloser? closer = null) : IWrapDevices
 {
     public const double MinFlatSeconds = 1.0 / 250, MaxFlatSeconds = 10;
 
@@ -132,25 +132,8 @@ public sealed class RealWrapDevices(NinaRig rig, Engine.NinaWatcher watcher, ILo
         return ok;
     }
 
-    public async Task<bool> CloseProgramsAsync(CancellationToken ct)
-    {
-        var all = true;
-        watcher.ExpectExit(); // 정상 종료 — 화면에 "N.I.N.A.가 꺼졌어요"를 띄우지 않는다 (CX-APP-R4)
-        foreach (var name in new[] { "phd2", "NINA" })
-            foreach (var p in Process.GetProcessesByName(name))
-            {
-                try
-                {
-                    p.CloseMainWindow();
-                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    cts.CancelAfter(TimeSpan.FromSeconds(15));
-                    try { await p.WaitForExitAsync(cts.Token); } catch (OperationCanceledException) { all = false; log.LogWarning("{Name}이 닫히지 않음 (저장 확인 창 등)", name); }
-                }
-                catch (InvalidOperationException) { /* 이미 닫힘 */ }
-                finally { p.Dispose(); }
-            }
-        return all;
-    }
+    // 마무리는 아이라가 켰든 아니든 닫는다 (장비 정리 끝 — 사용자가 전원을 끔)
+    public Task<bool> CloseProgramsAsync(CancellationToken ct) => (closer ?? new Engine.ProgramCloser(watcher, Microsoft.Extensions.Logging.Abstractions.NullLogger<Engine.ProgramCloser>.Instance)).CloseAsync(ct);
 
     public async Task<bool> StopAsync(CancellationToken ct) =>
         await rig.AbortExposureAsync(ct) & await rig.StopSlewAndConfirmAsync(ct);

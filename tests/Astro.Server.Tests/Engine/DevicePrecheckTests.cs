@@ -20,10 +20,33 @@ public class DevicePrecheckTests
         public DateTimeOffset? EmpireStartedAt() => Empire;
         public DateTimeOffset? LastUsbInsertedAt() => Inserted;
         public void CloseEmpire() => Closed = true;
+        public string? Phd2Camera = "ToupTek Camera";
+        public string? Phd2CameraName() => Phd2Camera;
     }
 
     private static Task<DevicePrecheck.Result> Check(FakeHost h, string kind, string id, string role) =>
         DevicePrecheck.CheckAsync(h, kind, id, role, TimeSpan.Zero, CancellationToken.None);
+
+    [Fact]
+    public async Task 가이드_카메라가_PC에_없으면_PHD2를_부르기_전에_막는다()
+    {
+        Assert.True((await Check(new FakeHost(), "guider", "PHD2_Guider", "가이드 카메라")).Ok);
+        var off = new FakeHost { Usb = ["10C4", "1A86"] }; // 장비 전원을 다 끈 상태 (10/09)
+        var r = await Check(off, "guider", "PHD2_Guider", "가이드 카메라");
+        Assert.False(r.Ok);
+        Assert.Contains("USB", r.Fix);
+        // PHD2 카메라를 모르면(시뮬레이터·처음 설정) 막지 않는다
+        Assert.True((await Check(new FakeHost { Usb = [], Phd2Camera = "Simulator" }, "guider", "PHD2_Guider", "가이드 카메라")).Ok);
+    }
+
+    [Theory]
+    [InlineData("Input Voltage", true)]
+    [InlineData("입력 전압", true)]
+    [InlineData("Voltage (input)", true)]
+    [InlineData("DC2 voltage", false)]
+    [InlineData("Input Current", false)]
+    public void 허브_입력_전압_칸_이름(string name, bool expected) =>
+        Assert.Equal(expected, EquipmentConnector.IsInputVoltage(name));
 
     [Fact]
     public async Task 적도의_포트가_있으면_통과()

@@ -27,6 +27,9 @@ public sealed class SimulatedPolarDevices(SimOptions sim, SimFaults faults) : IP
         return DeviceResult.Success;
     }
 
+    /// <summary>[모의 고장 polar.dialog] 처음 한 번만 열려 있음 (다시 확인하면 닫힘)</summary>
+    public Task<bool> Phd2DialogOpenAsync(CancellationToken ct) => Task.FromResult(faults.Take("polar.dialog"));
+
     public async Task<DeviceResult> StartSharpCapAsync(CancellationToken ct)
     {
         await sim.Delay(1000, ct);

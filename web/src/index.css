@@ -5,6 +5,7 @@
 
 :root,
 :root[data-theme='dark'] {
+  --glass-blur: blur(14px) saturate(1.15);
   /* [임시] 다크: 푸른 기 없는 짙은 회색 + 호박색 */
   --bg: #1e1f21;
   --surface: #27292c;
@@ -27,6 +28,10 @@
   --step-done: #303337;
   --step-done-line: #5e8f6f;
   --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.35);
+  /* 글래스 원 (2026-10-09 — 배경 효과 위의 장비 연결 원): 반투명 면 + 뒤 흐림 + 옅은 테두리. strong = 확인됨·가리킴 */
+  --glass-bg: rgb(46 48 52 / 0.38);
+  --glass-bg-strong: rgb(56 59 63 / 0.55);
+  --glass-line: rgb(255 255 255 / 0.09);
   /* 하늘 화면(준비 단계 배경): 사진이라 밝게 테마에서도 어둡다. 그 위 글자·선은 하늘 전용 색 */
   --sky: #0e0f11;
   --star: #e8e6e1;
@@ -57,6 +62,10 @@
   --step-done: #ffffff;
   --step-done-line: #8fb89d;
   --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.14);
+  /* 글래스 원 (2026-10-09 — 배경 효과 위의 장비 연결 원): 반투명 면 + 뒤 흐림 + 옅은 테두리. strong = 확인됨·가리킴 */
+  --glass-bg: rgb(255 255 255 / 0.45);
+  --glass-bg-strong: rgb(255 255 255 / 0.7);
+  --glass-line: rgb(0 0 0 / 0.08);
   --sky: #16181b;
   --star: #ebe8e3;
   --sky-muted: rgb(255 255 255 / 0.6);
@@ -88,6 +97,10 @@
   --step-done: #150000;
   --step-done-line: #6a0000;
   --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.6);
+  /* 글래스 원 (2026-10-09 — 배경 효과 위의 장비 연결 원): 반투명 면 + 뒤 흐림 + 옅은 테두리. strong = 확인됨·가리킴 */
+  --glass-bg: rgb(12 0 0 / 0.55);
+  --glass-bg-strong: rgb(23 0 0 / 0.7);
+  --glass-line: rgb(60 0 0 / 0.7);
   --sky: #000000;
   --star: #b80000;
   --sky-muted: #9a0000;

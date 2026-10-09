@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>아이라 배경 시안</title>
+<style>
+  /* 시안 전용 — 앱 토큰(web/src/index.css)과 같은 값 */
+  :root, :root[data-theme='dark'] {
+    --bg: #1e1f21; --surface: #27292c; --surface-2: #303236; --line: #3b3e42;
+    --text: #ebe8e3; --muted: #a3a09a; --accent: #f0a93b; --pass: #72bf8e; --step-done-line: #5e8f6f;
+    --star: 235, 232, 227; --glow: 240, 169, 59; --orbit: 235, 232, 227;
+    --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.35);
+  }
+  :root[data-theme='light'] {
+    --bg: #f1f1ef; --surface: #fafaf9; --surface-2: #e7e7e4; --line: #d6d6d2;
+    --text: #25272a; --muted: #676a6e; --accent: #b36b00; --pass: #2f7d4e; --step-done-line: #8fb89d;
+    --star: 60, 62, 66; --glow: 179, 107, 0; --orbit: 37, 39, 42;
+    --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.14);
+  }
+  :root[data-theme='night'] {
+    --bg: #000; --surface: #0c0000; --surface-2: #170000; --line: #3c0000;
+    --text: #b80000; --muted: #720000; --accent: #d00000; --pass: #b80000; --step-done-line: #5a0000;
+    --star: 150, 0, 0; --glow: 120, 0, 0; --orbit: 150, 0, 0;
+    --lift-shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Pretendard Variable', Pretendard, 'Malgun Gothic', system-ui, sans-serif;
+    overflow: hidden;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* 위에 올린 화면 흉내 (출발 전 점검 카드덱) — 효과가 글·카드를 방해하지 않는지 보려고 */
+  .ui { position: fixed; inset: 0; display: flex; flex-direction: column; pointer-events: none; transition: opacity 300ms; }
+  .ui[hidden] { display: flex; opacity: 0; }
+  .bar { height: 56px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 70%, transparent); }
+  .ui h1 { margin: 0; padding: 48px 6vw 0; font-size: clamp(22px, 2.3vw, 34px); font-weight: 700; }
+  .table { flex: 1; display: flex; align-items: center; justify-content: center; gap: 72px; }
+  .deck { position: relative; width: calc(min(32vh, 340px) + 60px); height: calc(min(32vh, 340px) + 60px); }
+  .card {
+    position: absolute; width: min(32vh, 340px); aspect-ratio: 1; border-radius: 22px;
+    background: var(--surface-2); box-shadow: inset 0 0 0 1.5px var(--line), var(--lift-shadow);
+    display: grid; place-items: center;
+  }
+  .card svg { width: 58%; height: 58%; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .card .acc { stroke: var(--accent); }
+  .about { width: 448px; display: grid; gap: 14px; }
+  .about small { color: var(--muted); font-weight: 700; }
+  .about h2 { margin: 0; font-size: 34px; }
+  .about p { margin: 0; font-size: 19px; line-height: 1.55; }
+  .about .hint { font-size: 14px; color: var(--muted); }
+  .foot { height: 132px; display: grid; place-items: center; }
+  .foot span { padding: 12px 28px; border: 1.5px solid var(--line); border-radius: 10px; font-weight: 700; }
+
+  /* 시안 조작판 (앱에는 없음) */
+  .panel {
+    position: fixed; right: 16px; bottom: 16px; z-index: 5; width: 300px;
+    padding: 14px 16px 16px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 92%, transparent);
+    box-shadow: inset 0 0 0 1px var(--line), 0 8px 30px rgb(0 0 0 / 0.3); display: grid; gap: 12px; font-size: 13px;
+  }
+  .panel b { font-size: 14px; }
+  .row { display: grid; gap: 6px; }
+  .row > span { color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pills button {
+    font: inherit; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line);
+    background: transparent; color: var(--text); cursor: pointer;
+  }
+  .pills button[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+  .pills button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .note { color: var(--muted); line-height: 1.5; margin: 0; }
+  .body { display: grid; gap: 12px; }
+  .panel[data-folded="true"] .body { display: none; }
+  .fold { justify-self: start; font: inherit; background: none; border: none; color: var(--muted); padding: 0; cursor: pointer; }
+
+  @media (max-width: 900px) {
+    .table { flex-direction: column; gap: 24px; }
+    .about { width: min(90vw, 448px); text-align: center; }
+    .panel { left: 16px; right: 16px; width: auto; }
+  }
+</style>
+</head>
+<body>
+<canvas id="sky" aria-hidden="true"></canvas>
+
+<div class="ui" id="ui">
+  <div class="bar"></div>
+  <h1>촬영 시작 전에 장비를 한 번 둘러봐 주세요</h1>
+  <div class="table">
+    <div class="deck">
+      <div class="card" style="transform: translate(56px,56px); filter: brightness(.55)"></div>
+      <div class="card" style="transform: translate(42px,42px); filter: brightness(.64)"></div>
+      <div class="card" style="transform: translate(28px,28px); filter: brightness(.76)"></div>
+      <div class="card" style="transform: translate(14px,14px); filter: brightness(.88)"></div>
+      <div class="card">
+        <svg viewBox="0 0 64 64">
+          <path class="acc" d="M50 8l1.6 3.4 3.7.4-2.8 2.5.8 3.7-3.3-1.9-3.3 1.9.8-3.7-2.8-2.5 3.7-.4z"/>
+          <path d="M22 58l10-22 10 22"/><path d="M32 36v-6"/><path d="M26 34l20-20"/>
+          <rect x="30" y="12" width="20" height="8" rx="3" transform="rotate(-45 40 16)"/>
+          <path d="M32 30v12"/><circle cx="32" cy="46" r="4"/>
+        </svg>
+      </div>
+    </div>
+    <div class="about">
+      <small>1/6</small>
+      <h2>적도의 시작 위치</h2>
+      <p>망원경은 북극성 쪽, 균형추는 아래를 향하게 두었나요?</p>
+      <p class="hint">확인했으면 카드를 누르세요</p>
+    </div>
+  </div>
+  <div class="foot"><span>모두 확인 완료</span></div>
+</div>
+
+<div class="panel" id="panel">
+  <b>배경 효과 시안</b>
+  <div class="body">
+    <div class="row">
+      <span>효과</span>
+      <div class="pills" data-group="mode">
+        <button data-v="nebula" aria-pressed="true">성운과 별</button><button data-v="stars" aria-pressed="false">별만</button>        <button data-v="none" aria-pressed="false">없음</button>
+      </div>
+    </div>
+    <div class="row">
+      <span>세기 <output id="levelOut">1.0</output></span>
+      <input id="level" type="range" min="0.4" max="2" step="0.1" value="1">
+    </div>
+    <div class="row">
+      <span>테마</span>
+      <div class="pills" data-group="theme">
+        <button data-v="dark" aria-pressed="true">다크</button>
+        <button data-v="light" aria-pressed="false">라이트</button>
+        <button data-v="night" aria-pressed="false">야간(촬영)</button>
+      </div>
+    </div>
+    <div class="row">
+      <span>화면</span>
+      <div class="pills" data-group="ui">
+        <button data-v="on" aria-pressed="true">점검 화면 올림</button>
+        <button data-v="off" aria-pressed="false">배경만</button>
+      </div>
+    </div>
+    <p class="note" id="note"></p>
+  </div>
+  <button class="fold" id="fold">접기</button>
+</div>
+
+<script>
+(()=>{
+const cv=document.getElementById('sky'),ctx=cv.getContext('2d'),reduce=matchMedia('(prefers-reduced-motion: reduce)');
+const state={mode:'nebula',theme:'dark',level:1},rand=(a,b)=>a+Math.random()*(b-a);
+let W,H,stars=[],clouds=[],glints=[],time=0,nextStar=2,previous=0,raf=0,color;
+const hash=(x,y)=>{const n=Math.sin(x*127.1+y*311.7)*43758.5453;return n-Math.floor(n);};
+function noise(x,y){const ix=Math.floor(x),iy=Math.floor(y);let u=x-ix,v=y-iy;u=u*u*(3-2*u);v=v*v*(3-2*v);return (hash(ix,iy)*(1-u)+hash(ix+1,iy)*u)*(1-v)+(hash(ix,iy+1)*(1-u)+hash(ix+1,iy+1)*u)*v;}
+function fbm(x,y){let n=0,a=.5;for(let i=0;i<5;i++){n+=a*noise(x,y);x=x*2.03+13;y=y*2.03+7;a*=.5;}return n;}
+// Generate texture once per palette, never per animation frame.
+function texture(index){
+ const c=document.createElement('canvas');c.width=640;c.height=400;
+ const g=c.getContext('2d'),d=g.createImageData(640,400);
+ const colors=state.theme==='night'?[[110,0,0],[80,0,0]]:state.theme==='light'?[[70,103,156],[139,86,143]]:[[92,132,174],[147,105,157]];
+ for(let y=0;y<400;y++)for(let x=0;x<640;x++){
+ const u=x/640,v=y/400,wx=u*4+index*17,wy=v*3+index*9,warp=fbm(wx,wy),n=fbm(wx+warp*2,wy+warp*1.4);
+ const band=Math.exp(-Math.pow((v-(.67-.4*u+.12*Math.sin(u*5+index*2)))/.25,2)),edge=Math.pow(Math.sin(Math.PI*u)*Math.sin(Math.PI*v),.65),i=(y*640+x)*4;
+ d.data[i]=colors[index][0];d.data[i+1]=colors[index][1];d.data[i+2]=colors[index][2];d.data[i+3]=Math.min(255,Math.pow(Math.max(0,n-.24),1.65)*band*edge*(state.theme==='light'?560:240));
+ }g.putImageData(d,0,0);return c;
+}
+function palette(){color=getComputedStyle(document.documentElement).getPropertyValue('--star').trim();clouds=[texture(0),texture(1)];}
+function resize(){W=innerWidth;H=innerHeight;const d=Math.min(devicePixelRatio||1,1.5);cv.width=Math.round(W*d);cv.height=Math.round(H*d);ctx.setTransform(d,0,0,d,0,0);stars=Array.from({length:Math.min(130,Math.round(W*H/15000))},()=>({x:Math.random(),y:Math.random(),r:rand(.45,1),a:rand(.08,.25)}));glints=[];nextStar=time+2;draw();}
+// One comet per pass. Normalized coordinates keep its route stable on resize.
+function newComet(start) {
+ return {start,duration:rand(28,32)*60,x0:rand(.04,.12),y0:rand(.82,.94),
+  x1:rand(.40,.55),y1:rand(.28,.48),x2:rand(1.12,1.22),y2:rand(-.24,-.16)};
+}
+let comet=newComet(0);
+function drawComet(k) {
+ if(time-comet.start>=comet.duration)comet=newComet(time);
+ const c=comet,u=Math.min(1,(time-c.start)/c.duration),v=1-u;
+ const x=(v*v*c.x0+2*v*u*c.x1+u*u*c.x2)*W;
+ const y=(v*v*c.y0+2*v*u*c.y1+u*u*c.y2)*H;
+ const dx=(v*(c.x1-c.x0)+u*(c.x2-c.x1))*W;
+ const dy=(v*(c.y1-c.y0)+u*(c.y2-c.y1))*H;
+ const length=Math.min(72,W*.055,H*.09),alpha=Math.min(1,k)*Math.min(1,(time-c.start)/5);
+ ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(dy,dx));
+ const tail=ctx.createLinearGradient(-length,0,0,0);
+ tail.addColorStop(0,'rgba('+color+',0)');
+ tail.addColorStop(.65,'rgba('+color+','+alpha*.035+')');
+ tail.addColorStop(1,'rgba('+color+','+alpha*.24+')');
+ ctx.fillStyle=tail;ctx.beginPath();ctx.moveTo(0,0);
+ ctx.quadraticCurveTo(-length*.4,-3,-length,-5);
+ ctx.quadraticCurveTo(-length*.65,2,0,1);ctx.fill();
+ const halo=ctx.createRadialGradient(0,0,0,0,0,6);
+ halo.addColorStop(0,'rgba('+color+','+alpha*.3+')');halo.addColorStop(1,'rgba('+color+',0)');
+ ctx.fillStyle=halo;ctx.fillRect(-6,-6,12,12);
+ ctx.fillStyle='rgba('+color+','+alpha*.65+')';ctx.beginPath();ctx.arc(0,0,1.2,0,Math.PI*2);ctx.fill();ctx.restore();
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);if(state.mode==='none')return;const k=state.level*(state.theme==='night'?.55:1);
+ if(state.mode==='nebula')clouds.forEach((c,i)=>{
+  // Independent drift, rotation and scale give the cloud layers a gentle flow.
+  const phase=i*2.3, direction=i===0?1:-1, scale=1.46+.085*Math.sin(time/13.103448+phase);
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,k*(i===0?.9:.65));
+  ctx.translate(W*(.5+.1125*Math.sin(direction*time/13.939394+phase)),H*(.5+.0825*Math.cos(time/17.952381+phase)));
+  ctx.rotate(.0775*Math.sin(direction*time/21.106383+phase));
+  ctx.drawImage(c,-W*scale/2,-H*scale/2,W*scale,H*scale);
+  ctx.restore();
+ });
+ ctx.globalAlpha=1;
+ if(!reduce.matches)drawComet(k);
+ stars.forEach(s=>{ctx.fillStyle='rgba('+color+','+s.a*k+')';ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill();});
+ if(!reduce.matches&&time>=nextStar){if(glints.length<6)glints.push({x:rand(.06,.94),y:rand(.08,.92),start:time,duration:rand(5,9),r:rand(.85,1.3)});nextStar=time+rand(1.4,2.6);}
+ glints=glints.filter(s=>time-s.start<s.duration);
+ glints.forEach(s=>{const a=Math.pow(Math.sin(Math.PI*(time-s.start)/s.duration),2)*k,x=s.x*W,y=s.y*H,g=ctx.createRadialGradient(x,y,0,x,y,9);g.addColorStop(0,'rgba('+color+','+a*.18+')');g.addColorStop(1,'rgba('+color+',0)');ctx.fillStyle=g;ctx.fillRect(x-9,y-9,18,18);ctx.fillStyle='rgba('+color+','+a*.65+')';ctx.beginPath();ctx.arc(x,y,s.r,0,Math.PI*2);ctx.fill();});
+}
+function loop(now){raf=requestAnimationFrame(loop);if(now-previous<1000/30)return;time+=Math.min((now-previous)/1000,.1);previous=now;draw();}
+function schedule(){cancelAnimationFrame(raf);previous=performance.now();if(!document.hidden&&!reduce.matches&&state.mode!=='none')raf=requestAnimationFrame(loop);draw();}
+document.querySelectorAll('.pills').forEach(group=>group.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;group.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));const key=group.dataset.group,v=b.dataset.v;if(key==='mode')state.mode=v;if(key==='theme'){state.theme=v;document.documentElement.dataset.theme=v;palette();}if(key==='ui')document.getElementById('ui').hidden=v==='off';schedule();}));
+document.getElementById('level').addEventListener('input',e=>{state.level=+e.target.value;document.getElementById('levelOut').textContent=state.level.toFixed(1);draw();});
+document.getElementById('fold').addEventListener('click',e=>{const p=document.getElementById('panel'),folded=p.dataset.folded!=='true';p.dataset.folded=String(folded);e.target.textContent=folded?'펼치기':'접기';});
+document.getElementById('note').textContent='성운 두 층이 서로 다른 방향으로 흐릅니다. 별은 1.4–2.6초마다 나타나 5–9초 동안 빛나며, 동시에 최대 6개로 제한합니다. 혜성 하나가 좌하단에서 우상단으로 약 28–32분에 걸쳐 지나갑니다. 야간은 붉은빛으로 표현합니다.';
+addEventListener('resize',resize);document.addEventListener('visibilitychange',schedule);reduce.addEventListener('change',()=>{glints=[];schedule();});palette();resize();schedule();
+})();
+</script>
+</body>
+</html>

@@ -69,10 +69,11 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
             }
         }
 
+        var cloud = await CloudNotice.ReadAsync(ctx, ct);
         // 극축 정렬을 건너뛰었으면 움직이기 전에 한 번 묻는다 — 실내·북쪽만 트인 곳처럼 이미 안 될 걸 아는 경우 (2026-10-08 실기)
         if (ctx.Results.Get<PolarResult>() is { Skipped: true })
         {
-            run.Guide("캘리브레이션을 할까요?", "적도의를 자오선 근처 하늘로 옮겨 가이드 별로 보정값을 만들어요. 그쪽 하늘이 보이지 않으면 가이딩 없이 진행할 수 있어요.");
+            run.Guide("캘리브레이션을 할까요?", CloudNotice.With("적도의를 자오선 근처 하늘로 옮겨 가이드 별로 보정값을 만들어요. 그쪽 하늘이 보이지 않으면 가이딩 없이 진행할 수 있어요.", cloud));
             run.Status(null);
             if (await run.AskAsync([new("start", "캘리브레이션 시작", true), new("noguide", "가이딩 없이 진행")], ct) == "noguide")
                 return await NoGuideAsync(ctx, evening, "가이딩 없이 진행을 고름", ct);
@@ -82,7 +83,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
         {
             foreach (var pos in Positions)
             {
-                var data = await TryAtAsync(run, pos, ct);
+                var data = await TryAtAsync(run, pos, cloud, ct);
                 if (data is null) continue; // 이 위치는 안 됨 → 다음 위치
                 var (grade, tone, reason) = CalibrationRules.Judge(data);
                 var result = new CalibrationResult(false, data.OrthogonalityErrorDeg, pos.Name, evening, ctx.Now());
@@ -131,7 +132,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
     }
 
     /// <summary>한 위치에서 이동 → 별 → 측정. 이 위치가 안 되면 null (다음 위치로)</summary>
-    private async Task<CalibrationData?> TryAtAsync(ITaskRun run, (string Name, string Label, double HourAngle) pos, CancellationToken ct)
+    private async Task<CalibrationData?> TryAtAsync(ITaskRun run, (string Name, string Label, double HourAngle) pos, string? cloud, CancellationToken ct)
     {
         run.SubStep(0);
         run.Guide("위치로 이동", $"극 근처는 캘리브레이션에 맞지 않아 위치 {pos.Name}({pos.Label})로 옮깁니다. 손대실 것은 없습니다.");
@@ -148,7 +149,7 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
         }
 
         run.SubStep(1);
-        run.Guide("별 선택", "PHD2가 가이드 카메라 사진에서 캘리브레이션에 쓸 별을 고릅니다.");
+        run.Guide("별 선택", CloudNotice.With("PHD2가 가이드 카메라 사진에서 캘리브레이션에 쓸 별을 고릅니다.", cloud));
         run.Live("guide-image", "/api/prepare/live/guide");
         run.Status("별을 고르는 중입니다");
         var star = await devices.SelectStarAsync(ct);

@@ -46,6 +46,8 @@ public sealed class RealPolarDevices(NinaRig rig, Phd2Client phd2, SharpCapBridg
         }
     }
 
+    public Task<bool> Phd2DialogOpenAsync(CancellationToken ct) => Task.FromResult(Phd2Windows.ConnectDialogOpen());
+
     /// <summary>PHD2가 영어로 주는 이유를 사용자가 할 일로 (2026-10-08 실기: 장비 연결 창이 열려 있으면 카메라를 놓지 못함)</summary>
     internal static string Phd2Words(string message) =>
         message.Contains("Connect Equipment dialog", StringComparison.OrdinalIgnoreCase)

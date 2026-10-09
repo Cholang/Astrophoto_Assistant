@@ -26,7 +26,7 @@ const RAIL_STATE: Record<PrepTaskStatus, RailItem['state']> = {
 
 /** [임시] 작업마다 걸어 볼 수 있는 모의 실패 (서버 SimFaults.Known) — 실제 장비(P3)를 붙이면 뺀다 */
 const FAULTS: Record<string, [string, string][]> = {
-  polar: [['polar.handover', '넘겨받기'], ['polar.stars', '별 찾기'], ['polar.giveback', '돌려주기']],
+  polar: [['polar.dialog', 'PHD2 장비 연결 창'], ['polar.handover', '넘겨받기'], ['polar.stars', '별 찾기'], ['polar.giveback', '돌려주기']],
   calibration: [['calibration.star', '위치 A 별 없음'], ['calibration.measure', '측정']],
   slew: [['slew.low', '대상 낮음'], ['slew.move', '이동']],
   focus: [['focus.stars', '별 없음'], ['focus.stall', '포커서 멈춤'], ['focus.temp', '기온 3.3°C 내려감 (다음 초점 확인)']],

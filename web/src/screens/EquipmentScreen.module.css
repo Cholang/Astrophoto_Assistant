@@ -60,12 +60,16 @@
 }
 
 /* 가운데 원: 1단계 원의 자리·크기에서 옮겨 오며 작아진다.
-   장비 원들보다 앞에 있고 안이 채워져 있어서, 흡수·펼침 때 장비 원들이 원 뒤로 들어가고 나온다 */
+   장비 원들보다 앞에 있고 글래스(반투명 + 뒤 흐림, 2026-10-09)라서, 흡수·펼침 때 장비 원들이 흐려지며 원 뒤로 들어가고 나온다.
+   배경 효과(성운)는 은은하게 비치고, 연결선은 원 안에서 흐려져 가려진다 */
 .center {
   position: absolute;
   z-index: 2;
   border-radius: 50%;
-  background: var(--bg);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
   transform: translate(-50%, -50%);
 }
 
@@ -87,7 +91,7 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: var(--bg);
+  background: var(--glass-bg);
   pointer-events: none;
   opacity: 0;
 }
@@ -157,9 +161,12 @@
   align-content: center;
   gap: 2px;
   padding: 0 6px;
-  border: 1.5px solid transparent;
+  border: 1.5px solid var(--glass-line);
   border-radius: 50%;
-  background: var(--step-idle);
+  /* 글래스 원 (2026-10-09 — 채운 회색이 배경 효과 위에서 어색해서) */
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   color: var(--muted);
   text-align: center;
   cursor: default;
@@ -228,7 +235,7 @@
 }
 
 .node[data-status='Pass'] {
-  background: var(--step-done);
+  background: var(--glass-bg-strong);
   border-color: var(--step-done-line);
   color: var(--text);
 }
@@ -268,11 +275,11 @@
 }
 
 .node[data-selectable='true']:hover {
-  background: var(--step-hover);
+  background: var(--glass-bg-strong);
 }
 
 .node[data-selected='true'] {
-  background: var(--step-done);
+  background: var(--glass-bg-strong);
   box-shadow: var(--state-ring);
 }
 
@@ -618,7 +625,9 @@
   place-items: center;
   border: 1.5px solid var(--step-done-line);
   border-radius: 50%;
-  background: var(--step-done);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   color: var(--text);
   cursor: pointer;
   transition: transform 160ms ease-out, border-color 160ms;

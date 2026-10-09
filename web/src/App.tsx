@@ -5,6 +5,7 @@ import StatusBar, { type DeviceState } from './components/StatusBar'
 import NinaLostCard, { type NinaState } from './components/NinaLostCard'
 import NinaNoticeCard from './components/NinaNoticeCard'
 import StepRail, { RailProvider, type RailExtra, type Stage } from './components/StepRail'
+import SkyBackdrop from './components/SkyBackdrop'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
 import EngineStartScreen from './screens/EngineStartScreen'
@@ -325,6 +326,8 @@ export default function App() {
 
   return (
     <div className={styles.window}>
+    {/* 앱 전체 배경 효과 (성운과 별) — 틀 바깥 여백까지. 틀은 그 위에 투명 */}
+    <SkyBackdrop />
     <div
       className={styles.shell}
       data-fixed={frame.fixed}

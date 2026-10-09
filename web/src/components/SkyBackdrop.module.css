@@ -1,0 +1,20 @@
+/* 앱 전체 배경 효과: 창 전체(틀 바깥 여백 포함)에 깔고, 앱 틀은 그 위에 투명하게 (SkyBackdrop.tsx) */
+.sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+}
+
+/* 성운 무늬가 만들어진 뒤 천천히 나타난다 */
+.sky[data-ready='true'] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sky { transition: none; }
+}

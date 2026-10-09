@@ -392,6 +392,14 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                 }
                 connected = await nina.ConnectAsync(kind, d.Id, ct) && await nina.IsConnectedAsync(kind, ct);
             }
+            // 허브가 USB로만 붙고 전원(DC)이 안 들어오면(10/09: USB만으로도 연결됨) 뒤 장비를 N.I.N.A.에 맡기지 않는다 —
+            // 허브 입력 전압이 곧 장비 전원 (사용자 배선: 외부 전원 → 적도의 → 새들 → 허브). 전압 칸을 모르면 그냥 진행
+            if (connected && kind == Hub && await HubInputVoltsAsync(ct) is { } volts && volts < NoPowerVolts)
+            {
+                return Make(d, CheckStatus.Fail, $"전원 허브에 전원이 들어오지 않습니다 (입력 {volts:0.0}V)", new Diagnosis(
+                    ["외부 전원(배터리·어댑터)이 꺼져 있습니다", "허브로 가는 전원 케이블이 빠졌습니다 (적도의에서 받으면 적도의 전원도)"],
+                    "장비 전원을 켜고 허브 입력 전원 케이블을 확인한 뒤 다시 연결을 눌러 주세요. 허브 전원이 없으면 적도의·카메라·포커서도 켜지지 않아 연결을 미룹니다."));
+            }
             // 허브가 연결되면 USB 출력을 켜 둔다 — 가이드 카메라·포커서가 허브 USB에 붙어 있다 (자동 해결, 다시 읽어 확인 — 10/09: N.I.N.A.는 실패해도 성공이라 답함)
             if (connected && kind == Hub) await EnsureHubUsbOnAsync(ct);
             if (connected) live.Set(kind, d.Id);
@@ -436,6 +444,35 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
 
     /// <summary>"Regulated 0-13.2V adjustable DC2: DC2" → "DC2"</summary>
     internal static string ShortOutlet(string name) => name.Contains(':') ? name[(name.LastIndexOf(':') + 1)..].Trim() : name;
+
+    /// <summary>이보다 낮으면 허브에 전원이 없다고 본다 (12V 장비용 허브 — USB만 꽂혀 있으면 0 근처)</summary>
+    private const double NoPowerVolts = 5;
+
+    /// <summary>
+    /// 허브 입력 전압(V). 읽기 전용 칸 중 이름에 입력·전압이 함께 든 것. N.I.N.A.는 연결 직후 몇 초 동안 값을 아직 안 읽어 0일 수 있어
+    /// 8초까지 다시 읽어 가장 큰 값 (전원이 있으면 바로 끝남). 그런 칸이 없으면 null (모름 — 막지 않음). 실기 미확인: Empire의 칸 이름
+    /// </summary>
+    private async Task<double?> HubInputVoltsAsync(CancellationToken ct)
+    {
+        double? best = null;
+        for (var i = 0; i < 9; i++)
+        {
+            var info = await nina.RequestAsync("equipment/switch/info", TimeSpan.FromSeconds(10), ct);
+            if (info.Response is { ValueKind: JsonValueKind.Object } r)
+                foreach (var key in new[] { "ReadonlySwitches", "Gauges" })
+                    if (r.TryGetProperty(key, out var list) && list.ValueKind == JsonValueKind.Array)
+                        foreach (var g in list.EnumerateArray())
+                            if (Text(g, "Name") is { } n && IsInputVoltage(n) && g.TryGetProperty("Value", out var v) && v.TryGetDouble(out var volts))
+                                best = Math.Max(best ?? 0, volts);
+            if (best is null && i >= 2) return null; // 전압 칸이 없음
+            if (best >= NoPowerVolts) return best;
+            await Task.Delay(1000, ct);
+        }
+        return best;
+    }
+
+    internal static bool IsInputVoltage(string name) =>
+        Regex.IsMatch(name, @"(input|입력).*(volt|전압)|(volt|전압).*(input|입력)", RegexOptions.IgnoreCase);
 
     private async Task EnsureHubUsbOnAsync(CancellationToken ct)
     {

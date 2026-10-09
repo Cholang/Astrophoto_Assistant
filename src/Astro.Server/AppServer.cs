@@ -55,6 +55,7 @@ public static class AppServer
         builder.Services.AddSingleton<NinaWatcher>();
         builder.Services.AddTransient<EquipmentConnector>();
         builder.Services.AddSingleton<EquipmentRun>();
+        builder.Services.AddSingleton<ProgramCloser>();
         builder.Services.AddSingleton<DevicePrecheck.IHostDevices, DevicePrecheck.WindowsHost>();
         builder.Services.AddSingleton<CameraPowerStore>();
         builder.Services.AddSingleton<EquipmentSimulation>();
@@ -142,11 +143,18 @@ public static class AppServer
         api.MapGet("/equipment/connect", (EquipmentConnector connector, CancellationToken ct) =>
             TypedResults.ServerSentEvents(connector.RunAsync(ct), eventType: "check"));
         // 출발 전 점검을 마침 ("포커서 0점" 확인) → 다음 초점 작업이 포커서 0점을 잡는다
-        api.MapPost("/prepare/focuser-zero", (Prepare.Tasks.Focus.FocuserZeroRequest zero) =>
+        // 지난번 포커서를 0에 두고 끝냈고 지금도 0이면 점검이 "포커서 0점" 카드를 묻지 않으므로 0점도 잡지 않는다
+        api.MapPost("/prepare/focuser-zero", async (Prepare.Tasks.Focus.FocuserZeroRequest zero, Prepare.FocuserPark park, CancellationToken ct) =>
         {
-            zero.Pending = true;
+            if (!await park.ReadyAsync(ct)) zero.Pending = true;
             return Results.NoContent();
         });
+        // 포커서 0에 두기: 점검이 "포커서 0점" 카드를 건너뛸지(ready) · 아이라 종료 전에 0으로 보내기 (못 하면 이유, 종료는 그대로)
+        api.MapGet("/focuser/parked", async (Prepare.FocuserPark park, CancellationToken ct) => Results.Ok(new { ready = await park.ReadyAsync(ct) }));
+        // 아이라 종료 마지막: 아이라가 켠 N.I.N.A.면 PHD2와 함께 닫는다 (촬영 중이면 두기). 사용자가 켜 둔 N.I.N.A.는 그대로
+        api.MapPost("/engine/close", async (ProgramCloser programs, Shoot.ShootSession shoot, CancellationToken ct) =>
+            Results.Ok(new { closed = programs.LaunchedNina && !shoot.Active && await programs.CloseAsync(ct) }));
+        api.MapPost("/focuser/park", async (Prepare.FocuserPark park, CancellationToken ct) => Results.Ok(new { problem = await park.ParkAsync(ct) }));
         // 진행 표시 아래 "적도의 홈": 지금 보낼 수 있는지(이유) · 보내기
         api.MapGet("/mount/home", async (Prepare.MountHome home, CancellationToken ct) => Results.Ok(await home.StateAsync(ct)));
         api.MapPost("/mount/home", async (Prepare.MountHome home, CancellationToken ct) =>

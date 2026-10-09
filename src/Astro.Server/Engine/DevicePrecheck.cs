@@ -39,8 +39,9 @@ public static class DevicePrecheck
             }
         }
 
-        // ② 제조사를 아는 USB 장치가 PC에 있나 (C01·E01)
-        if (UsbVendor(kind, id) is { } usb)
+        // ② 제조사를 아는 USB 장치가 PC에 있나 (C01·E01). 가이더는 PHD2가 기억한 카메라로 (2026-10-09 — 장비 전원을 다 끈 채 연결하자
+        //    PHD2가 "equipment failed to connect"를 내고 N.I.N.A. 알림이 남음)
+        if ((kind == "guider" ? GuideCameraVendor(host.Phd2CameraName()) : UsbVendor(kind, id)) is { } usb)
         {
             if (!await WaitAsync(() => host.UsbPresent(usb.Vid), wait, ct))
                 return new(false, $"{role}{(Josa(role) ? "이" : "가")} PC에 보이지 않습니다", usb.Fix);
@@ -131,6 +132,17 @@ public static class DevicePrecheck
         return null;
     }
 
+    /// <summary>PHD2 카메라 이름으로 아는 USB 제조사 번호 (ToupTek 0547 — 10/09 실기 G3M662M, ZWO 03C3, QHY 1618). 모르면 확인하지 않음</summary>
+    internal static (string Vid, string Fix)? GuideCameraVendor(string? camera)
+    {
+        if (camera is null) return null;
+        var vid = camera.Contains("ToupTek", StringComparison.OrdinalIgnoreCase) ? "0547"
+            : camera.Contains("ZWO", StringComparison.OrdinalIgnoreCase) ? "03C3"
+            : camera.Contains("QHY", StringComparison.OrdinalIgnoreCase) ? "1618"
+            : null;
+        return vid is null ? null : (vid, "가이드 카메라 USB 케이블을 확인해 주세요. 전원 허브의 USB에 꽂혀 있으면 허브 전원과 USB 출력이 켜져 있는지도 확인해 주세요.");
+    }
+
     private static bool Josa(string word) => Astro.Core.Josa.HasFinalConsonant(word);
 
     private static async Task<bool> WaitAsync(Func<bool> ok, TimeSpan wait, CancellationToken ct)
@@ -166,10 +178,22 @@ public static class DevicePrecheck
         DateTimeOffset? EmpireStartedAt();
         DateTimeOffset? LastUsbInsertedAt();
         void CloseEmpire();
+        /// <summary>PHD2가 지금 프로필에서 쓰는 카메라 이름 (예: "ToupTek Camera"). 모르면 null</summary>
+        string? Phd2CameraName() => null;
     }
 
     public sealed class WindowsHost : IHostDevices
     {
+        /// <summary>PHD2 설정(레지스트리 HKCU\Software\StarkLabs\PHDGuidingV2)의 지금 프로필 → camera\LastMenuchoice</summary>
+        public string? Phd2CameraName()
+        {
+            if (!OperatingSystem.IsWindows()) return null;
+            using var root = Registry.CurrentUser.OpenSubKey(@"Software\StarkLabs\PHDGuidingV2");
+            if (root?.GetValue("currentProfile") is not { } profile) return null;
+            using var cam = root.OpenSubKey($@"profile\{profile}\camera");
+            return cam?.GetValue("LastMenuchoice") as string;
+        }
+
         /// <summary>지금 있는 COM 포트 (SerialPort.GetPortNames와 같은 곳 — 레지스트리 SERIALCOMM)</summary>
         public IReadOnlyList<string> ComPorts()
         {

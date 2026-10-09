@@ -21,7 +21,7 @@ public sealed class SimFaults
 
     public static readonly IReadOnlyList<string> Known =
     [
-        "polar.handover", "polar.stars", "polar.giveback",
+        "polar.dialog", "polar.handover", "polar.stars", "polar.giveback",
         "calibration.star", "calibration.measure",
         "slew.move", "slew.low",
         "focus.stars", "focus.stall", "focus.temp",

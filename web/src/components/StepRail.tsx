@@ -95,17 +95,24 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
   const now = extra?.complete ? STAGES.length : STAGES.indexOf(current)
   const [open, setOpen] = useState<string | null>(null)
   const [quitting, setQuitting] = useState(false)
-  // 종료 확인 뒤: 장비 연결 중이면 멈추고 끊는 중(busy), 끊지 못한 장비가 있으면 그 안내(notOff)
-  const [closing, setClosing] = useState<{ busy: boolean; notOff: string[] } | null>(null)
+  // 종료 확인 뒤: 포커서를 0으로 되돌리는 중(focuser) → 장비 연결 중이면 멈추고 끊는 중(busy) → 아이라가 켠 N.I.N.A.·PHD2 닫는 중(programs).
+  // 끊지 못한 장비가 있으면 그 안내(notOff)
+  const [closing, setClosing] = useState<{ busy: boolean; notOff: string[]; step?: 'focuser' | 'programs' } | null>(null)
   const quit = async () => {
-    if (closing && !closing.busy) return closeApp() // 끊지 못한 장비가 있어도 "그래도 종료"
+    if (closing && !closing.busy) return closeApp() // 끊지 못한 장비가 있어도 "그래도 종료" (N.I.N.A.는 남겨 둠 — 사용자가 직접 확인)
+    // 포커서를 0(노브 끝까지 넣은 위치)에 두고 끝낸다 — 다음에 노브를 손으로 맞추지 않게 (2026-10-09). 못 하면(촬영·작업 중, 미연결) 그냥 종료
+    setClosing({ busy: true, notOff: [], step: 'focuser' })
+    await fetch('/api/focuser/park', { method: 'POST' }).catch(() => null)
     setClosing({ busy: true, notOff: [] })
     const notOff = await fetch('/api/equipment/abort', { method: 'POST' })
       .then((r) => (r.ok ? (r.json() as Promise<{ notDisconnected: string[] }>) : null))
       .then((b) => b?.notDisconnected ?? [])
       .catch(() => [] as string[])
-    if (notOff.length === 0) return closeApp()
-    setClosing({ busy: false, notOff })
+    if (notOff.length > 0) return setClosing({ busy: false, notOff })
+    // 아이라가 켠 N.I.N.A.면 PHD2와 함께 닫는다 — 남겨 두면 아이라 없이 N.I.N.A. 알림만 뜬다 (2026-10-09). 사용자가 켜 둔 N.I.N.A.는 그대로
+    setClosing({ busy: true, notOff: [], step: 'programs' })
+    await fetch('/api/engine/close', { method: 'POST' }).catch(() => null)
+    closeApp()
   }
   // 창의 × 버튼도 "AA 종료"와 같은 확인 (진행 중일 때만 — 요약 화면은 바로 닫음)
   const confirmOnClose = !extra?.hideExit
@@ -344,7 +351,11 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
         open={quitting}
         message={
           closing?.busy
-            ? '장비 연결을 멈추고 연결을 끊는 중입니다…'
+            ? closing.step === 'focuser'
+              ? '포커서를 0으로 되돌리는 중입니다…'
+              : closing.step === 'programs'
+                ? 'N.I.N.A.와 PHD2를 닫는 중입니다…'
+                : '장비 연결을 멈추고 연결을 끊는 중입니다…'
             : closing
               ? `${closing.notOff.join(', ')} 연결을 끊지 못했습니다. N.I.N.A.에서 직접 끊어 주세요.`
               : `${current} 진행을 종료하고 ${PRODUCT.reul} 종료합니다.`

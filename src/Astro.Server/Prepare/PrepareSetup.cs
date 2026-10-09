@@ -72,6 +72,8 @@ public static class PrepareSetup
         s.AddSingleton<Shoot.ShootSession>();
         s.AddSingleton<MountLock>();
         s.AddSingleton<MountHome>();
+        s.AddSingleton<FocuserParkStore>();
+        s.AddSingleton<FocuserPark>();
         s.AddSingleton<IPrepMemory, InMemoryPrepMemory>();
         s.AddSingleton(sp => new PrepareFlow(sp.GetServices<IPrepTask>(), sp.GetRequiredService<ILogger<PrepareRunner>>(), simulate));
         s.AddSingleton<PrepareStarter>();
@@ -110,7 +112,7 @@ public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService ton
         var rigCtx = new PrepContext(null, profile.Site, profile.Rig.PixelScale is > 0 and var px ? px : 2.0,
             hasGuider: profile.Rig.HasGuider && !equipment.IsWithout("guider"),
             hasFocuser: !equipment.IsWithout("focuser"),
-            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
+            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now) { Clouds = c => tonight.CloudsAsync(profile.Site, c) };
         await flow.ResumeRigAsync(rigCtx, evening, done);
         if (phase == "rig" || !flow.Rig.AllDone) return "rig";
         switch (phase)
@@ -120,7 +122,7 @@ public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService ton
                 var ctx = new PrepContext(plan, night.Site, night.Rig.PixelScale is > 0 and var px2 ? px2 : 2.0,
                     hasGuider: night.Rig.HasGuider && !equipment.IsWithout("guider"),
                     hasFocuser: !equipment.IsWithout("focuser"),
-                    flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
+                    flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now) { Clouds = c => tonight.CloudsAsync(profile.Site, c) };
                 await flow.ResumeTargetAsync(ctx, done);
                 return phase == "shoot" && flow.Target.AllDone ? "shoot" : "target";
             case "wrap":
@@ -141,7 +143,7 @@ public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService ton
         var ctx = new PrepContext(null, profile.Site, profile.Rig.PixelScale is > 0 and var px ? px : 2.0,
             hasGuider: profile.Rig.HasGuider && !equipment.IsWithout("guider"),
             hasFocuser: !equipment.IsWithout("focuser"),
-            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
+            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now) { Clouds = c => tonight.CloudsAsync(profile.Site, c) };
         flow.StartRig(ctx, evening);
         return null;
     }
@@ -156,7 +158,7 @@ public sealed class PrepareStarter(PlanAssistant planner, Sky.TonightService ton
         var ctx = new PrepContext(null, profile.Site, profile.Rig.PixelScale is > 0 and var px ? px : 2.0,
             hasGuider: profile.Rig.HasGuider && !equipment.IsWithout("guider"),
             hasFocuser: !equipment.IsWithout("focuser"),
-            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now);
+            flow.ResultsFor(evening), mount, memory, () => DateTimeOffset.Now) { Clouds = c => tonight.CloudsAsync(profile.Site, c) };
         flow.StartWrap(ctx, evening);
         return null;
     }

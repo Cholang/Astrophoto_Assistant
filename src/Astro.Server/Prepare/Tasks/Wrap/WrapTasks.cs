@@ -280,7 +280,7 @@ public sealed class DarkTask(IWrapDevices devices) : IPrepTask
 }
 
 /// <summary>마무리 ③ 장비 정리: 적도의 홈·추적 끔 → 장비 연결 끊기 → N.I.N.A.·PHD2 닫기 (묻지 않음). 끝나면 오늘 밤 요약</summary>
-public sealed class PackTask(IWrapDevices devices) : IPrepTask
+public sealed class PackTask(IWrapDevices devices, FocuserPark? focuser = null) : IPrepTask
 {
     public string Id => "pack";
     public string Title => "장비 정리";
@@ -326,6 +326,12 @@ public sealed class PackTask(IWrapDevices devices) : IPrepTask
         }
         run.SubStep(1);
         run.Readout("pack", "2 / 3", "장비 연결 끊기", Tone.Busy);
+        if (focuser is not null)
+        {
+            // 연결을 끊기 전에 포커서를 0(노브 끝까지 넣은 위치)에 둔다 — 다음에 노브를 손으로 맞추지 않게. 못 해도 정리는 계속 (다음 점검에서 물음)
+            run.Status("포커서를 0으로 되돌리는 중입니다");
+            await focuser.ParkAsync(ct);
+        }
         run.Status("장비 연결을 끊는 중입니다");
         var disconnected = await devices.DisconnectAllAsync(ct);
         run.SubStep(2);

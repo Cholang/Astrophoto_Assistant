@@ -118,6 +118,8 @@ public sealed class PrepContext(
     public bool RefocusRequested { get; set; }
     /// <summary>앞 작업의 끝에서 시작 버튼 대신 고른 다른 선택 (StartAlternatives의 "next:" 뒤). 작업이 시작하며 읽고 지운다</summary>
     public string? StartChoice { get; set; }
+    /// <summary>시간별 구름양 예보 (CloudNotice). 없으면 알리지 않음</summary>
+    public Func<CancellationToken, Task<IReadOnlyList<Sky.CloudHour>>>? Clouds { get; init; }
     /// <summary>[모의] 낮에 흐름을 볼 때 대상이 보인다고 가정</summary>
     public bool IgnoreAltitude { get; set; }
 

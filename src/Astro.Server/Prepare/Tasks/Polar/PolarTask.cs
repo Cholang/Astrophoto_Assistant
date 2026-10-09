@@ -8,6 +8,8 @@ public interface IPolarDevices
     Task<DeviceResult> SetSiderealTrackingAsync(CancellationToken ct);
     /// <summary>PHD2가 가이드 카메라를 놓게 한다 (루프 멈춤 → Stopped 기다림 → 연결 해제). 한 번 시도</summary>
     Task<DeviceResult> HandOverGuideCameraAsync(CancellationToken ct);
+    /// <summary>PHD2 장비 연결 창이 열려 있는가 — 열려 있으면 PHD2가 카메라를 놓지 못하므로 넘겨받기 전에 본다 (사전 점검 F03)</summary>
+    Task<bool> Phd2DialogOpenAsync(CancellationToken ct) => Task.FromResult(false);
     /// <summary>SharpCap을 카메라·스크립트와 함께 실행하고 극축 정렬을 켠다</summary>
     Task<DeviceResult> StartSharpCapAsync(CancellationToken ct);
     /// <summary>첫 사진 → RA 회전 → 둘째 사진. 진행(별 개수·노출·회전 각도)을 알린다. 별이 모자라면 노출을 늘려 다시</summary>
@@ -48,7 +50,8 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
 
     public async Task<TaskOutcome> RunAsync(ITaskRun run, CancellationToken ct)
     {
-        if (!await HandOverAsync(run, ct) || !await FindPoleAsync(run, ct)) return await SkipAsync(run, ct);
+        var cloud = await CloudNotice.ReadAsync(run.Context, ct);
+        if (!await HandOverAsync(run, cloud, ct) || !await FindPoleAsync(run, cloud, ct)) return await SkipAsync(run, ct);
         var offset = await AlignAsync(run, ct);
         await GiveBackAsync(run, ct);
         var scale = await devices.GuidePixelScaleAsync(ct);
@@ -56,8 +59,9 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
         var result = new PolarResult(arcmin, offset.XPx, offset.YPx, grade, run.Context.Now());
         run.Context.Memory.LastPolarAlignedAt = run.Context.Now(); // 이 뒤로는 새 캘리브레이션 (CX-PREP-CODE-06)
         var line = arcmin is { } a ? $"{grade} · {a:F1}′" : $"{Math.Abs(offset.XPx):F0}·{Math.Abs(offset.YPx):F0}px";
+        // 캘리브레이션 버튼(남쪽 하늘로 이동 / 가이딩 없이 진행)을 누르기 전에 구름 예보를 다시 본다
         return new Completed(result, line, grade ?? "정렬 완료",
-            "가이드 카메라가 PHD2에 다시 연결되었습니다. 다음은 가이딩 보정값을 만드는 캘리브레이션입니다.");
+            CloudNotice.With("가이드 카메라가 PHD2에 다시 연결되었습니다. 다음은 가이딩 보정값을 만드는 캘리브레이션입니다.", await CloudNotice.ReadAsync(run.Context, ct)));
     }
 
     /// <summary>
@@ -79,15 +83,22 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
     }
 
     /// <summary>넘겨받기. 건너뛰기를 고르면 false</summary>
-    private async Task<bool> HandOverAsync(ITaskRun run, CancellationToken ct)
+    private async Task<bool> HandOverAsync(ITaskRun run, string? cloud, CancellationToken ct)
     {
         run.SubStep(0);
-        run.Guide("넘겨받기", "가이드 카메라를 PHD2에서 SharpCap으로 넘깁니다. 손대실 것은 없습니다.");
+        run.Guide("넘겨받기", CloudNotice.With("가이드 카메라를 PHD2에서 SharpCap으로 넘깁니다. 손대실 것은 없습니다.", cloud));
         run.Live("none");
         while (true)
         {
             run.Status("적도의 추적 속도를 항성으로 맞추는 중입니다");
             await devices.SetSiderealTrackingAsync(ct); // 실패해도 진행 (DESIGN.md ①)
+            if (await devices.Phd2DialogOpenAsync(ct))
+            {
+                // 넘겨받기를 세 번 헛되이 시도하지 않고 먼저 닫게 한다 (F03)
+                run.Status("PHD2의 장비 연결 창이 열려 있습니다. 이 창이 열려 있으면 PHD2가 가이드 카메라를 놓지 못합니다. 창을 닫은 뒤 다시 확인을 눌러 주세요", Tone.Warn);
+                if (await run.AskAsync([new("retry", "다시 확인", true), new("skip", "극축 정렬 건너뛰기")], ct) == "skip") return false;
+                continue;
+            }
             var released = DeviceResult.Fail("PHD2가 가이드 카메라를 놓지 않았습니다.");
             for (var i = 1; i <= HandOverTries && !released.Ok; i++)
             {
@@ -107,10 +118,10 @@ public sealed class PolarTask(IPolarDevices devices) : IPrepTask
     }
 
     /// <summary>극 찾기. 건너뛰기를 고르면 false</summary>
-    private async Task<bool> FindPoleAsync(ITaskRun run, CancellationToken ct)
+    private async Task<bool> FindPoleAsync(ITaskRun run, string? cloud, CancellationToken ct)
     {
         run.SubStep(1);
-        run.Guide("극 찾기", "회전 전후의 별 위치를 비교해 극축 오차를 계산합니다. 잠시 기다려 주세요.");
+        run.Guide("극 찾기", CloudNotice.With("회전 전후의 별 위치를 비교해 극축 오차를 계산합니다. 잠시 기다려 주세요.", cloud));
         run.Live("sharpcap", "/api/prepare/live/sharpcap");
         while (true)
         {

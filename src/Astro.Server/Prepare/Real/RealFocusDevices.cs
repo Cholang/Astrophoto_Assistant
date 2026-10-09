@@ -8,8 +8,10 @@ namespace Astro.Server.Prepare.Real;
 /// 2026-10-05 실기: Oasis 이동 정상, 범위 0~56000(제조사 설정 — 사용자가 0·최대를 설정 창에서 정함), 프로브 기온은 연결할 때만 잡힘.
 /// 자동초점은 별이 필요해 맑은 날 확인. 지점별 곡선은 N.I.N.A.가 끝난 뒤 기록으로만 줘서, 끝난 다음 한꺼번에 그린다.
 /// </summary>
-public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, FocuserZeroRequest zero, Engine.OpticsStore optics) : IFocusDevices
+public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, FocuserZeroRequest zero, Engine.OpticsStore optics, FocuserParkStore? parked = null) : IFocusDevices
 {
+    public async Task<bool> ConnectedAsync(CancellationToken ct) => (await rig.FocuserAsync(ct))?.Connected == true;
+
     /// <summary>N.I.N.A. 자동초점이 시작점에서 한쪽으로 가는 거리 = 처음 칸 수 × 칸 크기 (+ 백래시 보정 여유)</summary>
     public async Task<int> AutofocusReachAsync(CancellationToken ct)
     {
@@ -90,6 +92,7 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, Focuser
 
     public async Task<FocuserMove> MoveAsync(int position, CancellationToken ct)
     {
+        if (position != 0) parked?.Clear(); // 0을 떠나면 "0에 두고 끝냄"이 아니다 (FocuserPark)
         var problem = await rig.MoveFocuserAsync(Math.Clamp(position, 0, Max), ct);
         return problem is null ? new FocuserMove(true) : new FocuserMove(false, Stalled: problem.Contains("멈췄"), problem);
     }
@@ -100,6 +103,7 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, Focuser
     public async Task<AutofocusRun> AutofocusAsync(Action<int, double> point, CancellationToken ct)
     {
         var since = DateTimeOffset.Now;
+        parked?.Clear();
         if (!await rig.StartAutofocusAsync(ct)) return new AutofocusRun(false, true, 0, 0, false, Problem: "자동초점을 시작하지 못했습니다");
         var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(15);
         var shown = 0; // 화면에 이미 보낸 측정점 수 — 재는 동안 하나씩 (끝난 뒤 한꺼번에가 아니라)

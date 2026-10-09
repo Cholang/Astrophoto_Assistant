@@ -8,6 +8,8 @@ public interface IFocusDevices
     /// <summary>포커서 범위(걸음). 제조사 설정의 0~최대 (DESIGN.md ④ — 한계는 제조사 기능에 맡김)</summary>
     Task<(int Min, int Max)> LimitsAsync(CancellationToken ct);
     Task<int> PositionAsync(CancellationToken ct);
+    /// <summary>포커서가 연결되어 있는가 (모의는 항상)</summary>
+    Task<bool> ConnectedAsync(CancellationToken ct) => Task.FromResult(true);
     /// <summary>바깥 기온(°C). 프로브가 없으면 null</summary>
     Task<double?> TemperatureAsync(CancellationToken ct);
     Task<FocuserMove> MoveAsync(int position, CancellationToken ct);
