@@ -410,7 +410,7 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 return;
             }
             var primary = next is null ? _setup.Finish : new PrepAction("next", next.StartLabel, true);
-            cur.Actions = [primary, .. done.Extra ?? []];
+            cur.Actions = [primary, .. next?.StartAlternatives ?? [], .. done.Extra ?? []];
             Changed();
         }
     }
@@ -467,7 +467,13 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 break;
             case "device-check": _ = RecheckStopAsync(); break;
             default:
-                if (actionId.StartsWith("redo:", StringComparison.Ordinal)) _ = RedoAsync(actionId[5..], fromRunning: true);
+                if (actionId.StartsWith("next:", StringComparison.Ordinal))
+                {
+                    // 다음 작업을 다른 선택으로 시작 (예: 캘리브레이션을 "가이딩 없이 진행")
+                    _ctx!.StartChoice = actionId[5..];
+                    RunNext();
+                }
+                else if (actionId.StartsWith("redo:", StringComparison.Ordinal)) _ = RedoAsync(actionId[5..], fromRunning: true);
                 else return "지금은 그 버튼을 쓸 수 없습니다.";
                 break;
         }

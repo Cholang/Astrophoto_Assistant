@@ -14,6 +14,11 @@ public interface IPrepTask
     string Title { get; }
     /// <summary>이 작업을 시작하는 버튼 이름 (앞 작업의 끝 버튼). 예: "캘리브레이션 시작"</summary>
     string StartLabel { get; }
+    /// <summary>
+    /// 시작 버튼 옆에 둘 다른 선택 (id는 "next:선택"). 누르면 PrepContext.StartChoice에 선택을 넣고 이 작업을 시작한다 —
+    /// 예: 캘리브레이션의 "가이딩 없이 진행" (2026-10-09 사용자 제안: 움직이기 전 버튼에서 고르게)
+    /// </summary>
+    IReadOnlyList<PrepAction> StartAlternatives => [];
     IReadOnlyList<SubStep> SubSteps { get; }
 
     /// <summary>이번 준비에서 할 작업인가 (예: 가이더 없으면 캘리브레이션·가이딩은 건너뜀)</summary>
@@ -111,6 +116,8 @@ public sealed class PrepContext(
     public int ExposureSeconds { get; set; } = plan?.ExposureSeconds ?? DefaultExposureSeconds;
     /// <summary>센터링 실패·시험 사진이 "초점 다시 맞추기"를 고르면 켠다 — 초점 확인이 비교 없이 바로 다시 맞춘다 (한 번 쓰고 끈다)</summary>
     public bool RefocusRequested { get; set; }
+    /// <summary>앞 작업의 끝에서 시작 버튼 대신 고른 다른 선택 (StartAlternatives의 "next:" 뒤). 작업이 시작하며 읽고 지운다</summary>
+    public string? StartChoice { get; set; }
     /// <summary>[모의] 낮에 흐름을 볼 때 대상이 보인다고 가정</summary>
     public bool IgnoreAltitude { get; set; }
 

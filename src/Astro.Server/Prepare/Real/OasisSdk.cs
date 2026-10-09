@@ -14,13 +14,17 @@ public static class OasisSdk
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ScanFn(ref int number, int[] ids);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int IdFn(int id);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int TextFn(int id, byte[] text);
     // AOFocuserStatus: int 9개(기온 3 · position · moving · stallDetection · heatingOn · heatingPower · dcPower) + 예비 int 20개
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int StatusFn(int id, int[] status);
 
     public static bool Installed => File.Exists(DllPath);
 
-    /// <summary>첫 번째 Oasis 포커서의 지금 위치를 0으로 정한다 (움직이지 않음). 성공이면 null, 아니면 이유</summary>
-    public static string? SetZero()
+    /// <summary>
+    /// Oasis 포커서의 지금 위치를 0으로 정한다 (움직이지 않음). 성공이면 null, 아니면 이유.
+    /// 포커서가 여럿이면 드라이버에 저장된 일련번호(serial)와 같은 것만 — 모르면 첫 번째를 0점으로 잡지 않는다 (Codex E03)
+    /// </summary>
+    public static string? SetZero(string? serial = null)
     {
         if (!Installed) return "Oasis 포커서 드라이버(SDK)를 찾지 못했습니다";
         nint lib;
@@ -37,7 +41,25 @@ public static class OasisSdk
             var ids = new int[32];
             var count = 0;
             if (scan(ref count, ids) != 0 || count < 1) return "Oasis 포커서를 찾지 못했습니다. 포커서 USB 연결을 확인해 주세요";
-            var id = ids[0];
+            int id;
+            if (count == 1) id = ids[0];
+            else
+            {
+                var getSerial = Get<TextFn>(lib, "AOFocuserGetSerialNumber");
+                var match = ids.Take(count).Where(i =>
+                {
+                    if (string.IsNullOrEmpty(serial) || open(i) != 0) return false;
+                    try
+                    {
+                        var buf = new byte[64];
+                        var sn = getSerial(i, buf) == 0 ? System.Text.Encoding.ASCII.GetString(buf).TrimEnd('\0').Trim() : "";
+                        return sn.Length > 0 && (serial.EndsWith(sn, StringComparison.OrdinalIgnoreCase) || sn.EndsWith(serial, StringComparison.OrdinalIgnoreCase));
+                    }
+                    finally { close(i); }
+                }).ToList();
+                if (match.Count != 1) return $"Oasis 포커서가 {count}개 연결되어 있어 어느 것인지 알 수 없습니다. 쓰지 않는 포커서를 빼거나, 드라이버 설정에서 포커서를 골라 주세요";
+                id = match[0];
+            }
             if (open(id) is var o && o != 0) return $"Oasis 포커서를 열지 못했습니다 (코드 {o}) — 다른 프로그램이 쓰고 있을 수 있습니다";
             try
             {

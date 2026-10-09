@@ -105,6 +105,7 @@ internal sealed record CheckItem(string Id, string Title, string? Term, string? 
     public CheckResult Running(string message) => Make(CheckStatus.Running, message);
     public CheckResult Skip(string message) => Make(CheckStatus.Skipped, message);
     public CheckResult Fail(string message, Diagnosis diagnosis) => Make(CheckStatus.Fail, message, diagnosis);
+    public CheckResult Warn(string message, Diagnosis diagnosis) => Make(CheckStatus.Warn, message, diagnosis);
     private CheckResult Make(CheckStatus status, string message, Diagnosis? diagnosis = null) =>
         new(Id, Title, Term, Hint, Severity, status, message, diagnosis);
 }

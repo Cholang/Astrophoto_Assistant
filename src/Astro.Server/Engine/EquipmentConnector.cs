@@ -307,6 +307,10 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             await nina.ChangeProfileValueAsync("TelescopeSettings-FocalLength", Math.Round(scope.EffectiveFocalLength, 1).ToString(inv), ct);
             await nina.ChangeProfileValueAsync("TelescopeSettings-FocalRatio", Math.Round(scope.EffectiveFocalRatio, 2).ToString(inv), ct);
             await nina.ChangeProfileValueAsync("TelescopeSettings-Name", scope.Name, ct);
+            // 솔버가 있어야 센터링을 할 수 있다 (H01) — 망원경 칸에서 알린다
+            if (!options.Value.Simulate && await nina.GetActiveProfileAsync(ct) is { ValueKind: JsonValueKind.Object } prof && prof.TryGetProperty("PlateSolveSettings", out var ps)
+                && DevicePrecheck.Solver(Text(ps, "PlateSolverType"), Text(ps, "ASTAPLocation")) is { } solver)
+                return Make(d, CheckStatus.Warn, solver.Message, new Diagnosis([], solver.Fix));
             return Make(d, CheckStatus.Pass, scope.Optics);
         }
 
@@ -376,7 +380,16 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                     }
                 }
                 if (connectedNow) await nina.DisconnectAsync(kind, ct);
-                await WaitListedAsync(kind, d.Id, ct);
+                // N.I.N.A. 장비 목록에 끝내 없으면 연결을 시도하지 않는다 — N.I.N.A. 오류 알림 대신 할 일 (Codex B05)
+                if (await WaitListedAsync(kind, d.Id, ct) == false)
+                {
+                    live.Forget(kind);
+                    var miss = new Diagnosis(["드라이버가 이 PC에 설치되어 있지 않습니다", "장비 전원이 꺼져 있어 목록에 나타나지 않습니다(플러그인 카메라 등)", "N.I.N.A. 프로필의 장비가 다른 PC에서 고른 것입니다"],
+                        $"장비 전원과 USB를 확인하고, 처음 쓰는 장비라면 제조사 드라이버를 설치해 주세요. 아래 \"장비 변경\"에서 이 PC에 있는 장비를 다시 고를 수도 있습니다. (찾는 장비: {d.DriverName})");
+                    return d.Slot.Tier == Optional && kind != Hub
+                        ? Make(d, CheckStatus.Warn, $"N.I.N.A.가 {d.Slot.Role}{Reul(d.Slot.Role)} 찾지 못해 {d.Slot.Role} 없이 진행합니다", miss)
+                        : Make(d, CheckStatus.Fail, $"N.I.N.A.가 {d.Slot.Role}{Reul(d.Slot.Role)} 찾지 못했습니다", miss);
+                }
                 connected = await nina.ConnectAsync(kind, d.Id, ct) && await nina.IsConnectedAsync(kind, ct);
             }
             // 허브가 연결되면 USB 출력을 켜 둔다 — 가이드 카메라·포커서가 허브 USB에 붙어 있다 (자동 해결, 다시 읽어 확인 — 10/09: N.I.N.A.는 실패해도 성공이라 답함)
@@ -392,6 +405,18 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         if (connected)
         {
             choices.Connected(d.Slot.Kind);
+            // 연결 직후 점검 (docs/PRECHECK_DESIGN.md ④⑤): 시뮬레이터가 골라졌는지(A06), 카메라면 사진 저장 폴더(I01~I03)
+            if (!options.Value.Simulate)
+            {
+                var note = DevicePrecheck.Simulator(d.Slot.Role, d.Name);
+                if (note is null && d.Slot.Kind == "camera" && await nina.GetActiveProfileAsync(ct) is { ValueKind: JsonValueKind.Object } prof && prof.TryGetProperty("ImageFileSettings", out var files))
+                    note = DevicePrecheck.Storage(Text(files, "FilePath"));
+                if (note is null && d.Slot.Kind == "mount" && await nina.GetActiveProfileAsync(ct) is { ValueKind: JsonValueKind.Object } p2 && p2.TryGetProperty("AstrometrySettings", out var astro)
+                    && await nina.GetInfoAsync("mount", ct) is { ValueKind: JsonValueKind.Object } mi)
+                    note = DevicePrecheck.MountSite(Num(astro, "Latitude"), Num(astro, "Longitude"), Num(mi, "SiteLatitude"), Num(mi, "SiteLongitude"));
+                if (note is not null)
+                    return Make(d, note.Block ? CheckStatus.Fail : CheckStatus.Warn, note.Message, new Diagnosis([], note.Fix));
+            }
             return Make(d, CheckStatus.Pass, "연결되어 있습니다");
         }
 
@@ -407,6 +432,8 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     /// 허브의 "USB" 출력이 꺼져 있으면 켠다. N.I.N.A. 출력 바꾸기의 index는 출력 Id가 아니라 쓰기 가능한 출력 목록의 순서(10/09 실기 —
     /// Id를 넣으면 "Switch value updated"라고 답하고 실제로는 안 바뀜) → 순서로 바꾸고 다시 읽어 확인한다. 못 켜도 연결은 그대로 (뒤 장비 점검이 알린다)
     /// </summary>
+    private static double Num(JsonElement e, string key) => e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : double.NaN;
+
     /// <summary>"Regulated 0-13.2V adjustable DC2: DC2" → "DC2"</summary>
     internal static string ShortOutlet(string name) => name.Contains(':') ? name[(name.LastIndexOf(':') + 1)..].Trim() : name;
 
@@ -456,14 +483,19 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
     /// connect?to=가 "목록에 없음"(Sequence contains no matching element)으로 실패한다 (2026-10-08 실기: 켜고 9초 뒤 전원 허브 연결 실패, 목록은 11초 뒤 완성).
     /// 끝내 안 나타나면 그냥 연결을 시도해 원래 오류를 보인다
     /// </summary>
-    private async Task WaitListedAsync(string kind, string id, CancellationToken ct)
+    private async Task<bool?> WaitListedAsync(string kind, string id, CancellationToken ct)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        var sawList = false;
         while (DateTime.UtcNow < deadline)
         {
-            if ((await nina.ListDevicesAsync(kind, ct)).Any(x => x.Id == id)) return;
+            var list = await nina.ListDevicesAsync(kind, ct);
+            if (list.Any(x => x.Id == id)) return true;
+            sawList |= list.Count > 0;
             await Task.Delay(1500, ct);
         }
+        // 목록은 받았는데 끝내 없음 = N.I.N.A.가 이 장비를 찾지 못함 (Codex B05). 목록 자체를 못 받았으면 모름
+        return sawList ? false : null;
     }
 
     private async Task<Phd2Check.Problem?> CheckPhd2Async(CancellationToken ct)

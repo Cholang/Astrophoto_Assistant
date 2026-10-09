@@ -170,6 +170,33 @@ public class TaskIsolationTests
         Assert.True(dev.Dropped);
     }
 
+    /// <summary>이동을 세는 캘리브레이션 장비</summary>
+    private sealed class CountingCalibration(ICalibrationDevices inner) : ICalibrationDevices
+    {
+        public int Slews;
+        public Task<SlewOutcome> SlewToHourAngleAsync(double hourAngle, double decDeg, CancellationToken ct) { Slews++; return inner.SlewToHourAngleAsync(hourAngle, decDeg, ct); }
+        public Task<StarPick> SelectStarAsync(CancellationToken ct) => inner.SelectStarAsync(ct);
+        public Task<CalibrationData> CalibrateAsync(Action<string, int> step, CancellationToken ct) => inner.CalibrateAsync(step, ct);
+        public Task<bool> HasCalibrationAsync(CancellationToken ct) => inner.HasCalibrationAsync(ct);
+        public Task<bool> StopAsync(CancellationToken ct) => inner.StopAsync(ct);
+        public Task<CalibrationEndState> ReadEndStateAsync(CancellationToken ct) => inner.ReadEndStateAsync(ct);
+    }
+
+    [Fact]
+    public async Task 시작_버튼_옆_가이딩_없이_진행을_고르면_적도의를_움직이지_않는다()
+    {
+        var devices = new CountingCalibration(new SimulatedCalibrationDevices(Fast, new SimFaults()));
+        var task = new CalibrationTask(devices);
+        Assert.Contains(task.StartAlternatives, a => a.Id == "next:noguide");
+        var ctx = Harness.Context();
+        ctx.StartChoice = "noguide";
+        var (done, _) = await RunAlone(task, ctx);
+        Assert.Equal(0, devices.Slews);
+        Assert.False(ctx.HasGuider);
+        Assert.Null(ctx.StartChoice);
+        Assert.IsType<CalibrationResult>(done.Result);
+    }
+
     [Fact]
     public async Task 센터링_단독_카메라_방향을_기억한다()
     {

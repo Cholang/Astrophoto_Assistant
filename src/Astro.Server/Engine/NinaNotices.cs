@@ -97,6 +97,13 @@ public static class NinaLogRules
                 $"케이블을 확인해 주세요. 다른 구멍에 꽂았다면 원래 구멍에 다시 꽂거나, 장비 드라이버 설정에서 {com} 대신 새 포트를 골라 주세요.");
         }
 
+        // 포트를 다른 프로그램이 쓰고 있음 (Codex B04) — 점유 가능성으로만 말한다
+        if (Regex.Match(all, @"(COM\d+)", RegexOptions.IgnoreCase) is { Success: true } busy
+            && (Has("Access to the port") || Has("is denied") || Has("액세스가 거부") || Has("사용 중")))
+            return ("connect", $"USB 포트({busy.Groups[1].Value.ToUpperInvariant()})를 열지 못했습니다",
+                ["다른 프로그램(제조사 설정 프로그램, 다른 N.I.N.A., SharpCap 등)이 그 포트를 쓰고 있을 수 있습니다", "장비를 뺐다 꽂는 중이었습니다"],
+                "그 장비를 쓰는 다른 프로그램을 닫은 뒤 다시 연결해 주세요.");
+
         // 포커서 멈춤 (자동초점 실패의 원인으로 함께 남는다 — 이쪽을 먼저)
         if (Has("Focuser stuck at position"))
             return ("focus", "포커서가 움직이지 않습니다",

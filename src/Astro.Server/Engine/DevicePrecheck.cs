@@ -28,10 +28,15 @@ public static class DevicePrecheck
         if (host.DriverComPort(kind, id) is { } com)
         {
             if (!await WaitAsync(() => host.ComPorts().Contains(com, StringComparer.OrdinalIgnoreCase), wait, ct))
+            {
+                // 지금 보이는 USB 직렬 포트를 함께 알린다 — 번호가 바뀌었으면 사용자가 고를 수 있게. 번호만으로 그 장비라고 단정하지 않는다 (Codex B02·B03)
+                var others = host.UsbSerialPorts().Where(p => !p.Port.Equals(com, StringComparison.OrdinalIgnoreCase)).ToList();
+                var seen = others.Count == 0 ? "" : $" 지금 PC에 보이는 USB 직렬 포트: {string.Join(", ", others.Select(p => $"{p.Port}({p.Name})"))}.";
                 return new(false, $"{role}의 USB 포트({com})가 PC에 보이지 않습니다",
-                    kind == "mount"
+                    (kind == "mount"
                         ? $"적도의 전원이 켜져 있는지, USB 케이블이 꽂혀 있는지 확인해 주세요. 다른 USB 구멍에 꽂았다면 적도의 드라이버 설정에서 {com} 대신 새 포트를 골라 주세요."
-                        : $"{role} 전원과 USB 케이블을 확인해 주세요. 다른 USB 구멍에 꽂았다면 드라이버 설정에서 {com} 대신 새 포트를 골라 주세요.");
+                        : $"{role} 전원과 USB 케이블을 확인해 주세요. 다른 USB 구멍에 꽂았다면 드라이버 설정에서 {com} 대신 새 포트를 골라 주세요.") + seen);
+            }
         }
 
         // ② 제조사를 아는 USB 장치가 PC에 있나 (C01·E01)
@@ -42,6 +47,72 @@ public static class DevicePrecheck
         }
         return Result.Pass;
     }
+
+    /// <summary>연결 직후 점검 결과: Block = 이대로는 촬영할 수 없음(실패), 아니면 알리고 진행(경고)</summary>
+    public sealed record Note(bool Block, string Message, string Fix);
+
+    /// <summary>
+    /// 사진 저장 폴더 (I01·I02·I03): 있고 쓸 수 있는가, 남은 공간, 동기화 폴더인가. 장당 약 76MB(X-T5 RAW → FITS, 10/08 실기)
+    /// </summary>
+    public static Note? Storage(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return null; // 모름
+        if (!Directory.Exists(folder))
+            return new(true, $"사진 저장 폴더가 없습니다 ({folder})", "N.I.N.A. 옵션 → 이미징의 이미지 파일 경로를 있는 폴더로 바꾸거나 그 폴더를 만들어 주세요. 외장 디스크라면 연결돼 있는지 확인해 주세요.");
+        try
+        {
+            var probe = Path.Combine(folder, $".aira-write-test-{Guid.NewGuid():N}");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return new(true, $"사진 저장 폴더에 쓸 수 없습니다 ({folder})", "폴더 권한과 디스크 상태를 확인하거나, N.I.N.A. 이미지 파일 경로를 다른 폴더로 바꿔 주세요.");
+        }
+        try
+        {
+            var free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(folder))!).AvailableFreeSpace;
+            const long frame = 76L * 1024 * 1024;
+            if (free < 2L * 1024 * 1024 * 1024)
+                return new(true, $"사진 저장 디스크 공간이 부족합니다 (남은 {free / 1024 / 1024 / 1024.0:0.0}GB, 약 {free / frame}장)", "디스크를 비우거나 N.I.N.A. 이미지 파일 경로를 여유 있는 디스크로 바꿔 주세요.");
+            if (free < 20L * 1024 * 1024 * 1024)
+                return new(false, $"사진 저장 공간이 넉넉하지 않습니다 (남은 {free / 1024 / 1024 / 1024.0:0}GB, 약 {free / frame}장)", "오늘 밤 계획보다 적으면 디스크를 비워 두세요.");
+        }
+        catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException) { }
+        if (folder.Contains("OneDrive", StringComparison.OrdinalIgnoreCase) || folder.Contains("Dropbox", StringComparison.OrdinalIgnoreCase) || folder.Contains("Google Drive", StringComparison.OrdinalIgnoreCase))
+            return new(false, "사진 저장 폴더가 동기화 폴더 안에 있습니다", "장당 76MB를 밤새 올리느라 저장이 늦어지거나 파일이 잠길 수 있습니다. N.I.N.A. 이미지 파일 경로를 동기화 폴더 밖(예: D 드라이브의 Photo 폴더)으로 바꾸는 것을 권합니다.");
+        return null;
+    }
+
+    /// <summary>플레이트 솔버 (H01): ASTAP이면 실행 파일과 별 목록(데이터베이스 *.1476·*.290)이 있는가. 센터링·대상 확인에 필요</summary>
+    public static Note? Solver(string? type, string? astapPath)
+    {
+        if (!string.Equals(type, "ASTAP", StringComparison.OrdinalIgnoreCase)) return null; // 다른 솔버는 아직 모름
+        if (string.IsNullOrWhiteSpace(astapPath) || !File.Exists(astapPath))
+            return new(false, "플레이트 솔빙 프로그램(ASTAP)을 찾지 못했습니다", "ASTAP을 설치하고 N.I.N.A. 옵션 → 플레이트 솔빙에서 ASTAP 경로를 지정해 주세요. 없으면 대상 가운데 맞추기(센터링)를 할 수 없습니다.");
+        var dir = Path.GetDirectoryName(astapPath)!;
+        var hasDb = Directory.EnumerateFiles(dir, "*.1476").Any() || Directory.EnumerateFiles(dir, "*.290").Any();
+        return hasDb ? null : new(false, "ASTAP 별 목록(데이터베이스)이 없습니다", "ASTAP 홈페이지에서 별 목록(D50 등)을 받아 ASTAP 폴더에 설치해 주세요. 없으면 센터링을 할 수 없습니다.");
+    }
+
+    /// <summary>
+    /// 적도의에 저장된 관측지가 N.I.N.A.(아이라가 넣은 관측지)와 다른가 (Codex D02) — 다르면 대상 위치·자오선 반전 시각이 틀어진다.
+    /// 0.05°(약 5km) 넘게 다르면 알린다. 값을 모르면(0·NaN) 확인하지 않는다
+    /// </summary>
+    public static Note? MountSite(double profileLat, double profileLon, double mountLat, double mountLon)
+    {
+        static bool Known(double v) => double.IsFinite(v) && v != 0;
+        if (!Known(profileLat) || !Known(mountLat) || !Known(profileLon) || !Known(mountLon)) return null;
+        if (Math.Abs(profileLat - mountLat) <= 0.05 && Math.Abs(profileLon - mountLon) <= 0.05) return null;
+        return new(false, $"적도의에 저장된 관측지가 다릅니다 (적도의 {mountLat:0.00}°, {mountLon:0.00}° · 아이라 {profileLat:0.00}°, {profileLon:0.00}°)",
+            "N.I.N.A.가 관측지를 맞출지 물으면 N.I.N.A.(아이라) 값을 적도의로 보내기를 골라 주세요. 다르면 대상 위치와 자오선 반전 시각이 틀어질 수 있습니다.");
+    }
+
+    /// <summary>실장비로 쓰는데 N.I.N.A.·PHD2 장비가 시뮬레이터 (A06) — 시험 구성일 수 있어 막지 않고 알린다</summary>
+    public static Note? Simulator(string role, string name) =>
+        name.Contains("Simulator", StringComparison.OrdinalIgnoreCase)
+            ? new(false, $"{role}{(Josa(role) ? "이" : "가")} 시뮬레이터입니다 ({name})", "실제 장비로 촬영하려면 장비 변경에서 실제 장비를 골라 주세요. 시험 중이면 그대로 진행해도 됩니다.")
+            : null;
 
     /// <summary>드라이버 Id로 아는 USB 제조사 번호 (없으면 확인하지 않음)</summary>
     internal static (string Vid, string Fix)? UsbVendor(string kind, string id)
@@ -87,6 +158,8 @@ public static class DevicePrecheck
     public interface IHostDevices
     {
         IReadOnlyList<string> ComPorts();
+        /// <summary>USB에 붙은 직렬 포트와 장치 이름 (블루투스 직렬 포트는 뺀다 — 장비가 아님)</summary>
+        IReadOnlyList<(string Port, string Name)> UsbSerialPorts();
         bool UsbPresent(string vid);
         /// <summary>ASCOM 드라이버 설정의 COM 포트 (직렬 드라이버가 아니거나 모르면 null)</summary>
         string? DriverComPort(string kind, string id);
@@ -103,6 +176,24 @@ public static class DevicePrecheck
             if (!OperatingSystem.IsWindows()) return [];
             using var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DEVICEMAP\SERIALCOMM");
             return key is null ? [] : key.GetValueNames().Select(n => key.GetValue(n) as string).OfType<string>().ToList();
+        }
+
+        public IReadOnlyList<(string Port, string Name)> UsbSerialPorts()
+        {
+            if (!OperatingSystem.IsWindows()) return [];
+            try
+            {
+                using var s = new ManagementObjectSearcher("SELECT Name, PNPDeviceID FROM Win32_PnPEntity WHERE Name LIKE '%(COM%'");
+                var list = new List<(string, string)>();
+                foreach (var o in s.Get())
+                {
+                    var name = o["Name"] as string ?? "";
+                    if (!((o["PNPDeviceID"] as string ?? "").StartsWith("USB", StringComparison.OrdinalIgnoreCase))) continue;
+                    if (Regex.Match(name, @"\((COM\d+)\)") is { Success: true } m) list.Add((m.Groups[1].Value, name[..m.Index].Trim()));
+                }
+                return list;
+            }
+            catch (ManagementException) { return []; }
         }
 
         public bool UsbPresent(string vid)

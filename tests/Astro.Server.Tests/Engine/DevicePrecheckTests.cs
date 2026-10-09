@@ -12,7 +12,9 @@ public class DevicePrecheckTests
         public Dictionary<string, string> DriverPorts = new() { ["ASCOM.OnStep.Telescope"] = "COM3" };
         public DateTimeOffset? Empire, Inserted;
         public bool Closed;
+        public List<(string Port, string Name)> Serial = [];
         public IReadOnlyList<string> ComPorts() => Ports;
+        public IReadOnlyList<(string Port, string Name)> UsbSerialPorts() => Serial;
         public bool UsbPresent(string vid) => Usb.Contains(vid);
         public string? DriverComPort(string kind, string id) => DriverPorts.GetValueOrDefault(id);
         public DateTimeOffset? EmpireStartedAt() => Empire;
@@ -37,6 +39,15 @@ public class DevicePrecheckTests
         Assert.False(r.Ok);
         Assert.Contains("COM3", r.Message);
         Assert.Contains("적도의 전원", r.Fix);
+    }
+
+    [Fact]
+    public async Task 포트_번호가_바뀌었으면_지금_보이는_포트를_알려_준다_CodexB02()
+    {
+        var h = new FakeHost { Ports = ["COM4", "COM5"], Serial = [("COM4", "USB-SERIAL CH340"), ("COM5", "Silicon Labs CP210x USB to UART Bridge")] };
+        var r = await Check(h, "mount", "ASCOM.OnStep.Telescope", "적도의");
+        Assert.False(r.Ok);
+        Assert.Contains("COM5(Silicon Labs", r.Fix);
     }
 
     [Fact]

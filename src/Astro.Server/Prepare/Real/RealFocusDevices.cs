@@ -25,7 +25,9 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, Focuser
             return new FocuserZero(true, false, Unsupported: true);
         if ((await rig.FocuserAsync(ct))?.Connected == true && !await rig.DisconnectAsync("focuser", ct))
             return new FocuserZero(true, false, Problem: "N.I.N.A.에서 포커서 연결을 끊지 못했습니다");
-        var problem = await Task.Run(OasisSdk.SetZero, ct);
+        // 포커서가 여럿이면 드라이버에 저장된 일련번호로 고른다 (Codex E03)
+        var serial = OperatingSystem.IsWindows() ? Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\ASCOM\Focuser Drivers\ASCOM.AOFocuser.Focuser")?.GetValue("SerialNumber") as string : null;
+        var problem = await Task.Run(() => OasisSdk.SetZero(serial), ct);
         // 0점이 안 됐어도 포커서는 다시 연결해 둔다
         var back = await rig.ConnectAsync("focuser", ct) && (await rig.FocuserAsync(ct))?.Connected == true;
         if (!back) problem = (problem is null ? "" : problem + " · ") + "N.I.N.A.에 포커서를 다시 연결하지 못했습니다";

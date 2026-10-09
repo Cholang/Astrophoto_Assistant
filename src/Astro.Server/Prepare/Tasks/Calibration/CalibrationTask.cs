@@ -36,7 +36,9 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
 
     public string Id => "calibration";
     public string Title => "캘리브레이션";
-    public string StartLabel => "캘리브레이션 시작";
+    // 누르면 적도의가 크게 움직이므로 어디로 가는지 버튼에 쓴다. 남쪽이 막힌 곳이면 옆의 "가이딩 없이 진행" (2026-10-09 사용자 제안 — 따로 묻지 않고 버튼에서)
+    public string StartLabel => "캘리브레이션 시작 · 남쪽 하늘로 이동";
+    public IReadOnlyList<PrepAction> StartAlternatives { get; } = [new("next:noguide", "가이딩 없이 진행")];
     public IReadOnlyList<SubStep> SubSteps { get; } = [new("move", "위치로 이동"), new("star", "별 선택"), new("measure", "움직임 측정")];
 
     public bool AppliesTo(PrepContext ctx) => ctx.HasGuider;
@@ -45,6 +47,13 @@ public sealed class CalibrationTask(ICalibrationDevices devices) : IPrepTask
     {
         var ctx = run.Context;
         var evening = TonightService.EveningOf(ctx.Now());
+        // 앞 작업 끝에서 "가이딩 없이 진행"을 골랐으면 움직이지 않고 끝낸다
+        if (ctx.StartChoice == "noguide")
+        {
+            ctx.StartChoice = null;
+            return await NoGuideAsync(ctx, evening, "가이딩 없이 진행을 고름", ct);
+        }
+        ctx.StartChoice = null;
         ctx.Results.Remove(typeof(GuiderSkipped)); // 캘리브레이션을 다시 하면 가이딩도 다시 쓴다
         // 같은 밤 + 마지막 극축 정렬 뒤에 만든 보정값만 재사용 (극축 정렬을 다시 했으면 새로, CX-PREP-CODE-06)
         if (ctx.Memory.LastCalibration is { } last && last.Evening == evening && last.At > (ctx.Memory.LastPolarAlignedAt ?? DateTimeOffset.MinValue)

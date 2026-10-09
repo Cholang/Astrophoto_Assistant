@@ -29,9 +29,14 @@ public sealed class EngineStarter(NinaApiClient nina, InternetCheck internet, Ni
         // 1. N.I.N.A. 켜기
         var justLaunched = false;
         IDisposable? behind = null; // N.I.N.A.가 켜지며 AA 위로 뜨지 않게 (응답할 때까지 + 조금 더)
-        if (Process.GetProcessesByName("NINA").Length > 0)
+        if (Process.GetProcessesByName("NINA").Length is var running and > 0)
         {
-            yield return Launch.Pass("이미 켜져 있습니다");
+            // 여러 개가 켜져 있으면 어느 N.I.N.A.가 Advanced API(1888)를 쓰는지 알 수 없다 (Codex A05) — 아이라가 닫지는 않고 알린다
+            yield return running > 1
+                ? Launch.Warn($"N.I.N.A.가 {running}개 켜져 있습니다", new Diagnosis(
+                    ["N.I.N.A.를 두 번 켰습니다", "다른 프로필로 하나를 더 열었습니다"],
+                    "쓰지 않는 N.I.N.A.를 닫고 하나만 남겨 주세요. 아이라는 연결 통로(Advanced API)에 응답하는 N.I.N.A.를 씁니다."))
+                : Launch.Pass("이미 켜져 있습니다");
         }
         else
         {
