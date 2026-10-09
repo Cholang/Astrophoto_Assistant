@@ -58,9 +58,10 @@ export default function LiveView({ current, extras, simulated = true }: { curren
   if (!simulated && live?.url && !extras?.grid)
     return (
       <div className={styles.view} aria-hidden="true">
-        <RealImage url={live.url} refresh={kind === 'sharpcap' || kind === 'guide-image'} stamp={live.observedAt} />
+        <RealImage url={live.url} refresh={kind === 'sharpcap' || kind === 'guide-image' || kind === 'focus-curve'} stamp={live.observedAt} />
         {kind === 'guide-image' && <GuidingGraph data={live.data} />}
         {kind === 'test-photo' && <Histogram data={live.data} />}
+        {kind === 'focus-curve' && <FocusPanel data={live.data} />}
       </div>
     )
 
@@ -71,6 +72,58 @@ export default function LiveView({ current, extras, simulated = true }: { curren
       </svg>
       {kind === 'guide-image' && <GuidingGraph data={live?.data} />}
       {kind === 'test-photo' && !extras?.grid && <Histogram data={live?.data} />}
+    </div>
+  )
+}
+
+/**
+ * 자동초점 진행 (2026-10-09 사용자 요청 — N.I.N.A.의 자동초점 창 대신): 바탕은 N.I.N.A.가 찍은 마지막 사진, 오른쪽 세로 가운데에 측정점.
+ * 가로 = 포커서 위치, 세로 = 별 크기(HFR, 아래가 작음 = 초점). 별을 못 찾은 지점(HFR 0)은 아래 줄에 빈 점으로
+ */
+function FocusPanel({ data }: { data: unknown }) {
+  const d = data as { points?: { pos: number; hfr: number }[]; last?: number | null } | null
+  const pts = d?.points ?? []
+  const W = 320
+  const H = 168
+  const x0 = 20
+  const x1 = W - 20
+  const top = 40
+  const y0 = 128
+  const good = pts.filter((p) => p.hfr > 0)
+  const xs = pts.map((p) => p.pos).concat(d?.last != null ? [d.last] : [])
+  const lo = xs.length ? Math.min(...xs) : 0
+  const hi = xs.length ? Math.max(...xs) : 1
+  const span = Math.max(1, hi - lo)
+  const maxH = good.length ? Math.max(...good.map((p) => p.hfr)) : 1
+  const x = (pos: number) => x0 + ((x1 - x0) * (pos - lo)) / span
+  const y = (h: number) => y0 - ((y0 - top) * h) / (maxH * 1.15)
+  const sorted = [...good].sort((a, b) => a.pos - b.pos)
+  const best = good.length ? good.reduce((a, b) => (b.hfr < a.hfr ? b : a)) : null
+  return (
+    <div className={styles.hist}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="자동초점 측정점">
+        <text x={x0} y={24} className={styles.small}>
+          자동초점 · {pts.length} 지점
+        </text>
+        <text x={x1} y={24} textAnchor="end" className={styles.small}>
+          {best ? `가장 작은 별 ${best.hfr.toFixed(1)} · ${best.pos.toLocaleString()}` : pts.length ? '별을 찾지 못함' : '기다리는 중'}
+        </text>
+        <line x1={x0} y1={y0} x2={x1} y2={y0} className={styles.axis} />
+        {sorted.length > 1 && <path d={sorted.map((p, i) => `${i ? 'L' : 'M'}${x(p.pos).toFixed(1)},${y(p.hfr).toFixed(1)}`).join('')} className={styles.ra} />}
+        {pts.map((p, i) =>
+          p.hfr > 0 ? (
+            <circle key={i} cx={x(p.pos)} cy={y(p.hfr)} r={4} className={styles.accFill} />
+          ) : (
+            <circle key={i} cx={x(p.pos)} cy={y0 - 6} r={4} className={styles.mark} />
+          ),
+        )}
+        <text x={x0} y={y0 + 24} className={styles.small}>
+          {lo.toLocaleString()}
+        </text>
+        <text x={x1} y={y0 + 24} textAnchor="end" className={styles.small}>
+          {hi.toLocaleString()}
+        </text>
+      </svg>
     </div>
   )
 }

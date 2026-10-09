@@ -84,6 +84,7 @@ public static class AppServer
         builder.Services.AddSingleton<NinaNotices>();
         builder.Services.AddHostedService<NinaLogWatcher>();
         builder.Services.AddHostedService<NinaToastHider>();
+        builder.Services.AddHostedService<NinaAutofocusWindowHider>();
         builder.Services.AddTransient<SiteService>();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 

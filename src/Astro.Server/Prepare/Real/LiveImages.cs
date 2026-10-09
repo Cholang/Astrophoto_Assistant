@@ -7,7 +7,7 @@ namespace Astro.Server.Prepare.Real;
 /// 하늘 화면에 보낼 실제 이미지 (실장비 모드). 종류마다 마지막 한 장: sharpcap(SharpCap 화면 영상) · guide(PHD2 사진) · photo(솔빙 사진) · test(시험 사진).
 /// 화면은 /api/prepare/live/{kind}로 받는다. sharpcap은 요청할 때마다 새로 캡처, guide는 PHD2가 지금 사진을 저장(save_image)하게 해 읽는다(2초에 한 번).
 /// </summary>
-public sealed class LiveImages(Phd2Client phd2)
+public sealed class LiveImages(Phd2Client phd2, Astro.Nina.NinaApiClient nina)
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<string, (byte[] Bytes, string Type, DateTimeOffset At)> _images = [];
@@ -22,7 +22,20 @@ public sealed class LiveImages(Phd2Client phd2)
         // SharpCap: 스크립트가 저장한 영상만 (창 캡처는 메뉴·패널까지 나와 하늘이 작게 보임 — 2026-10-08 실기). 저장본이 없을 때만 창 캡처
         if (kind == "sharpcap" && (SharpCapBridge.LatestView() ?? WindowCapture.Capture("SharpCap")) is { } shot) Set("sharpcap", shot);
         if (kind == "guide") await RefreshGuideAsync(ct);
+        if (kind == "nina") await RefreshNinaAsync(ct);
         lock (_gate) return _images.TryGetValue(kind, out var v) ? v : null;
+    }
+
+    /// <summary>
+    /// N.I.N.A.가 화면에 보여 주는 마지막 사진 (자동초점 중 찍는 사진 등 — 2026-10-09 사용자 요청: N.I.N.A. 자동초점 창 대신 아이라 하늘 화면에).
+    /// prepared-image는 JPEG를 바로 준다. 2초에 한 번만
+    /// </summary>
+    private async Task RefreshNinaAsync(CancellationToken ct)
+    {
+        lock (_gate)
+            if (_images.TryGetValue("nina", out var g) && DateTimeOffset.Now - g.At < TimeSpan.FromSeconds(2)) return;
+        if (await nina.GetBytesAsync("prepared-image?resize=true&size=1600x1067&quality=80", TimeSpan.FromSeconds(10), ct) is { Length: > 0 } jpg)
+            Set("nina", jpg, "image/jpeg");
     }
 
     private async Task RefreshGuideAsync(CancellationToken ct)

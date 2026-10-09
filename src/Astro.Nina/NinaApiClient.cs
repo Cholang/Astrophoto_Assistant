@@ -86,6 +86,21 @@ public sealed class NinaApiClient(HttpClient http)
         }
     }
 
+    /// <summary>JSON이 아닌 응답(사진 등)을 그대로. 실패면 null</summary>
+    public async Task<byte[]?> GetBytesAsync(string path, TimeSpan timeout, CancellationToken ct = default)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+        try
+        {
+            using var res = await http.GetAsync(path, cts.Token);
+            if (!res.IsSuccessStatusCode || res.Content.Headers.ContentType?.MediaType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == false) return null;
+            return await res.Content.ReadAsByteArrayAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
+        catch (HttpRequestException) { return null; }
+    }
+
     private async Task<JsonElement?> GetResponseAsync(string path, TimeSpan timeout, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);

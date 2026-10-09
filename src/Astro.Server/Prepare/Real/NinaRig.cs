@@ -411,6 +411,19 @@ public sealed class NinaRig(NinaApiClient nina)
         return names;
     }
 
+    /// <summary>since 뒤의 자동초점 측정점 (AUTOFOCUS-POINT-ADDED — 위치·HFR, 잴 때마다 하나씩, 2026-10-09 확인). 시간 순</summary>
+    public async Task<IReadOnlyList<(int Position, double Hfr)>> AutofocusPointsAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("event-history", Short, ct);
+        var points = new List<(DateTimeOffset At, int Position, double Hfr)>();
+        if (r.Response is not { ValueKind: JsonValueKind.Array } list) return [];
+        foreach (var e in list.EnumerateArray())
+            if (e.TryGetProperty("Event", out var n) && n.GetString() == "AUTOFOCUS-POINT-ADDED"
+                && e.TryGetProperty("Time", out var t) && DateTimeOffset.TryParse(t.GetString(), Inv, DateTimeStyles.None, out var at) && at >= since)
+                points.Add((at, (int)Num(e, "Position"), Num(e, "HFR")));
+        return points.OrderBy(p => p.At).Select(p => (p.Position, p.Hfr)).ToList();
+    }
+
     /// <summary>since 뒤에 prefix로 시작하는 이벤트가 마지막으로 일어난 시각 (없으면 null) — 진행이 멈췄는지 볼 때</summary>
     public async Task<DateTimeOffset?> LastEventAtAsync(string prefix, DateTimeOffset since, CancellationToken ct)
     {

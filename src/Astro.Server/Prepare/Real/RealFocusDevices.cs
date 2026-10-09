@@ -102,9 +102,12 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, Focuser
         var since = DateTimeOffset.Now;
         if (!await rig.StartAutofocusAsync(ct)) return new AutofocusRun(false, true, 0, 0, false, Problem: "자동초점을 시작하지 못했습니다");
         var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(15);
+        var shown = 0; // 화면에 이미 보낸 측정점 수 — 재는 동안 하나씩 (끝난 뒤 한꺼번에가 아니라)
         while (DateTime.UtcNow < deadline)
         {
             await Task.Delay(2000, ct);
+            var live = await rig.AutofocusPointsAsync(since, ct);
+            for (; shown < live.Count; shown++) point(live[shown].Position, live[shown].Hfr);
             // N.I.N.A. 자동초점이 끝·실패 신호 없이 멈추는 일이 있다(2026-10-08 시뮬레이터: 측정점 5개 뒤 조용히 멈춤, 취소해야 끝남) →
             // 측정점(AUTOFOCUS-POINT-ADDED)이 Stall 동안 늘지 않으면 멈춘 것으로 보고 취소
             var progress = await rig.LastEventAtAsync("AUTOFOCUS", since, ct) ?? since;
@@ -125,7 +128,7 @@ public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, Focuser
             if (af.TryGetProperty("MeasurePoints", out var mp) && mp.ValueKind == JsonValueKind.Array)
                 foreach (var p in mp.EnumerateArray())
                     if (NinaRig.Num(p, "Value") is var v && double.IsFinite(v)) points.Add(((int)NinaRig.Num(p, "Position"), v));
-            foreach (var (pos, hfr) in points) point(pos, hfr);
+            if (shown == 0) foreach (var (pos, hfr) in points) point(pos, hfr); // 실시간으로 못 받았을 때만 끝난 기록으로
             var best = af.GetProperty("CalculatedFocusPoint");
             var r2 = af.TryGetProperty("RSquares", out var rs) ? Best(rs) : double.NaN;
             return new AutofocusRun(true, points.Count > 0, (int)NinaRig.Num(best, "Position"), NinaRig.Num(best, "Value"),

@@ -365,3 +365,53 @@ public sealed class NinaToastHider(NinaNotices notices) : BackgroundService
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint hWnd, int cmd);
     [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
 }
+
+/// <summary>
+/// N.I.N.A. 자동초점 창 숨기기 (2026-10-09 사용자 요청 — 아이라 하늘 화면이 N.I.N.A. 사진과 측정점을 대신 보여 준다).
+/// 창 제목은 한국어 N.I.N.A.에서 "오토포커스"(본 창에 딸린 창, 자동초점이 끝나도 남음 — 실기 확인), 영어는 "Autofocus".
+/// 아이라 창이 앞에 있을 때만 숨긴다 — 사용자가 N.I.N.A.로 가 있으면 그대로 보인다
+/// </summary>
+public sealed class NinaAutofocusWindowHider : BackgroundService
+{
+    private static readonly string[] Titles = ["오토포커스", "Autofocus", "Auto Focus", "AutoFocus"];
+
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        while (!ct.IsCancellationRequested)
+        {
+            try { HideOnce(); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            try { await Task.Delay(300, ct); } catch (OperationCanceledException) { return; }
+        }
+    }
+
+    private static void HideOnce()
+    {
+        var own = Process.GetCurrentProcess().MainWindowHandle;
+        if (own == 0 || GetForegroundWindow() != own) return;
+        var pids = Process.GetProcessesByName("NINA").Select(p => { using (p) return (uint)p.Id; }).ToHashSet();
+        if (pids.Count == 0) return;
+        var title = new StringBuilder(64);
+        EnumWindows((h, _) =>
+        {
+            GetWindowThreadProcessId(h, out var pid);
+            if (pids.Contains(pid) && IsWindowVisible(h) && GetWindow(h, GwOwner) != 0)
+            {
+                title.Clear();
+                GetWindowText(h, title, title.Capacity);
+                if (Titles.Contains(title.ToString().Trim(), StringComparer.OrdinalIgnoreCase)) ShowWindowAsync(h, 0);
+            }
+            return true;
+        }, 0);
+    }
+
+    private const uint GwOwner = 4;
+    private delegate bool EnumProc(nint hWnd, nint lParam);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc proc, nint lParam);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint hWnd, out uint pid);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(nint hWnd, StringBuilder text, int max);
+    [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint hWnd, int cmd);
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern nint GetWindow(nint hWnd, uint cmd);
+}

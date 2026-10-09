@@ -30,7 +30,7 @@ public class RealDeviceTests(ITestOutputHelper output)
     public async Task 실장비_시험_사진()
     {
         if (!Enabled) return;
-        var live = new LiveImages(Phd2());
+        var live = new LiveImages(Phd2(), new NinaApiClient(new HttpClient { BaseAddress = new Uri("http://localhost:1888/v2/api/") }));
         var dev = new RealTestShotDevices(Rig(), live);
         var since = DateTimeOffset.Now;
         Assert.True(await dev.ExposeAsync(1, 800, s => output.WriteLine($"남은 {s}초"), CancellationToken.None));
@@ -137,7 +137,7 @@ public class RealDeviceTests(ITestOutputHelper output)
     public async Task 실장비_센터링_한_회차_솔빙_실패()
     {
         if (!Enabled) return;
-        var live = new LiveImages(Phd2());
+        var live = new LiveImages(Phd2(), new NinaApiClient(new HttpClient { BaseAddress = new Uri("http://localhost:1888/v2/api/") }));
         var dev = new RealCenterDevices(Rig(), live);
         var m = await Rig().MountAsync(CancellationToken.None);
         var a = await dev.AttemptAsync(m!.RaDeg, m.DecDeg, 2, false, CancellationToken.None);

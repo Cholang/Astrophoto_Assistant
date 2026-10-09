@@ -75,7 +75,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
     {
         var ctx = run.Context;
         if (!ctx.HasFocuser) return await ManualAsync(run, "자동초점 장치가 없습니다. 초점을 손으로 맞춘 뒤 눌러 주세요.", ct);
-        run.Live("focus-curve", data: new { points = Array.Empty<object>(), last = ctx.Memory.LastFocus?.Position });
+        run.Live("focus-curve", LiveUrl, new { points = Array.Empty<object>(), last = ctx.Memory.LastFocus?.Position });
         if (devices.ZeroRequested) await ZeroAsync(run, ct);
 
         while (true)
@@ -112,7 +112,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
             {
                 points.Add(new { pos, hfr });
                 run.Readout("hfr", $"{hfr:F1}", "별 크기 (HFR) · 이번 지점", Tone.Busy, new Dictionary<string, double> { ["hfr"] = hfr, ["position"] = pos }, live: true);
-                run.Live("focus-curve", data: new { points = points.ToArray(), last = ctx.Memory.LastFocus?.Position });
+                run.Live("focus-curve", LiveUrl, new { points = points.ToArray(), last = ctx.Memory.LastFocus?.Position });
                 run.Status($"자동초점 중입니다 · {points.Count} / 9 지점 · AA 추천값");
             }, ct);
             // 자동초점이 멈췄는지 모르면 다시 자동초점·사진을 하지 않고 멈춤 확인부터 (CX-NIGHT-06)
@@ -191,6 +191,9 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
             return;
         }
     }
+
+    /// <summary>하늘 화면 바탕: N.I.N.A.가 찍은 마지막 사진 (실장비만 — 모의는 그림으로). N.I.N.A. 자동초점 창 대신</summary>
+    private const string LiveUrl = "/api/prepare/live/nina";
 
     private static string TempText(double? now, double? then) =>
         now is { } n && then is { } t ? $" (그때 {t:F1}°C, 지금 {n:F1}°C)" : "";

@@ -55,7 +55,7 @@ public class SimulatorRigTests(ITestOutputHelper output)
     {
         if (!Enabled) return;
         var phd2 = new Phd2Client(NullLogger<Phd2Client>.Instance);
-        var dev = new Shoot.RealShootDevices(new NinaRig(Api()), phd2, new LiveImages(phd2), null!, null!, new AscomWeather(NullLogger<AscomWeather>.Instance), NullLogger<Shoot.RealShootDevices>.Instance);
+        var dev = new Shoot.RealShootDevices(new NinaRig(Api()), phd2, new LiveImages(phd2, Api()), null!, null!, new AscomWeather(NullLogger<AscomWeather>.Instance), NullLogger<Shoot.RealShootDevices>.Instance);
         await dev.GuideRawAsync(CancellationToken.None); // 이벤트 받기 시작
         await Task.Delay(TimeSpan.FromSeconds(40));
         var raw = await dev.GuideRawAsync(CancellationToken.None);
@@ -79,7 +79,7 @@ public class SimulatorRigTests(ITestOutputHelper output)
         var api = Api();
         var rig = new NinaRig(api);
         var phd2 = new Phd2Client(NullLogger<Phd2Client>.Instance);
-        var live = new LiveImages(phd2);
+        var live = new LiveImages(phd2, Api());
         // 대상: 자오선 동쪽 1시간 (반전 없음, 높이 충분)
         var m = (await rig.MountAsync(CancellationToken.None))!;
         await rig.SetTrackingAsync(true, CancellationToken.None);
