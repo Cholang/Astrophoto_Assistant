@@ -94,7 +94,7 @@ public sealed class EquipmentChoices
 ///   단 전원 허브는 다른 장비에 전원을 주므로, 있으면 맨 먼저 연결하고 실패하면 뒤 장비는 보류한다
 /// 돔·안전 모니터·날씨 장치는 다루지 않는다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics, EquipmentRun state, DevicePrecheck.IHostDevices host, CameraPowerStore cameraPower, ILogger<EquipmentConnector> log)
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics, EquipmentRun state, DevicePrecheck.IHostDevices host, CameraPowerStore cameraPower, ILogger<EquipmentConnector> log, Profiles.PowerWiringStore? power = null)
 {
     private const CheckSeverity Required = CheckSeverity.Required;
     private const CheckSeverity Recommended = CheckSeverity.Recommended;
@@ -131,6 +131,23 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
 
     /// <summary>허브가 실패하면 뒤 장비는 이 문장으로 보류한다 (전원이 허브에서 오므로 원인을 하나로 모은다).</summary>
     private const string WaitingForHub = "전원 허브가 연결되면 확인합니다";
+
+    /// <summary>지금 프로필의 전원 배선 (모의·시험에서 저장소가 없으면 기본값)</summary>
+    private Profiles.PowerWiring Wiring => power?.Current() ?? Profiles.PowerWiring.Default;
+    /// <summary>이번 연결에서 허브 입력 전압이 0이었나 (배선을 고치는 증거에 씀)</summary>
+    private bool _hubNoPower;
+
+    /// <summary>
+    /// 허브 뒤 장비인데 허브가 실패함: PC에 보이는지 바로 확인할 수 있고(COM 포트·USB 제조사) 보이면 전원이 있다 → true.
+    /// 허브에 전원이 없던 것이면 그 장비는 허브에서 받지 않는다는 증거 (적도의는 DC 전원, 나머지는 자체 전원)
+    /// </summary>
+    private async Task<bool> PoweredAnywayAsync(Device d, CancellationToken ct)
+    {
+        if (options.Value.Simulate || d.Id is null || !DevicePrecheck.CanSee(host, d.Slot.Kind, d.Id)) return false;
+        if (!(await DevicePrecheck.CheckAsync(host, d.Slot.Kind, d.Id, d.Slot.Role, TimeSpan.Zero, ct)).Ok) return false;
+        if (_hubNoPower) power?.Learn(d.Slot.Kind, d.Slot.Kind == "mount" ? Profiles.PowerWiring.Dc : null, "파워박스 입력 0V인데 PC에 보임");
+        return true;
+    }
 
     private const string Hub = "switch";
 
@@ -237,16 +254,18 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         }
 
         var hubFailed = false;
+        var wiring = Wiring;
         foreach (var d in devices)
         {
-            // 허브가 실패하면 멈추고 허브부터 해결한다: 뒤 장비는 연결을 시도하지 않고 보류
+            // 허브가 실패하면 허브부터 해결한다: 전원 배선상 허브에서 전원을 받는 장비만 보류 (docs/POWER_LAYOUT_PLAN.md — 배선을 믿는다).
+            // 다만 PC에 보이는지 바로 알 수 있는 장비가 보이면 전원이 있다는 증거 → 연결하고, 허브에 전원이 없던 것이면 배선을 고친다
             // 등록되지 않은 장비: 연결하지 않고 작은 원으로만 보인다
             if (d.Absent)
             {
                 yield return Make(d, CheckStatus.Absent, "");
                 continue;
             }
-            if (hubFailed)
+            if (hubFailed && wiring.BehindHub(d.Slot.Kind) && !await PoweredAnywayAsync(d, ct))
             {
                 yield return Make(d, CheckStatus.Skipped, WaitingForHub);
                 continue;
@@ -255,6 +274,9 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             var result = await ConnectOneAsync(d, ct);
             yield return result;
             if (d.Slot.Kind == Hub && result.Status != CheckStatus.Pass) hubFailed = true;
+            // 적도의 먼저(적도의 → 파워박스)인데 파워박스에 전원이 없는 채로 적도의가 연결됨 → 파워박스는 적도의에서 받지 않는다
+            if (_hubNoPower && d.Slot.Kind == "mount" && result.Status == CheckStatus.Pass && wiring.SourceOf(Hub) == Profiles.PowerWiring.Mount)
+                power?.Learn(Hub, Profiles.PowerWiring.Dc, "파워박스 입력 0V인데 적도의가 연결됨");
         }
         }
         finally { EndRun(); }
@@ -364,7 +386,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                     {
                         var turned = await SetHubOutputAsync(n => n == outlet, true, ct);
                         pre = turned == true
-                            ? await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(30), ct) is { Ok: true } p ? p
+                            ? await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(30), ct) is { Ok: true } p ? Learned(p, kind, "파워박스 출력을 켜자 PC에 나타남")
                                 : new(false, $"카메라 전원(허브 {ShortOutlet(outlet)})을 켰지만 카메라가 PC에 보이지 않습니다",
                                     $"카메라 전원 스위치가 ON인지, 전원 어댑터가 허브 {ShortOutlet(outlet)}에 꽂혀 있는지, USB 케이블을 확인해 주세요.")
                             : new(false, $"카메라 전원(허브 {ShortOutlet(outlet)})을 켜지 못했습니다",
@@ -373,7 +395,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                     if (!pre.Ok)
                     {
                         live.Forget(kind);
-                        var diag = new Diagnosis([], $"{pre.Fix} 그다음 다시 연결을 눌러 주세요.");
+                        var diag = new Diagnosis([], $"{pre.Fix}{WiringHint(kind)} 그다음 다시 연결을 눌러 주세요.");
                         return d.Slot.Tier == Optional && kind != Hub
                             ? Make(d, CheckStatus.Warn, $"{pre.Message} — {d.Slot.Role} 없이 진행합니다", diag)
                             : Make(d, CheckStatus.Fail, pre.Message!, diag);
@@ -396,9 +418,16 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             // 허브 입력 전압이 곧 장비 전원 (사용자 배선: 외부 전원 → 적도의 → 새들 → 허브). 전압 칸을 모르면 그냥 진행
             if (connected && kind == Hub && await HubInputVoltsAsync(ct) is { } volts && volts < NoPowerVolts)
             {
+                _hubNoPower = true;
+                // 안내는 배선을 믿고 (적도의 먼저면 적도의 전원부터)
+                var w = Wiring;
+                var fix = w.SourceOf(Hub) == Profiles.PowerWiring.Mount
+                    ? "파워박스는 적도의에서 전원을 받습니다. 적도의 전원을 켜면 파워박스도 켜집니다. 적도의 전원과 적도의 → 파워박스 케이블을 확인한 뒤 다시 연결을 눌러 주세요."
+                    : w.SourceOf("mount") == Hub
+                        ? "적도의를 포함한 모든 장비가 파워박스에서 전원을 받습니다. 파워박스 전원(DC 전원)을 켜고 입력 케이블을 확인한 뒤 다시 연결을 눌러 주세요."
+                        : "파워박스 전원(DC 전원)을 켜고 입력 케이블을 확인한 뒤 다시 연결을 눌러 주세요. 파워박스에서 전원을 받는 장비는 그때 연결합니다.";
                 return Make(d, CheckStatus.Fail, $"전원 허브에 전원이 들어오지 않습니다 (입력 {volts:0.0}V)", new Diagnosis(
-                    ["외부 전원(배터리·어댑터)이 꺼져 있습니다", "허브로 가는 전원 케이블이 빠졌습니다 (적도의에서 받으면 적도의 전원도)"],
-                    "장비 전원을 켜고 허브 입력 전원 케이블을 확인한 뒤 다시 연결을 눌러 주세요. 허브 전원이 없으면 적도의·카메라·포커서도 켜지지 않아 연결을 미룹니다."));
+                    ["전원이 꺼져 있습니다", "파워박스로 가는 전원 케이블이 빠졌습니다"], fix));
             }
             // 허브가 연결되면 USB 출력을 켜 둔다 — 가이드 카메라·포커서가 허브 USB에 붙어 있다 (자동 해결, 다시 읽어 확인 — 10/09: N.I.N.A.는 실패해도 성공이라 답함)
             if (connected && kind == Hub) await EnsureHubUsbOnAsync(ct);
@@ -444,6 +473,21 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
 
     /// <summary>"Regulated 0-13.2V adjustable DC2: DC2" → "DC2"</summary>
     internal static string ShortOutlet(string name) => name.Contains(':') ? name[(name.LastIndexOf(':') + 1)..].Trim() : name;
+
+    /// <summary>파워박스 출력을 켜서 나타난 장비 = 파워박스에서 전원을 받음 (배선을 조용히 고친다)</summary>
+    private DevicePrecheck.Result Learned(DevicePrecheck.Result r, string kind, string evidence)
+    {
+        power?.Learn(kind, Profiles.PowerWiring.Hub, evidence);
+        return r;
+    }
+
+    /// <summary>장비가 PC에 안 보일 때 배선에 맞춰 덧붙이는 말 (적도의·장비가 파워박스에서 받으면 그 출력부터)</summary>
+    private string WiringHint(string kind) =>
+        Wiring.SourceOf(kind) == Profiles.PowerWiring.Hub && kind != Hub
+            ? " 전원 배선상 파워박스에서 전원을 받으니, Wanderer Empire에서 그 출력이 켜져 있는지도 확인해 주세요."
+            : kind == "mount" && Wiring.SourceOf(Hub) == Profiles.PowerWiring.Mount
+                ? " 적도의 전원을 켜면 파워박스도 함께 켜집니다."
+                : "";
 
     /// <summary>이보다 낮으면 허브에 전원이 없다고 본다 (12V 장비용 허브 — USB만 꽂혀 있으면 0 근처)</summary>
     private const double NoPowerVolts = 5;

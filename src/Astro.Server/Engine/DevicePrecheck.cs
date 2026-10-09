@@ -49,6 +49,10 @@ public static class DevicePrecheck
         return Result.Pass;
     }
 
+    /// <summary>이 장비가 PC에 보이는지 바로 알 수 있는가 (드라이버 COM 포트나 USB 제조사를 앎). 모르면 CheckAsync는 그냥 통과라 증거가 되지 않는다</summary>
+    public static bool CanSee(IHostDevices host, string kind, string id) =>
+        host.DriverComPort(kind, id) is not null || (kind == "guider" ? GuideCameraVendor(host.Phd2CameraName()) : UsbVendor(kind, id)) is not null;
+
     /// <summary>연결 직후 점검 결과: Block = 이대로는 촬영할 수 없음(실패), 아니면 알리고 진행(경고)</summary>
     public sealed record Note(bool Block, string Message, string Fix);
 

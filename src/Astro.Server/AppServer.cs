@@ -78,6 +78,7 @@ public static class AppServer
         Prepare.PrepareSetup.AddPrepare(builder.Services, simulate: builder.Configuration.GetValue("Equipment:Simulate", true));
         // 데이터 폴더(기본 %LOCALAPPDATA%\<product.json의 dataFolder>)는 설정 App:DataDir로 바꿀 수 있다 (테스트용).
         builder.Services.AddSingleton(new ProfileStore(builder.Configuration["App:DataDir"]));
+        builder.Services.AddSingleton<PowerWiringStore>();
         // 그날 밤 진행 기록: 중간에 꺼져도 다시 켜면 이어서 할지 묻는다 (2026-10-08)
         builder.Services.AddSingleton(new Session.NightSessionStore(builder.Configuration["App:DataDir"]));
         builder.Services.AddHostedService<Session.NightSessionRecorder>();
@@ -397,6 +398,7 @@ public static class AppServer
 
     private sealed record RigSelect(string Kind, string? DeviceId, string? Name);
     private sealed record CameraPowerChoice(string? Outlet);
+    private sealed record PowerInput(Dictionary<string, string?> Sources);
 
     private sealed record UpdateDismiss(string Id, string Version);
 
@@ -474,6 +476,15 @@ public static class AppServer
         });
         profiles.MapDelete("/{id}/sites/{siteId}",(string id, string siteId, ProfileStore store) =>
             store.RemoveSite(id, siteId) is { } profile ? Results.Ok(profile) : Results.NotFound());
+
+        // 전원 배선 (docs/POWER_LAYOUT_PLAN.md): 모든 장비 종류를 채운 표 + 직접 설정했는지. 설정하지 않았으면 기본값(적도의 먼저)
+        profiles.MapGet("/{id}/power", (string id, ProfileStore store) =>
+            store.Get(id) is { } p ? Results.Ok(new { sources = (p.Power ?? PowerWiring.Default).Full(), custom = p.Power is not null }) : Results.NotFound());
+        profiles.MapPut("/{id}/power", (string id, PowerInput input, ProfileStore store) =>
+        {
+            if (PowerWiring.Validate(input.Sources) is { } error) return Results.BadRequest(new { error });
+            return store.SetPower(id, new PowerWiring(new Dictionary<string, string?>(input.Sources))) ? Results.NoContent() : Results.NotFound();
+        });
 
         // 화면이 가운데를 정사각형으로 잘라 256×256 WebP로 줄여서 보낸다.
         profiles.MapPut("/{id}/image", async (string id, HttpRequest request, ProfileStore store) =>

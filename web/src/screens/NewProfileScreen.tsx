@@ -1,9 +1,10 @@
-import { Pencil } from 'lucide-react'
+import { Activity, Pencil } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Button from '../components/Button'
+import PowerWiringPanel, { wiringSummary } from '../components/PowerWiringPanel'
 import ProfileAvatar from '../components/ProfileAvatar'
 import TextField from '../components/TextField'
-import { createProfile, editProfile, MEMO_MAX_BYTES, NICKNAME_MAX_BYTES, profileImageUrl, toSquareProfileImage, uploadProfileImage, type Profile } from '../profiles'
+import { createProfile, DEFAULT_WIRING, editProfile, getPower, MEMO_MAX_BYTES, NICKNAME_MAX_BYTES, profileImageUrl, savePower, toSquareProfileImage, uploadProfileImage, type PowerWiring, type Profile } from '../profiles'
 import styles from './NewProfileScreen.module.css'
 
 /**
@@ -31,6 +32,20 @@ export default function NewProfileScreen({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  // 전원 배선 (DESIGN.md 3장): 오른쪽 패널에서 고치고 프로필과 함께 저장. 손대지 않으면(custom=false) 저장하지 않아 기본값(적도의 먼저)을 쓴다
+  const [wiring, setWiring] = useState<PowerWiring>(DEFAULT_WIRING)
+  const [custom, setCustom] = useState(false)
+  const [changed, setChanged] = useState(false)
+  const [wiringOpen, setWiringOpen] = useState(false)
+  useEffect(() => {
+    if (!editing) return
+    getPower(editing.id)
+      .then((p) => {
+        setWiring(p.sources)
+        setCustom(p.custom)
+      })
+      .catch(() => null)
+  }, [editing])
 
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview)
@@ -59,12 +74,14 @@ export default function NewProfileScreen({
       if (editing) {
         const profile = await editProfile(editing.id, nickname, memo)
         if (image) await uploadProfileImage(profile.id, image)
+        if (changed) await savePower(profile.id, wiring)
         // 이미지 주소가 바뀌도록 시각을 갱신 (profileImageUrl이 lastUsedAt을 쓴다)
         onEdited?.({ ...profile, hasImage: profile.hasImage || !!image, lastUsedAt: image ? new Date().toISOString() : profile.lastUsedAt })
         return
       }
       const profile = await createProfile(nickname, memo)
       if (image) await uploadProfileImage(profile.id, image)
+      if (changed) await savePower(profile.id, wiring)
       onCreated({ ...profile, hasImage: !!image })
     } catch (err) {
       setError((err as Error).message)
@@ -73,7 +90,7 @@ export default function NewProfileScreen({
   }
 
   return (
-    <main className={styles.stage}>
+    <main className={styles.stage} data-wiring={wiringOpen}>
       <form className={styles.form} onSubmit={submit} noValidate>
         <div className={styles.head}>
           <h1 className={styles.title}>{editing ? '프로필 편집' : '프로필 선택'}</h1>
@@ -119,6 +136,15 @@ export default function NewProfileScreen({
           />
         </div>
 
+        {/* 전원 배선: 자주 바꾸지 않는 설정이라 프로필에서 (2026-10-10 사용자 결정). 누르면 오른쪽에 패널 */}
+        <button type="button" className={styles.wiring} aria-expanded={wiringOpen} onClick={() => setWiringOpen((v) => !v)}>
+          <Activity aria-hidden="true" />
+          <span>
+            <b>전원 배선</b>
+            <small>{custom || changed ? wiringSummary(wiring) : `기본 · ${wiringSummary(DEFAULT_WIRING)}`}</small>
+          </span>
+        </button>
+
         {error && (
           <p className={styles.error} role="alert">
             {error}
@@ -136,6 +162,16 @@ export default function NewProfileScreen({
           )}
         </div>
       </form>
+      <aside className={styles.side} aria-hidden={!wiringOpen} inert={!wiringOpen}>
+        <PowerWiringPanel
+          value={wiring}
+          onChange={(next) => {
+            setWiring(next)
+            setChanged(true)
+          }}
+          onClose={() => setWiringOpen(false)}
+        />
+      </aside>
     </main>
   )
 }

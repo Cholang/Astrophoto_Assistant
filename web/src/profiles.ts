@@ -139,3 +139,31 @@ export async function toSquareProfileImage(file: File): Promise<Blob> {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('이미지를 만들지 못했습니다.'))), 'image/webp', 0.9),
   )
 }
+
+/**
+ * 전원 배선 (docs/POWER_LAYOUT_PLAN.md): 장비 종류 → 전원을 받는 곳. 'dc' DC 전원 · 'mount' 적도의(새들 포트) · 'switch' 파워박스 · null 자체 전원(배터리 등).
+ * 아이라가 믿고 쓰는 값이고, 실제와 다르면 아이라가 조용히 고친다
+ */
+export type PowerSource = 'dc' | 'mount' | 'switch' | null
+export type PowerWiring = Record<string, PowerSource>
+
+/** 설정하지 않았을 때 = 서버 기본값과 같음 (적도의 먼저, 카메라는 자체 전원) */
+export const DEFAULT_WIRING: PowerWiring = {
+  mount: 'dc', switch: 'mount', camera: null, focuser: 'switch', filterwheel: 'switch',
+  rotator: 'switch', guider: 'switch', heater: 'switch', flatdevice: 'switch',
+}
+
+export async function getPower(id: string): Promise<{ sources: PowerWiring; custom: boolean }> {
+  const res = await fetch(`/api/profiles/${id}/power`)
+  if (!res.ok) throw new Error('전원 배선을 읽지 못했습니다.')
+  return res.json()
+}
+
+export async function savePower(id: string, sources: PowerWiring): Promise<void> {
+  const res = await fetch(`/api/profiles/${id}/power`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sources }),
+  })
+  if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? '전원 배선을 저장하지 못했습니다.')
+}

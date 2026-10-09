@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>전원 배선 시안</title>
+<style>
+  /* 시안 전용 — 앱 토큰(web/src/index.css)과 같은 값 */
+  :root, :root[data-theme='dark'] {
+    --bg: #1e1f21; --surface: #27292c; --surface-2: #303236; --line: #3b3e42;
+    --text: #ebe8e3; --muted: #a3a09a; --accent: #f0a93b; --on-accent: #231800; --fail: #f07a52; --pass: #72bf8e;
+    --glass-strong: rgb(56 59 63 / 0.6); --glass-line: rgb(255 255 255 / 0.09); --radius: 10px;
+  }
+  :root[data-theme='light'] {
+    --bg: #f1f1ef; --surface: #fafaf9; --surface-2: #e7e7e4; --line: #d6d6d2;
+    --text: #25272a; --muted: #676a6e; --accent: #b36b00; --on-accent: #fff; --fail: #c24a26; --pass: #2f7d4e;
+    --glass-strong: rgb(255 255 255 / 0.8); --glass-line: rgb(0 0 0 / 0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: 'Pretendard Variable', Pretendard, 'Malgun Gothic', system-ui, sans-serif; font-size: 15px; line-height: 1.6;
+    word-break: keep-all;
+  }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  /* 프로필 편집(가운데) → 전원 배선을 열면 왼쪽으로 비켜나고 오른쪽에 패널 */
+  .stage { position: fixed; inset: 0; display: flex; }
+  .profile { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+  .profile h1 { margin: 0 0 8px; font-size: 32px; }
+  .avatar { width: 132px; height: 132px; border-radius: 22px; background: var(--surface-2); display: grid; place-items: center; font-size: 44px; font-weight: 700; color: var(--muted); }
+  .field { width: 340px; display: grid; gap: 6px; }
+  .field span { font-size: 13px; color: var(--muted); }
+  .field input { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+  .wiringBtn {
+    width: 340px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: transparent; cursor: pointer; text-align: left;
+  }
+  .wiringBtn:hover, .wiringBtn[aria-expanded='true'] { border-color: var(--accent); }
+  .wiringBtn svg { flex: none; width: 26px; height: 26px; stroke: var(--accent); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .wiringBtn b { display: block; font-size: 15px; }
+  .wiringBtn small { display: block; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 270px; }
+  .save { margin-top: 8px; padding: 11px 32px; border-radius: var(--radius); border: none; background: var(--accent); color: var(--on-accent); font-weight: 700; cursor: pointer; }
+
+  .panel { width: 0; overflow: hidden; border-left: 1px solid transparent; background: var(--surface); transition: width 420ms cubic-bezier(.3,0,.2,1), border-color 420ms; }
+  .stage[data-open='true'] .panel { width: min(980px, 62vw); border-left-color: var(--line); }
+  .panelIn { width: min(980px, 62vw); height: 100%; display: flex; flex-direction: column; padding: 28px 32px 20px; gap: 14px; }
+  .panelHead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+  .panelHead h2 { margin: 0; font-size: 24px; }
+  .panelHead p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  .close { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; }
+
+  /* 배선도: 크기·자리 고정 — 선을 바꿔도 아무것도 커지거나 움직이지 않는다 */
+  .board { position: relative; flex: 1; min-height: 0; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); }
+  .board svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; user-select: none; }
+  .hint { position: absolute; left: 16px; bottom: 12px; font-size: 12.5px; color: var(--muted); pointer-events: none; }
+
+  /* 상자 어디서든 끌어 다른 상자에 놓으면 이어진다 */
+  .node { cursor: grab; }
+  /* pointer-events: all — 속이 빈 상자(DC 전원)도 안쪽 어디를 눌러도 잡히게 (fill: none이면 테두리만 잡힘) */
+  .node rect { fill: var(--glass-strong); stroke: var(--glass-line); stroke-width: 1.2; transition: stroke 120ms; pointer-events: all; }
+  .node.source rect { fill: none; stroke: var(--line); stroke-dasharray: 5 4; }
+  .node:hover rect, .node.sel rect { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: none; }
+  .node.target rect { stroke: var(--pass); stroke-width: 2; stroke-dasharray: none; }
+  .node.dim { opacity: .3; }
+  .node text { fill: var(--text); font-size: 16px; font-weight: 700; pointer-events: none; }
+  .node text.self { fill: var(--muted); font-size: 12.5px; font-weight: 400; }
+  .end { fill: var(--accent); pointer-events: none; }
+  .wire { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; pointer-events: none; }
+  .hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
+  .hit:hover + .wire { stroke-dasharray: 6 4; }
+  .wire.temp { stroke-dasharray: 3 5; opacity: .9; }
+
+  .foot { display: flex; justify-content: flex-end; gap: 10px; align-items: center; }
+  .foot .note { margin-right: auto; color: var(--muted); font-size: 12.5px; }
+  .ghost { padding: 9px 20px; border-radius: var(--radius); border: 1px solid var(--line); background: transparent; cursor: pointer; }
+  .toast { position: fixed; left: 50%; top: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--fail); font-size: 14px; opacity: 0; transition: opacity 200ms; pointer-events: none; z-index: 10; }
+  .toast[data-on='true'] { opacity: 1; }
+  .themeBtn { position: fixed; left: 16px; bottom: 14px; font-size: 12px; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .panel { transition: none; } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage" data-open="false">
+  <section class="profile">
+    <h1>프로필 수정</h1>
+    <div class="avatar">주</div>
+    <label class="field"><span>별명</span><input value="주히"></label>
+    <label class="field"><span>메모</span><input value="용인 집 베란다"></label>
+    <button class="wiringBtn" id="openBtn" aria-expanded="false">
+      <svg viewBox="0 0 26 26"><path d="M4 13h5l2-5 4 10 2-5h5"/></svg>
+      <span><b>전원 배선</b><small id="btnSummary"></small></span>
+    </button>
+    <button class="save">저장</button>
+  </section>
+
+  <aside class="panel" aria-label="전원 배선">
+    <div class="panelIn">
+      <div class="panelHead">
+        <div>
+          <h2>장비에 전원이 어떻게 들어가나요?</h2>
+          <p>설정해 두면 아이라가 이 배선을 믿고 안내합니다. 실제와 다른 것을 발견하면 아이라가 고쳐 둡니다.</p>
+        </div>
+        <button class="close" id="closeBtn">닫기</button>
+      </div>
+      <div class="board">
+        <svg id="svg" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="hint">상자를 다른 상자로 끌거나 차례로 누르면 이어집니다 · 선을 누르면 끊깁니다 · 선이 없으면 자체 전원</div>
+      </div>
+      <div class="foot">
+        <span class="note">시안 — 저장은 동작하지 않음</span>
+        <button class="ghost" id="resetBtn">처음 배선으로</button>
+        <button class="save" id="doneBtn" style="margin:0">완료</button>
+      </div>
+    </div>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+<button class="themeBtn" id="themeBtn">테마: 어둡게</button>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('svg');
+
+  // 자리는 고정 (viewBox 1000×520). 종류 이름만.
+  // 단 = 전원이 흐르는 순서: DC 전원(0) → 적도의·파워박스(1, 서로 앞뒤가 될 수 있음) → 나머지 장비(2)
+  const NODES = {
+    dc:      { x: 40,  y: 231, w: 150, h: 58, name: 'DC 전원', tier: 0, source: true },
+    mount:   { x: 350, y: 140, w: 180, h: 66, name: '적도의', tier: 1 },
+    hub:     { x: 350, y: 314, w: 180, h: 66, name: '파워박스', tier: 1 },
+    // 나머지 장비 = 장비 연결 단계의 장비 종류 (망원경은 전원이 없어 뺌). 위에서부터 광학 경로 순서
+    camera:  { x: 760, y: 18,  w: 190, h: 50, name: '카메라', tier: 2 },
+    focuser: { x: 760, y: 85,  w: 190, h: 50, name: '포커서', tier: 2 },
+    wheel:   { x: 760, y: 152, w: 190, h: 50, name: '필터휠', tier: 2 },
+    rotator: { x: 760, y: 219, w: 190, h: 50, name: '회전장치', tier: 2 },
+    guide:   { x: 760, y: 286, w: 190, h: 50, name: '가이드 카메라', tier: 2 },
+    heater:  { x: 760, y: 353, w: 190, h: 50, name: '이슬 방지 열선', tier: 2 },
+    flat:    { x: 760, y: 420, w: 190, h: 50, name: '플랫패널', tier: 2 },
+  };
+  const RECEIVERS = ['mount', 'hub', 'camera', 'focuser', 'wheel', 'rotator', 'guide', 'heater', 'flat'];
+  // 받는 장비 → 주는 곳 (null = 자체 전원 — 배터리 등). 기본값: 적도의 먼저 (DC 전원 → 적도의 → 파워박스 → 나머지, 카메라는 배터리)
+  // 카메라 외 장비는 파워박스에서 (나중에 추가한 장비와 같은 규칙 — 파워박스가 있으면 파워박스)
+  const DEFAULT = { mount: 'dc', hub: 'mount', camera: null, focuser: 'hub', wheel: 'hub', rotator: 'hub', guide: 'hub', heater: 'hub', flat: 'hub' };
+  const wiring = { ...DEFAULT };
+
+  const el = (tag, attrs = {}, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const inPos = (id) => ({ x: NODES[id].x, y: NODES[id].y + NODES[id].h / 2 });
+  const outPos = (id) => ({ x: NODES[id].x + NODES[id].w, y: NODES[id].y + NODES[id].h / 2 });
+  // 앞으로 가는 선은 옆으로 휘고, 같은 열의 다른 장비로 가는 선(적도의 ↔ 파워박스)은 오른쪽으로 돌아 왼쪽으로 들어간다
+  function curve(a, b) {
+    if (b.x <= a.x) {
+      const my = (a.y + b.y) / 2, mx = (a.x + b.x) / 2;
+      return `M${a.x},${a.y} C${a.x + 70},${a.y} ${a.x + 70},${my} ${mx},${my} S${b.x - 70},${b.y} ${b.x},${b.y}`;
+    }
+    const m = Math.max(40, (b.x - a.x) / 2);
+    return `M${a.x},${a.y} C${a.x + m},${a.y} ${b.x - m},${b.y} ${b.x},${b.y}`;
+  }
+
+  /**
+   * 두 상자를 이으면 어느 쪽이 전원을 주는지 정한다 (끈 방향과 상관없이).
+   * DC 전원 → 적도의·파워박스만, 적도의·파워박스 → 나머지 장비. 적도의 ↔ 파워박스는 끈 쪽이 주는 쪽.
+   * 결과: { to, from } 또는 이을 수 없는 이유(문자열)
+   */
+  function pair(a, b) {
+    if (a === b) return null;
+    const ta = NODES[a].tier, tb = NODES[b].tier;
+    if (ta === tb && ta !== 1) return ta === 2 ? '카메라·포커서 같은 장비끼리는 전원을 주고받지 않습니다' : null;
+    if (Math.abs(ta - tb) === 2) return 'DC 전원은 적도의나 파워박스로 이어 주세요';
+    if (ta === tb) return { from: a, to: b }; // 적도의 ↔ 파워박스: 끈 쪽이 주는 쪽
+    return ta < tb ? { from: a, to: b } : { from: b, to: a };
+  }
+  function connect(a, b) {
+    const p = pair(a, b);
+    if (!p) return;
+    if (typeof p === 'string') return toast(p);
+    // 적도의 ↔ 파워박스 순서를 뒤집으면: 앞이 되는 쪽이 DC 전원을 받는다 (서로에게서 받는 일이 없게)
+    if (wiring[p.from] === p.to) wiring[p.from] = 'dc';
+    wiring[p.to] = p.from;
+    render();
+  }
+
+  let sel = null, drag = null, hover = null;
+
+  function draw() {
+    svg.textContent = '';
+    const wires = el('g'), nodes = el('g'), ends = el('g');
+    for (const id of RECEIVERS) {
+      const src = wiring[id];
+      if (!src) continue;
+      const a = outPos(src), b = inPos(id), d = curve(a, b);
+      const hit = el('path', { d, class: 'hit' }, wires);
+      el('path', { d, class: 'wire' }, wires);
+      el('title', {}, hit).textContent = '누르면 끊깁니다 (그 장비는 자체 전원)';
+      hit.addEventListener('click', () => { wiring[id] = null; render(); });
+      el('circle', { cx: a.x, cy: a.y, r: 4, class: 'end' }, ends);
+      el('circle', { cx: b.x, cy: b.y, r: 4, class: 'end' }, ends);
+    }
+    if (drag?.moved) el('path', { d: `M${drag.start.x},${drag.start.y} L${drag.at.x},${drag.at.y}`, class: 'wire temp' }, wires);
+    for (const [id, n] of Object.entries(NODES)) {
+      const busy = sel ?? drag?.id;
+      const bad = busy && busy !== id && typeof pair(busy, id) === 'string';
+      const g = el('g', { class: 'node' + (n.source ? ' source' : '') + (sel === id ? ' sel' : '') + (hover === id ? ' target' : '') + (bad ? ' dim' : ''),
+        'data-node': id, tabindex: 0, role: 'button', 'aria-label': `${n.name} 잇기` }, nodes);
+      el('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 12 }, g);
+      el('text', { x: n.x + 20, y: n.y + n.h / 2 + 6 }, g).textContent = n.name;
+      if (RECEIVERS.includes(id) && !wiring[id]) el('text', { x: n.x + n.w - 16, y: n.y + n.h / 2 + 5, 'text-anchor': 'end', class: 'self' }, g).textContent = '자체 전원';
+      g.addEventListener('pointerdown', (e) => startDrag(e, id));
+      g.addEventListener('keydown', (e) => { if (e.key === 'Enter') pick(id); });
+    }
+  }
+
+  // 누르기만 하면: 고름 → 다른 상자를 누르면 이음
+  function pick(id) {
+    if (sel && sel !== id) { const a = sel; sel = null; connect(a, id); return; }
+    sel = sel === id ? null : id;
+    render();
+  }
+
+  function toSvg(e) { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); }
+  const nodeAt = (e) => document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-node]')?.getAttribute('data-node') ?? null;
+  function startDrag(e, id) {
+    e.preventDefault();
+    const start = toSvg(e);
+    drag = { id, start, at: start, moved: false };
+    const move = (ev) => {
+      const p = toSvg(ev);
+      if (Math.hypot(p.x - start.x, p.y - start.y) > 6) drag.moved = true;
+      drag.at = p;
+      const t = nodeAt(ev);
+      hover = t && t !== id ? t : null;
+      draw();
+    };
+    const up = (ev) => {
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+      const t = nodeAt(ev), moved = drag.moved;
+      drag = null; hover = null;
+      if (!moved) return pick(id);
+      sel = null;
+      if (t && t !== id) connect(id, t); else render();
+    };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  }
+
+  let timer = 0;
+  function toast(text) { const t = document.getElementById('toast'); t.textContent = text; t.dataset.on = 'true'; clearTimeout(timer); timer = setTimeout(() => (t.dataset.on = 'false'), 2400); render(); }
+
+  // 버튼의 한 줄 요약
+  function summary() {
+    const first = wiring.hub === 'mount' ? '적도의 먼저' : wiring.mount === 'hub' ? '파워박스 먼저' : '적도의·파워박스 따로';
+    document.getElementById('btnSummary').textContent = `${first} · 카메라 ${wiring.camera ? NODES[wiring.camera].name : '자체 전원'}`;
+  }
+  function render() { draw(); summary(); }
+
+  const stage = document.getElementById('stage'), openBtn = document.getElementById('openBtn');
+  const setOpen = (v) => { stage.dataset.open = String(v); openBtn.setAttribute('aria-expanded', String(v)); };
+  openBtn.addEventListener('click', () => setOpen(stage.dataset.open !== 'true'));
+  for (const id of ['closeBtn', 'doneBtn']) document.getElementById(id).addEventListener('click', () => setOpen(false));
+  document.getElementById('resetBtn').addEventListener('click', () => { Object.assign(wiring, DEFAULT); sel = null; render(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (sel) { sel = null; render(); } else setOpen(false); } });
+  const themes = [['dark', '어둡게'], ['light', '밝게']];
+  document.getElementById('themeBtn').addEventListener('click', (e) => {
+    const i = (themes.findIndex((t) => t[0] === document.documentElement.dataset.theme) + 1) % themes.length;
+    document.documentElement.dataset.theme = themes[i][0]; e.target.textContent = `테마: ${themes[i][1]}`;
+  });
+
+  render();
+  // #open: 패널을 연 채로 시작 (화면 캡처용)
+  if (location.hash === '#open') { document.querySelector('.panel').style.transition = 'none'; setOpen(true); } else setTimeout(() => setOpen(true), 400);
+})();
+</script>
+</body>
+</html>

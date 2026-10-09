@@ -3,8 +3,11 @@ using Astro.Core;
 
 namespace Astro.Server.Profiles;
 
-/// <summary>넷플릭스식 사용자 프로필 (사람 단위). 장비 구성과는 별개. Sites: 이 사람의 관측지 목록 (최대 10개, 없던 예전 파일은 null)</summary>
-public sealed record Profile(string Id, string Nickname, string? Memo, bool HasImage, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt, List<ObservingSite>? Sites = null);
+/// <summary>
+/// 넷플릭스식 사용자 프로필 (사람 단위). 장비 구성과는 별개. Sites: 이 사람의 관측지 목록 (최대 10개, 없던 예전 파일은 null).
+/// Power: 장비 전원 배선 (null = 설정 안 함 → 기본값 적도의 먼저)
+/// </summary>
+public sealed record Profile(string Id, string Nickname, string? Memo, bool HasImage, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt, List<ObservingSite>? Sites = null, PowerWiring? Power = null);
 
 /// <summary>관측지 하나: 이름 + 위도·경도(도) + 고도(m)</summary>
 public sealed record ObservingSite(string Id, string Name, double Latitude, double Longitude, double Elevation);
@@ -126,6 +129,15 @@ public sealed class ProfileStore
         Profile? changed = null;
         Update(id, p => changed = p with { Sites = (p.Sites ?? []).Where(s => s.Id != siteId).ToList() });
         return changed;
+    }
+
+    /// <summary>전원 배선 저장 (프로필 화면에서, 또는 아이라가 실제로 확인해 고칠 때)</summary>
+    public bool SetPower(string id, PowerWiring wiring) => Update(id, p => p with { Power = wiring });
+
+    /// <summary>지금 쓰는 프로필 = 마지막으로 고른 프로필</summary>
+    public Profile? Current()
+    {
+        lock (_gate) return Load().Where(p => p.LastUsedAt is not null).MaxBy(p => p.LastUsedAt);
     }
 
     public Profile? Get(string id)

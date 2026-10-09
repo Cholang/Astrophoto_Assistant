@@ -1,0 +1,185 @@
+/* 전원 배선 패널 (PowerWiringPanel.tsx, 시안 mockups/aira-power-wiring.html) */
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 32px 22px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.head h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.close,
+.reset {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.close:hover,
+.reset:hover {
+  color: var(--text);
+}
+
+/* 배선도: 크기·자리 고정 — 선을 바꿔도 아무것도 커지거나 움직이지 않는다 */
+.board {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.board svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+}
+
+/* 상자 어디서든 잡히게 (속이 빈 DC 전원 상자도 — fill: none이면 테두리만 잡힘) */
+.box {
+  cursor: grab;
+  outline: none;
+}
+
+.box rect {
+  fill: var(--glass-bg-strong);
+  stroke: var(--glass-line);
+  stroke-width: 1.2;
+  pointer-events: all;
+  transition: stroke 120ms;
+}
+
+.box[data-source='true'] rect {
+  fill: none;
+  stroke: var(--line);
+  stroke-dasharray: 5 4;
+}
+
+.box:hover rect,
+.box:focus-visible rect,
+.box[data-sel='true'] rect {
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-dasharray: none;
+}
+
+.box[data-target='true'] rect {
+  stroke: var(--pass);
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+
+.box[data-dim='true'] {
+  opacity: 0.3;
+}
+
+.box text {
+  fill: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.box text.self {
+  fill: var(--muted);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.wire {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.temp {
+  stroke-dasharray: 3 5;
+  opacity: 0.9;
+}
+
+.hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  cursor: pointer;
+}
+
+.hit:hover + .wire {
+  stroke-dasharray: 6 4;
+}
+
+.end {
+  fill: var(--accent);
+  pointer-events: none;
+}
+
+.hint {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* 이을 수 없을 때 한 줄 (자리 고정, 투명도만) */
+.notice {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--fail);
+  background: var(--surface-2);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+
+.notice[data-on='true'] {
+  opacity: 1;
+}
+
+.foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice,
+  .box rect {
+    transition: none;
+  }
+}

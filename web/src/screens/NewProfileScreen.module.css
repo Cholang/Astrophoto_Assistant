@@ -1,7 +1,10 @@
 /* 프로필 화면은 가운데 한 줄 배치 (사용자 요청, DESIGN.md의 왼쪽 정렬 예외) */
 .stage {
+  --wiring-w: min(980px, 58cqw);
+  position: relative;
   flex: 1;
   display: grid;
+  transition: padding-right 420ms cubic-bezier(0.3, 0, 0.2, 1);
   justify-items: center;
   /* 프로필 선택 화면과 같이 위아래 가운데. 없으면 키 큰 창에서 줄 높이가 늘어나 요소들이 벌어진다 */
   align-content: center;
@@ -102,3 +105,78 @@
 }
 
 
+
+/* 전원 배선 버튼: 입력 칸과 같은 너비, 테두리만 */
+.wiring {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wiring:hover,
+.wiring[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+.wiring > svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+}
+
+.wiring b {
+  display: block;
+}
+
+.wiring small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--size-small);
+}
+
+/* 패널이 열리면 프로필은 왼쪽 남은 자리의 가운데로 비켜나고, 패널은 오른쪽에서 들어온다 */
+.stage[data-wiring='true'] {
+  padding-right: var(--wiring-w);
+}
+
+.side {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--wiring-w);
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 420ms cubic-bezier(0.3, 0, 0.2, 1), visibility 0s linear 420ms;
+}
+
+.stage[data-wiring='true'] .side {
+  transform: none;
+  visibility: visible;
+  transition: transform 420ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+/* 좁은 화면: 패널이 화면 전체를 덮는다 */
+@media (max-width: 900px) {
+  .stage { --wiring-w: 100%; }
+  .stage[data-wiring='true'] { padding-right: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage,
+  .side {
+    transition: none;
+  }
+}
