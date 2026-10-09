@@ -71,6 +71,7 @@ public static class PrepareSetup
         s.AddSingleton<IPrepTask, PackTask>();
         s.AddSingleton<Shoot.ShootSession>();
         s.AddSingleton<MountLock>();
+        s.AddSingleton<MountHome>();
         s.AddSingleton<IPrepMemory, InMemoryPrepMemory>();
         s.AddSingleton(sp => new PrepareFlow(sp.GetServices<IPrepTask>(), sp.GetRequiredService<ILogger<PrepareRunner>>(), simulate));
         s.AddSingleton<PrepareStarter>();

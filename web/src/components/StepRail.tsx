@@ -1,4 +1,4 @@
-import { Check, LogOut } from 'lucide-react'
+import { Check, House, Lock, LogOut } from 'lucide-react'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { closeApp, inDesktop, onCloseRequest } from '../host'
 import { PRODUCT } from '../product'
@@ -328,13 +328,17 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
             {extra.action.label}
           </button>
         )}
-        {/* AA 종료: 전체화면이라 창 닫기 버튼이 없어서 둔다 (데스크톱 창에서만). 진행 중이면 한 번 묻는다 (2026-10-07 사용자 결정) */}
-        {inDesktop() && !extra?.hideExit && (
-          <button type="button" className={styles.exit} onClick={() => setQuitting(true)}>
-            <LogOut strokeWidth={2} aria-hidden="true" />
-            <span>{PRODUCT.name} 종료</span>
-          </button>
-        )}
+        <div className={styles.endRow}>
+          {/* 적도의 홈 (2026-10-09 사용자 요청): 종료 왼쪽. 움직이면 안 되는 때는 자물쇠 아이콘·흐리게, 이유는 가리키면 */}
+          <HomeButton />
+          {/* AA 종료: 전체화면이라 창 닫기 버튼이 없어서 둔다 (데스크톱 창에서만). 진행 중이면 한 번 묻는다 (2026-10-07 사용자 결정) */}
+          {inDesktop() && !extra?.hideExit && (
+            <button type="button" className={styles.exit} onClick={() => setQuitting(true)}>
+              <LogOut strokeWidth={2} aria-hidden="true" />
+              <span>{PRODUCT.name} 종료</span>
+            </button>
+          )}
+        </div>
       </div>
       <ConfirmDialog
         open={quitting}
@@ -354,5 +358,65 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
         }}
       />
     </nav>
+  )
+}
+
+/**
+ * 적도의 홈 (2026-10-09 사용자 요청): 서버가 지금 움직여도 되는지(촬영·적도의를 쓰는 작업·가이딩·미연결이면 안 됨)와 이유를 알려 준다 (2초마다).
+ * 움직여도 되면 집 아이콘, 안 되면 자물쇠 아이콘 + 흐리게 — 아이콘만 봐도 구분되게. 누르면 한 번 묻고 홈으로 보낸 뒤 추적을 끈다
+ */
+function HomeButton() {
+  const [state, setState] = useState<{ available: boolean; homing: boolean; reason: string | null } | null>(null)
+  const [asking, setAsking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    const poll = () =>
+      fetch('/api/mount/home')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((s) => alive && setState(s))
+        .catch(() => alive && setState(null))
+    void poll()
+    const t = window.setInterval(poll, 2000)
+    return () => {
+      alive = false
+      window.clearInterval(t)
+    }
+  }, [])
+  if (!state) return null
+  const on = state.available
+  const label = state.homing ? '홈으로 가는 중' : '적도의 홈'
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.exit}
+        data-locked={!on}
+        aria-disabled={!on}
+        title={on ? '적도의를 홈 위치로 보내고 추적을 끕니다' : (state.reason ?? undefined)}
+        aria-label={on ? '적도의 홈으로 보내기' : `적도의 홈 — ${state.reason ?? '지금은 쓸 수 없음'}`}
+        onClick={() => on && setAsking(true)}
+      >
+        {on || state.homing ? <House strokeWidth={2} aria-hidden="true" /> : <Lock strokeWidth={2} aria-hidden="true" />}
+        <span>{label}</span>
+      </button>
+      <ConfirmDialog
+        open={asking || error !== null}
+        message={error ?? '적도의를 홈 위치로 보내고 추적을 끕니다. 경통 주변에 걸리는 것이 없는지 확인해 주세요.'}
+        confirmLabel={error ? '확인' : '홈으로 보내기'}
+        single={error !== null}
+        onConfirm={() => {
+          if (error) return setError(null)
+          setAsking(false)
+          void fetch('/api/mount/home', { method: 'POST' }).then(async (r) => {
+            if (!r.ok) setError(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? '적도의를 홈으로 보내지 못했습니다')
+          })
+        }}
+        onCancel={() => {
+          setAsking(false)
+          setError(null)
+        }}
+      />
+    </>
   )
 }

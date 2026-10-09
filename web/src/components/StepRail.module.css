@@ -279,6 +279,27 @@
   padding-top: 16px;
 }
 
+/* 종료 줄: 적도의 홈 · 종료를 나란히. 레일(150px)보다 넓으면 왼쪽 화면 쪽으로 넘쳐 보인다 (긴 작업 이름과 같은 규칙) */
+.endRow {
+  display: flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* 지금 움직이면 안 됨: 자물쇠 아이콘 + 흐리게, 눌러도 아무 일 없음 (이유는 가리키면) */
+.exit[data-locked='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.exit[data-locked='true']:hover {
+  color: var(--muted);
+  border-color: transparent;
+  background: none;
+}
+
 .action,
 .exit {
   height: 34px;

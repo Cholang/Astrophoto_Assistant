@@ -24,6 +24,16 @@ public interface IFocusDevices
     /// </summary>
     Task<FocuserZero> ZeroIfRequestedAsync(CancellationToken ct) => Task.FromResult(FocuserZero.None);
     bool ZeroRequested => false;
+    /// <summary>
+    /// 자동초점이 시작점에서 안팎으로 훑는 거리(걸음). 시작점이 포커서 끝에서 이보다 가까우면 범위 절반이 기계 밖으로 나가 끝에서 멈춘다
+    /// (2026-10-09 실기: 0에서 시작 → 500·375·250·125·0 뒤 더 안쪽으로 못 가 0에서 움찔거림). 모르면 0
+    /// </summary>
+    Task<int> AutofocusReachAsync(CancellationToken ct) => Task.FromResult(0);
+    /// <summary>
+    /// 이 망원경에서 지난번 맞은 초점 위치 (밤을 넘어 저장). 포커서를 달 때 매번 끝까지 넣은 위치를 0으로 잡으므로(포커서 0점) 숫자의 뜻이 밤마다 같다
+    /// </summary>
+    (int Position, double? TemperatureC)? SavedFocus => null;
+    void SaveFocus(int position, double? temperatureC) { }
     /// <summary>0점 요청을 거둔다 (사용자가 직접 했거나 건너뜀)</summary>
     void DropZeroRequest() { }
 }
@@ -74,8 +84,22 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
             run.SubStep(0);
             run.Guide("시작 위치로", "포커서를 지난번에 맞았던 위치로 옮긴 뒤, 조금씩 옮기며 별 크기를 잽니다.");
             var temp = await devices.TemperatureAsync(ct);
+            // 같은 밤에 맞춘 위치 → 저장해 둔 지난 밤 위치 → 지금 위치
+            ctx.Memory.LastFocus ??= devices.SavedFocus;
             var start = ctx.Memory.LastFocus?.Position ?? await devices.PositionAsync(ct);
             run.Status(ctx.Memory.LastFocus is { } lf ? $"지난번 위치 {lf.Position:N0}에서 시작합니다{TempText(temp, lf.TemperatureC)}" : "지금 위치에서 시작합니다");
+            // 자동초점 범위가 포커서 0~최대 안에 들도록 시작점을 끝에서 떼어 놓는다
+            var reach = await devices.AutofocusReachAsync(ct);
+            if (reach > 0)
+            {
+                var (lo, hi) = await devices.LimitsAsync(ct);
+                var safe = hi - lo > 2 * reach ? Math.Clamp(start, lo + reach, hi - reach) : start;
+                if (safe != start)
+                {
+                    run.Status($"자동초점은 {reach:N0}걸음 안팎을 재므로 포커서 끝에서 떨어진 {safe:N0}에서 시작합니다");
+                    start = safe;
+                }
+            }
             var moved = await devices.MoveAsync(start, ct);
             if (!moved.Ok) { if (await FocuserErrorAsync(run, moved.Stalled, moved.Problem, ct)) continue; return ManualDone(ctx); }
 
@@ -129,6 +153,7 @@ public sealed class FocusTask(IFocusDevices devices) : IPrepTask
             run.SubStep(2);
             _best = af.BestPosition;
             ctx.Memory.LastFocus = (af.BestPosition, temp);
+            devices.SaveFocus(af.BestPosition, temp); // 다음 밤 시작 위치
             var tempText = temp is { } t ? $" · 기온 {t:F1}°C 기억" : "";
             run.Readout("hfr", $"{af.Hfr:F1}", $"별 크기 (HFR) · 가장 좋은 위치 {af.BestPosition:N0}{tempText}", Tone.Ok,
                 new Dictionary<string, double> { ["hfr"] = af.Hfr, ["position"] = af.BestPosition });

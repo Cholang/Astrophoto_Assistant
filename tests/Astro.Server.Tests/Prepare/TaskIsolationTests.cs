@@ -170,6 +170,30 @@ public class TaskIsolationTests
         Assert.True(dev.Dropped);
     }
 
+    /// <summary>지금 위치가 0(안쪽 끝)이고 자동초점이 1,225걸음 안팎을 재는 포커서 — 이동 목표를 기록</summary>
+    private sealed class EdgeFocus(IFocusDevices inner) : IFocusDevices
+    {
+        public List<int> Moves = [];
+        public Task<int> AutofocusReachAsync(CancellationToken ct) => Task.FromResult(1225);
+        public Task<(int Min, int Max)> LimitsAsync(CancellationToken ct) => Task.FromResult((0, 56000));
+        public Task<int> PositionAsync(CancellationToken ct) => Task.FromResult(0);
+        public Task<double?> TemperatureAsync(CancellationToken ct) => inner.TemperatureAsync(ct);
+        public Task<FocuserMove> MoveAsync(int position, CancellationToken ct) { Moves.Add(position); return inner.MoveAsync(position, ct); }
+        public Task<AutofocusRun> AutofocusAsync(Action<int, double> point, CancellationToken ct) => inner.AutofocusAsync(point, ct);
+        public Task<int?> CoarseSearchAsync(int min, int max, int from, Action<int> visiting, CancellationToken ct) => inner.CoarseSearchAsync(min, max, from, visiting, ct);
+        public Task<bool> StopAsync(CancellationToken ct) => inner.StopAsync(ct);
+        public Task<FocusEndState> ReadEndStateAsync(CancellationToken ct) => inner.ReadEndStateAsync(ct);
+    }
+
+    [Fact]
+    public async Task 포커서가_안쪽_끝이면_자동초점_범위만큼_떨어져서_시작한다()
+    {
+        var dev = new EdgeFocus(new SimulatedFocusDevices(Fast, new SimFaults()));
+        var (_, run) = await RunAlone(new FocusTask(dev), Harness.Context());
+        Assert.Equal(1225, dev.Moves[0]); // 0이 아니라 0 + 자동초점 거리에서
+        Assert.Contains(run.Statuses, s => s.Contains("떨어진 1,225"));
+    }
+
     /// <summary>이동을 세는 캘리브레이션 장비</summary>
     private sealed class CountingCalibration(ICalibrationDevices inner) : ICalibrationDevices
     {

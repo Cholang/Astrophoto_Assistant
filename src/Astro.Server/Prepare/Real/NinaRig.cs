@@ -176,6 +176,13 @@ public sealed class NinaRig(NinaApiClient nina)
         return (date, name.Length > 0 ? await FindSavedFileAsync(name, date, ct) ?? "" : "", Num(e, "HFR"), (int)Num(e, "Stars"));
     }
 
+    /// <summary>N.I.N.A. 활성 프로필 전체. 모르면 null</summary>
+    public async Task<JsonElement?> ProfileAsync(CancellationToken ct)
+    {
+        var r = await nina.RequestAsync("profile/show?active=true", Short, ct);
+        return r.Ok && r.Response is { ValueKind: JsonValueKind.Object } p ? p : null;
+    }
+
     /// <summary>N.I.N.A. 프로필의 이미지 폴더(ImageFileSettings.FilePath). 모르면 null</summary>
     public async Task<string?> ImageFolderAsync(CancellationToken ct)
     {

@@ -8,8 +8,50 @@ namespace Astro.Server.Prepare.Real;
 /// 2026-10-05 실기: Oasis 이동 정상, 범위 0~56000(제조사 설정 — 사용자가 0·최대를 설정 창에서 정함), 프로브 기온은 연결할 때만 잡힘.
 /// 자동초점은 별이 필요해 맑은 날 확인. 지점별 곡선은 N.I.N.A.가 끝난 뒤 기록으로만 줘서, 끝난 다음 한꺼번에 그린다.
 /// </summary>
-public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, FocuserZeroRequest zero) : IFocusDevices
+public sealed class RealFocusDevices(NinaRig rig, IConfiguration config, FocuserZeroRequest zero, Engine.OpticsStore optics) : IFocusDevices
 {
+    /// <summary>N.I.N.A. 자동초점이 시작점에서 한쪽으로 가는 거리 = 처음 칸 수 × 칸 크기 (+ 백래시 보정 여유)</summary>
+    public async Task<int> AutofocusReachAsync(CancellationToken ct)
+    {
+        if (await rig.ProfileAsync(ct) is not { ValueKind: JsonValueKind.Object } p || !p.TryGetProperty("FocuserSettings", out var f)) return 0;
+        var steps = NinaRig.Num(f, "AutoFocusInitialOffsetSteps");
+        var size = NinaRig.Num(f, "AutoFocusStepSize");
+        var backlash = Math.Max(NinaRig.Num(f, "BacklashIn"), NinaRig.Num(f, "BacklashOut"));
+        if (!double.IsFinite(steps) || !double.IsFinite(size) || steps <= 0 || size <= 0) return 0;
+        return (int)Math.Ceiling(steps * size + (double.IsFinite(backlash) ? backlash : 0) + size);
+    }
+
+    private static string MemoryFile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Astro.Core.Product.DataFolder, "focus-memory.json");
+    private sealed record Saved(int Position, double? TemperatureC, DateTimeOffset At);
+
+    /// <summary>망원경별로 지난번 맞은 초점 위치 (focus-memory.json)</summary>
+    public (int Position, double? TemperatureC)? SavedFocus
+    {
+        get
+        {
+            try
+            {
+                if (optics.Current is not { } scope || !File.Exists(MemoryFile)) return null;
+                var all = JsonSerializer.Deserialize<Dictionary<string, Saved>>(File.ReadAllText(MemoryFile));
+                return all is not null && all.TryGetValue(scope.Id, out var s) ? (s.Position, s.TemperatureC) : null;
+            }
+            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return null; }
+        }
+    }
+
+    public void SaveFocus(int position, double? temperatureC)
+    {
+        if (optics.Current is not { } scope) return;
+        try
+        {
+            var all = File.Exists(MemoryFile) ? JsonSerializer.Deserialize<Dictionary<string, Saved>>(File.ReadAllText(MemoryFile)) ?? [] : [];
+            all[scope.Id] = new Saved(position, temperatureC, DateTimeOffset.Now);
+            Directory.CreateDirectory(Path.GetDirectoryName(MemoryFile)!);
+            File.WriteAllText(MemoryFile, JsonSerializer.Serialize(all));
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
+    }
+
     public bool ZeroRequested => zero.Pending;
     public void DropZeroRequest() => zero.Pending = false;
 

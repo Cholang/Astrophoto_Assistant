@@ -118,6 +118,16 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
 
     // ── 상태 읽기 ─────────
 
+    /// <summary>작업이 진행 중이면 그 작업 이름 (끝나서 다음 버튼을 기다리는 중이면 null) — 적도의 홈 버튼을 막을 때</summary>
+    public string? ActiveTaskTitle
+    {
+        get
+        {
+            lock (_gate)
+                return _cur is { Finished: false } c && _rows[c.Task.Id].Status is PrepTaskStatus.Running or PrepTaskStatus.Waiting ? c.Task.Title : null;
+        }
+    }
+
     public PrepView View()
     {
         lock (_gate) return Snapshot();

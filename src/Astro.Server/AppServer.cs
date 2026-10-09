@@ -146,6 +146,10 @@ public static class AppServer
             zero.Pending = true;
             return Results.NoContent();
         });
+        // 진행 표시 아래 "적도의 홈": 지금 보낼 수 있는지(이유) · 보내기
+        api.MapGet("/mount/home", async (Prepare.MountHome home, CancellationToken ct) => Results.Ok(await home.StateAsync(ct)));
+        api.MapPost("/mount/home", async (Prepare.MountHome home, CancellationToken ct) =>
+            await home.StartAsync(ct) is { } why ? Results.Conflict(new { error = why }) : Results.Accepted());
         // 카메라 전원: 배터리(outlet=null) 또는 전원 허브 출력. 고를 수 있는 출력은 허브가 연결돼 있을 때의 쓰기 가능한 출력들
         api.MapGet("/equipment/camera-power", async (CameraPowerStore power, EquipmentConnector connector, CancellationToken ct) =>
             Results.Ok(new { outlet = power.Outlet, outlets = await connector.HubOutputsAsync(ct) }));

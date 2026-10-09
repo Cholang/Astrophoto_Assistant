@@ -104,6 +104,9 @@ public sealed class ShootSession(IShootDevices devices, Prepare.PrepareMode mode
 
     public PrepContext? Context { get { lock (_gate) return _ctx; } }
 
+    /// <summary>촬영이 진행 중인가 (멈춤·반전·초점 다시 맞추기 포함, 끝났거나 시작 전이면 false)</summary>
+    public bool Active => _mode is not (ShootMode.Idle or ShootMode.Ended);
+
     public ShootView View()
     {
         lock (_gate) return Snapshot();

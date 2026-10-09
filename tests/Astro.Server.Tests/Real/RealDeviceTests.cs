@@ -74,7 +74,7 @@ public class RealDeviceTests(ITestOutputHelper output)
     {
         if (!Enabled) return;
         var config = new ConfigurationBuilder().Build();
-        var dev = new RealFocusDevices(Rig(), config, new());
+        var dev = new RealFocusDevices(Rig(), config, new(), new global::Astro.Server.Engine.OpticsStore(Path.GetTempPath()));
         var start = await dev.PositionAsync(CancellationToken.None);
         output.WriteLine($"시작 {start}, 기온 {await dev.TemperatureAsync(CancellationToken.None)}");
         var go = await dev.MoveAsync(start + 300, CancellationToken.None);
