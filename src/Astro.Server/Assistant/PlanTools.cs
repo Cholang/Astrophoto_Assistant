@@ -215,6 +215,9 @@ public sealed class PlanTools(DsoCatalog catalog, Engine.EquipmentChoices equipm
         var rule = Str(a, "end") switch { "dawn" => EndRule.Dawn, "time" => EndRule.AtTime, _ => EndRule.TargetLowOrDawn };
         var endTime = Str(a, "end_time");
         if (rule == EndRule.AtTime && !TimeOnly.TryParse(endTime, out _)) return new { error = "end가 time이면 end_time을 HH:mm로 넣으세요." };
+        // 카메라가 쓸 수 없는 ISO면 계획에 넣지 않고 AI에게 범위를 알려 다시 고르게 한다 (Codex C06 — 조용히 다른 값으로 찍지 않게)
+        if (Int(a, "iso") is { } wantIso && n.Rig.IsoMin is { } isoMin && n.Rig.IsoMax is { } isoMax && (wantIso < isoMin || wantIso > isoMax))
+            return new { error = $"이 카메라({n.Rig.Camera})는 ISO {isoMin}~{isoMax}만 쓸 수 있습니다. 그 안의 값으로 다시 정하고, 사용자에게 바꾼 이유를 한 줄로 말하세요." };
         var s = new PlanSettings(Int(a, "exposure_seconds") ?? 180, Int(a, "iso") ?? 800, Str(a, "filter") ?? "필터 없음",
             rule, n.Window.DarkStart, n.Window.DarkEnd, 0,
             Bool(a, "exposure_recommended") ?? false, Bool(a, "iso_recommended") ?? false);

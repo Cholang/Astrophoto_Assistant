@@ -8,7 +8,7 @@ namespace Astro.Server.Sky;
 public sealed record Rig(
     string Telescope, double FocalLength, double FocalRatio,
     string Camera, double PixelSize, int SensorWidth, int SensorHeight,
-    bool HasFilterWheel, bool HasGuider)
+    bool HasFilterWheel, bool HasGuider, int? IsoMin = null, int? IsoMax = null)
 {
     /// <summary>화각(도): 가로·세로</summary>
     public (double Width, double Height) FieldOfView =>
@@ -54,6 +54,10 @@ public sealed class TonightService(NinaApiClient nina, IHttpClientFactory httpFa
             (int)Num("FramingAssistantSettings", "CameraHeight"),
             Str("FilterWheelSettings", "Id") is { Length: > 0 } fw && fw != "No_Device",
             Str("GuiderSettings", "GuiderName") is { Length: > 0 } g && g != "No_Guider");
+        // 연결된 카메라의 ISO(gain) 범위 — 계획에서 카메라가 못 쓰는 ISO를 고르지 않게 (Codex C06). 연결 안 됐으면 모름
+        if (await nina.GetInfoAsync("camera", ct) is { ValueKind: JsonValueKind.Object } cam && cam.TryGetProperty("Connected", out var on) && on.ValueKind == JsonValueKind.True
+            && cam.TryGetProperty("GainMin", out var gmin) && gmin.TryGetInt32(out var lo) && cam.TryGetProperty("GainMax", out var gmax) && gmax.TryGetInt32(out var hi) && hi > lo && hi > 0)
+            rig = rig with { IsoMin = lo, IsoMax = hi };
         return (site, rig);
     }
 
