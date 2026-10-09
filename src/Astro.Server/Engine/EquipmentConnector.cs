@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Astro.Core.Setup;
 using Astro.Nina;
 using Microsoft.Extensions.Options;
@@ -93,7 +94,7 @@ public sealed class EquipmentChoices
 ///   단 전원 허브는 다른 장비에 전원을 주므로, 있으면 맨 먼저 연결하고 실패하면 뒤 장비는 보류한다
 /// 돔·안전 모니터·날씨 장치는 다루지 않는다.
 /// </summary>
-public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics, EquipmentRun state)
+public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOptions> options, EquipmentSimulation sim, EquipmentChoices choices, RigOverrides overrides, LiveDevices live, OpticsStore optics, EquipmentRun state, DevicePrecheck.IHostDevices host, ILogger<EquipmentConnector> log)
 {
     private const CheckSeverity Required = CheckSeverity.Required;
     private const CheckSeverity Recommended = CheckSeverity.Recommended;
@@ -343,10 +344,32 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
             }
             else
             {
+                // 연결 직전 점검 (docs/PRECHECK_DESIGN.md ③): 장비가 PC에 보이지 않으면 N.I.N.A.에 맡기지 않고 할 일을 알린다 —
+                // N.I.N.A. 오류 알림·2분 기다림 없이. 허브 USB 출력을 막 켰을 수 있어 USB 장치는 10초까지 기다려 본다
+                if (!connectedNow)
+                {
+                    if (kind == Hub && DevicePrecheck.EmpireStale(host))
+                    {
+                        // Empire가 켜진 뒤 USB가 다시 꽂힘 → Empire가 허브와 끊겨 있을 수 있다. 닫아 두면 N.I.N.A. 연결이 새로 띄우며 자동으로 연결 (10/09 실기)
+                        log.LogInformation("Empire가 켜진 뒤 USB 장치가 새로 꽂혀 Empire를 다시 켭니다");
+                        await Task.Run(host.CloseEmpire, ct);
+                    }
+                    var pre = await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(10), ct);
+                    if (!pre.Ok)
+                    {
+                        live.Forget(kind);
+                        var diag = new Diagnosis([], $"{pre.Fix} 그다음 다시 연결을 눌러 주세요.");
+                        return d.Slot.Tier == Optional && kind != Hub
+                            ? Make(d, CheckStatus.Warn, $"{pre.Message} — {d.Slot.Role} 없이 진행합니다", diag)
+                            : Make(d, CheckStatus.Fail, pre.Message!, diag);
+                    }
+                }
                 if (connectedNow) await nina.DisconnectAsync(kind, ct);
                 await WaitListedAsync(kind, d.Id, ct);
                 connected = await nina.ConnectAsync(kind, d.Id, ct) && await nina.IsConnectedAsync(kind, ct);
             }
+            // 허브가 연결되면 USB 출력을 켜 둔다 — 가이드 카메라·포커서가 허브 USB에 붙어 있다 (자동 해결, 다시 읽어 확인 — 10/09: N.I.N.A.는 실패해도 성공이라 답함)
+            if (connected && kind == Hub) await EnsureHubUsbOnAsync(ct);
             if (connected) live.Set(kind, d.Id);
             else live.Forget(kind);
 
@@ -367,6 +390,31 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         return d.Slot.Tier == Optional && d.Slot.Kind != Hub
             ? Make(d, CheckStatus.Warn, $"연결되지 않아 {d.Slot.Role} 없이 진행합니다", diagnosis)
             : Make(d, CheckStatus.Fail, "연결되어 있지 않습니다", diagnosis);
+    }
+
+    /// <summary>
+    /// 허브의 "USB" 출력이 꺼져 있으면 켠다. N.I.N.A. 출력 바꾸기의 index는 출력 Id가 아니라 쓰기 가능한 출력 목록의 순서(10/09 실기 —
+    /// Id를 넣으면 "Switch value updated"라고 답하고 실제로는 안 바뀜) → 순서로 바꾸고 다시 읽어 확인한다. 못 켜도 연결은 그대로 (뒤 장비 점검이 알린다)
+    /// </summary>
+    private async Task EnsureHubUsbOnAsync(CancellationToken ct)
+    {
+        var info = await nina.RequestAsync("equipment/switch/info", TimeSpan.FromSeconds(10), ct);
+        if (!info.Ok || info.Response is not { ValueKind: JsonValueKind.Object } r || !r.TryGetProperty("WritableSwitches", out var ws) || ws.ValueKind != JsonValueKind.Array) return;
+        var list = ws.EnumerateArray().ToList();
+        var index = list.FindIndex(s => Text(s, "Name") is { } n && Regex.IsMatch(n, @"(^|:\s*)USB\s*$|^USB\b", RegexOptions.IgnoreCase));
+        if (index < 0) return;
+        if (list[index].TryGetProperty("Value", out var v) && v.TryGetDouble(out var value) && value >= 1) return;
+        await nina.RequestAsync($"equipment/switch/set?index={index}&value=1", TimeSpan.FromSeconds(10), ct);
+        // N.I.N.A.는 출력 값을 몇 초마다 새로 읽는다(10/09 실기: 켠 뒤 2초에는 아직 0) → 10초까지 1초마다 다시 읽는다
+        var on = false;
+        for (var i = 0; i < 10 && !on; i++)
+        {
+            await Task.Delay(1000, ct);
+            var after = await nina.RequestAsync("equipment/switch/info", TimeSpan.FromSeconds(10), ct);
+            on = after.Response is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("WritableSwitches", out var w2) && w2.ValueKind == JsonValueKind.Array
+                && w2.EnumerateArray().ElementAtOrDefault(index) is { ValueKind: JsonValueKind.Object } sw && sw.TryGetProperty("Value", out var v2) && v2.TryGetDouble(out var val2) && val2 >= 1;
+        }
+        log.LogInformation(on ? "허브 USB 출력을 켰습니다" : "허브 USB 출력을 켜지 못했습니다 (다시 읽은 값이 꺼짐)");
     }
 
     /// <summary>PHD2 주소는 N.I.N.A. 프로필의 가이더 설정에서(없으면 localhost:4400), 비교할 적도의 이름은 N.I.N.A.가 연결한 적도의</summary>

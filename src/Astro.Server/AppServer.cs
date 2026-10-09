@@ -55,6 +55,7 @@ public static class AppServer
         builder.Services.AddSingleton<NinaWatcher>();
         builder.Services.AddTransient<EquipmentConnector>();
         builder.Services.AddSingleton<EquipmentRun>();
+        builder.Services.AddSingleton<DevicePrecheck.IHostDevices, DevicePrecheck.WindowsHost>();
         builder.Services.AddSingleton<EquipmentSimulation>();
         builder.Services.AddSingleton<EquipmentChoices>();
         builder.Services.AddSingleton(new RigOverrides(builder.Configuration["App:DataDir"]));

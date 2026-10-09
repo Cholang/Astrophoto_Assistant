@@ -158,9 +158,10 @@ public static class NinaLogRules
                 ["구름이 지나가거나 가이드 망원경 덮개가 닫혀 있습니다", "가이드 노출이 짧거나 초점이 흐립니다"],
                 "가이드 망원경 덮개와 하늘을 확인해 주세요.");
         if (Has("equipment failed to connect"))
-            return ("guide", "PHD2가 장비를 연결하지 못했습니다",
-                ["가이드 카메라 USB가 빠졌거나 포트가 바뀌었습니다", "PHD2 장비 연결 창이 열려 있습니다"],
-                "PHD2 장비 연결 창에서 카메라와 적도의를 다시 연결해 주세요.");
+            // 장비 연결 화면이 스스로 보여 주므로 연결(connect) 종류로 — 그 화면에서는 겹쳐 띄우지 않는다
+            return ("connect", "PHD2가 장비를 연결하지 못했습니다",
+                ["USB를 다시 꽂아 PHD2가 기억한 카메라를 찾지 못합니다", "가이드 카메라 USB가 빠졌습니다", "PHD2 장비 연결 창이 열려 있습니다"],
+                "PHD2 장비 연결 창에서 카메라 줄 옆 선택 버튼으로 가이드 카메라를 다시 고른 뒤 연결해 주세요.");
         if (Has("Start guiding has failed") || Has("Start guiding has timed out"))
             return ("guide", "가이딩을 시작하지 못했습니다",
                 ["가이드 별이 없거나 구름이 지나갑니다", "캘리브레이션이 맞지 않습니다"],
