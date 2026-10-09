@@ -75,6 +75,9 @@ public partial class MainWindow : Window
             await _server.StartAsync();
 
             await Web.EnsureCoreWebView2Async();
+            // 디스크 캐시를 비운다: 예전에 no-cache 없이 받아 둔 index.html이 남아 있으면 WebView2가 새 빌드 대신 옛 화면을 띄운다
+            // (2026-10-09 이름을 바꾼 뒤 "AA v0.1.58" 화면이 뜸). 화면 파일은 내 PC의 내부 서버에서 오므로 비워도 느려지지 않는다. 설정(localStorage)은 남음
+            await Web.CoreWebView2.Profile.ClearBrowsingDataAsync(Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DiskCache);
             // 바깥 링크(설치 안내 등)는 창 안이 아니라 기본 브라우저로 연다.
             Web.CoreWebView2.NewWindowRequested += (_, args) =>
             {

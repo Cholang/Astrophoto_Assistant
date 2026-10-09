@@ -16,6 +16,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Product.MoveDataFromPreviousName(); // 이름을 바꾸기 전 데이터 폴더 → 새 폴더 (창이 테마 파일을 읽기 전에)
         _single = new Mutex(initiallyOwned: true, $@"Local\{Product.DataFolder}-single-instance", out var first);
         if (!first)
         {

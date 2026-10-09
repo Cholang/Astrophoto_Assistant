@@ -8,7 +8,17 @@
 
 ---
 
-## 2026-10-09 · [Claude] 시험 사진에 히스토그램
+## 2026-10-09 · [Claude] 제품 이름을 아이라(AIRA)로
+
+**요청**: 가칭 AA 대신 정식 이름 — 사용자가 "아이라"로 정함(Claude·Codex·Gemini 후보 비교 뒤). 실행 파일·데이터 폴더 이름도 바꾸기
+
+**변경**: product.json — name 아이라, id AIRA(새 키, 실행 파일 이름), fullName Astrophotography Imaging & Rig Assistant, tagline 천체사진 조수, dataFolder AIRA, previousDataFolder AA(새 키). Directory.Build.props가 id·previousDataFolder를 읽고 Astro.Desktop AssemblyName = id. `Product.Id`, `Product.MoveDataFromPreviousName`/`MoveData`(새 폴더가 없을 때만 예전 폴더를 통째로 옮김, 안 되면 복사) — 데스크톱 시작·서버 Build에서. README·CLAUDE.md 이름. 부팅 화면에 영어 풀이(낱말 첫 글자 강조 — AIRA가 되는 것이 보이게, 사용자 요청). `MainWindow` 시작 때 WebView2 디스크 캐시 비우기 — 예전에 받아 둔 index.html(no-cache 전)이 남아 새 빌드 대신 "AA v0.1.58" 화면이 뜸. `BackgroundWindows`: Alt·Windows 키가 눌리면 지키기(항상 위·포커스 되돌리기)를 그만두고 2분 동안 새로 시작하지 않음 — 장비 연결 중 종료 확인 창에서 Alt+Tab으로 고른 창이 다시 끌려 내려가던 것
+
+**확인**: ProductDataTests 3개(옮김·새 폴더 있으면 그대로·예전 없음) 포함 서버 테스트 149 통과·1 건너뜀, 웹·데스크톱 빌드 — AIRA.exe, 창 제목 "아이라 · 천체사진 조수", 페이지 제목 아이라, 캐시 비운 뒤 상태 줄 "아이라 v0.1.59"(창 캡처). 확인 못 함: 사용자 실제 데이터 폴더 옮기기 — Claude 도구로 켠 앱은 Claude 앱의 가상 AppData(Packages\Claude_…\LocalCache)를 봐서 실제 AA 폴더는 건드리지 않았음. 사용자가 직접 AIRA.exe를 켤 때 옮겨짐
+
+---
+
+## 2026-10-09 · 9ace5dc [Claude] 시험 사진에 히스토그램
 
 **요청**: 시험 사진 화면에서 사진 위 오른쪽 세로 가운데에 그 사진의 히스토그램 (N.I.N.A.에 있는 것처럼)
 

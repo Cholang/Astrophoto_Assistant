@@ -64,6 +64,8 @@ public static class BackgroundWindows
             _grace = grace;
             _onTop = onTop;
             if (!OperatingSystem.IsWindows()) return;
+            // 사용자가 방금(2분 안) 직접 창을 바꿨으면 다시 앞을 차지하지 않는다 (다음 장비 연결이 아이라를 또 끌어올리지 않게)
+            if (DateTime.UtcNow - _userSwitchedAt < TimeSpan.FromMinutes(2)) return;
             if (onTop) HoldTop(true);
             // 지켜보기 전부터 있던 창(사용자가 열어 둔 것)은 건드리지 않는다
             var before = Windows(names).ToHashSet();
@@ -74,6 +76,13 @@ public static class BackgroundWindows
                 {
                     while (!_stop.IsCancellationRequested)
                     {
+                        // 사용자가 Alt(Alt+Tab)·Windows 키로 직접 창을 바꾸면 지키기를 그만둔다 — 고른 창을 다시 끌어내리지 않게
+                        // (2026-10-09 실기: 장비 연결 중 종료 확인 창에서 Alt+Tab을 눌러도 다른 창이 올라오지 않음)
+                        if (UserSwitching())
+                        {
+                            _userSwitchedAt = DateTime.UtcNow;
+                            break;
+                        }
                         // 지켜보는 동안 다시 펼쳐지는 창(프로그램이 로딩 끝에 창을 다시 띄움)도 다시 내린다
                         foreach (var h in Windows(names))
                         {
@@ -108,6 +117,15 @@ public static class BackgroundWindows
 
         public void Dispose() => _stop.CancelAfter(_grace);
     }
+
+    /// <summary>Alt나 Windows 키가 눌려 있는가 (Alt+Tab·Win+Tab·작업 표시줄 — 사용자가 직접 창을 바꾸는 중)</summary>
+    private static bool UserSwitching() =>
+        (GetAsyncKeyState(VkMenu) & 0x8000) != 0 || (GetAsyncKeyState(VkLWin) & 0x8000) != 0 || (GetAsyncKeyState(VkRWin) & 0x8000) != 0;
+
+    private static DateTime _userSwitchedAt = DateTime.MinValue;
+
+    private const int VkMenu = 0x12, VkLWin = 0x5B, VkRWin = 0x5C;
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
 
     /// <summary>그 프로세스들의 보이는 맨 위 창 (주인 창이 없는 것만 — 대화 상자는 주인 창과 함께 움직인다)</summary>
     private static IEnumerable<nint> Windows(string[] names)

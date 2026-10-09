@@ -17,8 +17,44 @@ public static class Product
     public static string FullName { get; } = Get("AppProductFullName", "Astrophoto Assistant");
     public static string Tagline { get; } = Get("AppProductTagline", "");
 
+    /// <summary>영문 짧은 이름 (실행 파일 이름 등)</summary>
+    public static string Id { get; } = Get("AppProductId", Name);
+
     /// <summary>%LOCALAPPDATA% 아래 데이터 폴더 이름. 이름을 바꿔도 기존 데이터를 찾도록 따로 둔다.</summary>
     public static string DataFolder { get; } = Get("AppDataFolder", "AA");
+
+    /// <summary>
+    /// 이름을 바꾸기 전 데이터 폴더(product.json previousDataFolder)가 있고 새 폴더가 없으면 통째로 옮긴다 — 프로필·망원경·장소·이어서 하기 기록이 그대로 남게.
+    /// 앱이 데이터를 읽기 전에 한 번 부른다 (데스크톱 시작, 서버 Build). 옮기지 못하면(다른 프로그램이 쓰는 중 등) 복사한다
+    /// </summary>
+    public static void MoveDataFromPreviousName()
+    {
+        var old = Get("AppPreviousDataFolder", "");
+        if (old.Length == 0 || old.Equals(DataFolder, StringComparison.OrdinalIgnoreCase)) return;
+        MoveData(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), old),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DataFolder));
+    }
+
+    /// <summary>from 폴더를 to로 (to가 이미 있으면 아무것도 하지 않음 — 새 이름으로 한 번이라도 켠 뒤). 시험용으로 경로를 받는다</summary>
+    public static void MoveData(string from, string to)
+    {
+        lock (MoveGate)
+        {
+            if (!Directory.Exists(from) || Directory.Exists(to)) return;
+            try { Directory.Move(from, to); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { CopyDir(from, to); }
+        }
+    }
+
+    private static readonly object MoveGate = new();
+
+    private static void CopyDir(string from, string to)
+    {
+        Directory.CreateDirectory(to);
+        foreach (var f in Directory.EnumerateFiles(from))
+            try { File.Copy(f, Path.Combine(to, Path.GetFileName(f)), overwrite: false); } catch (IOException) { }
+        foreach (var d in Directory.EnumerateDirectories(from)) CopyDir(d, Path.Combine(to, Path.GetFileName(d)));
+    }
 
     /// <summary>"AA가" / "별빛이"</summary>
     public static string Ga => Name + Josa.Pick(Name, "이", "가");

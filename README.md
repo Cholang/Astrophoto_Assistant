@@ -1,4 +1,4 @@
-# AA (Astrophoto Assistant) — 가칭
+# 아이라 (AIRA · Astrophotography Imaging & Rig Assistant)
 
 N.I.N.A. 위에서 동작하는 천체사진 촬영 비서. 개인용 프로토타입.
 

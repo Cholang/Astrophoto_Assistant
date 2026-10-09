@@ -1,7 +1,9 @@
 {
-  "name": "AA",
-  "fullName": "Astrophoto Assistant",
-  "tagline": "천체사진 촬영 비서",
-  "dataFolder": "AA",
+  "name": "아이라",
+  "id": "AIRA",
+  "fullName": "Astrophotography Imaging & Rig Assistant",
+  "tagline": "천체사진 조수",
+  "dataFolder": "AIRA",
+  "previousDataFolder": "AA",
   "version": "0.1"
 }

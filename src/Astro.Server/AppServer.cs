@@ -23,6 +23,7 @@ public static class AppServer
     /// </param>
     public static WebApplication Build(string[] args, string? url = null, string? contentRoot = null)
     {
+        Astro.Core.Product.MoveDataFromPreviousName(); // 개발 서버로 켤 때도 (데스크톱은 이미 옮겼으면 그대로)
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             Args = args,

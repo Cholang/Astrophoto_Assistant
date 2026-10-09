@@ -10,6 +10,10 @@
     <AppProductFullName>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"fullName"\s*:\s*"([^"]*)".*', '$1'))</AppProductFullName>
     <AppProductTagline>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"tagline"\s*:\s*"([^"]*)".*', '$1'))</AppProductTagline>
     <AppDataFolder>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"dataFolder"\s*:\s*"([^"]*)".*', '$1'))</AppDataFolder>
+    <!-- 영문 짧은 이름: 실행 파일 이름 (화면 이름은 한글일 수 있어 따로 둔다) -->
+    <AppProductId>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"id"\s*:\s*"([^"]*)".*', '$1'))</AppProductId>
+    <!-- 이름을 바꾸기 전 데이터 폴더: 처음 켤 때 새 폴더로 옮긴다 -->
+    <AppPreviousDataFolder>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"previousDataFolder"\s*:\s*"([^"]*)".*', '$1'))</AppPreviousDataFolder>
   </PropertyGroup>
 
   <!-- Astro.Core.Product가 실행 중에 읽는 값 -->
@@ -18,5 +22,7 @@
     <AssemblyMetadata Include="AppProductFullName" Value="$(AppProductFullName)" />
     <AssemblyMetadata Include="AppProductTagline" Value="$(AppProductTagline)" />
     <AssemblyMetadata Include="AppDataFolder" Value="$(AppDataFolder)" />
+    <AssemblyMetadata Include="AppProductId" Value="$(AppProductId)" />
+    <AssemblyMetadata Include="AppPreviousDataFolder" Value="$(AppPreviousDataFolder)" />
   </ItemGroup>
 </Project>
