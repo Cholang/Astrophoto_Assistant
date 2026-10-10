@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="망원경">
+  <!-- 아이라용 선 아이콘 (jwst-icon.svg를 바탕으로, 2026-10-10): 금색·은색 면 대신 글자색 선(currentColor) + 아주 옅은 면.
+       선 굵기는 64px 안팎으로 그렸을 때 Lucide 아이콘(1.6~1.8)과 비슷하게 보이도록 viewBox 기준 6.5 (2026-10-11 가늘게 — 70px 안팎에서 그림). 거울 18장·가운데 구멍·보조경 지지대 셋·차양막 세 겹 -->
+  <defs>
+    <path id="seg" d="M0 -42 36.37 -21 36.37 21 0 42 -36.37 21 -36.37 -21Z"/>
+  </defs>
+  <!-- 차양막: 세 겹을 선 하나씩으로 -->
+  <g stroke-width="6" fill="currentColor" fill-opacity="0.05">
+    <path d="M74 384 247 347 438 387 269 445Z"/>
+  </g>
+  <path d="M74 404 269 465 438 407" stroke-width="5" opacity="0.55"/>
+  <path d="M74 424 269 485 438 427" stroke-width="4.5" opacity="0.3"/>
+  <path d="M240 338 262 337 272 372" stroke-width="6"/>
+  <!-- 주경: 육각 거울 18장 -->
+  <g transform="translate(256 215) rotate(-8)">
+    <g stroke-width="6.5" fill="currentColor" fill-opacity="0.08">
+      <use href="#seg" transform="translate(-145.49 0)"/>
+      <use href="#seg" transform="translate(-109.12 63)"/>
+      <use href="#seg" transform="translate(-72.75 126)"/>
+      <use href="#seg" transform="translate(-109.12 -63)"/>
+      <use href="#seg" transform="translate(-72.75 0)"/>
+      <use href="#seg" transform="translate(-36.37 63)"/>
+      <use href="#seg" transform="translate(0 126)"/>
+      <use href="#seg" transform="translate(-72.75 -126)"/>
+      <use href="#seg" transform="translate(-36.37 -63)"/>
+      <use href="#seg" transform="translate(36.37 63)"/>
+      <use href="#seg" transform="translate(72.75 126)"/>
+      <use href="#seg" transform="translate(0 -126)"/>
+      <use href="#seg" transform="translate(36.37 -63)"/>
+      <use href="#seg" transform="translate(72.75 0)"/>
+      <use href="#seg" transform="translate(109.12 63)"/>
+      <use href="#seg" transform="translate(72.75 -126)"/>
+      <use href="#seg" transform="translate(109.12 -63)"/>
+      <use href="#seg" transform="translate(145.49 0)"/>
+    </g>
+    <!-- 보조경 지지대 셋 + 보조경 -->
+    <path d="M0 -166 112 56 -144 84 M112 56 38 145" stroke-width="6.5"/>
+    <circle cx="112" cy="56" r="18" stroke-width="6.5" fill="currentColor" fill-opacity="0.15"/>
+  </g>
+</svg>

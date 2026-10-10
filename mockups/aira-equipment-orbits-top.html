@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>장비 연결 궤도 시안 2</title>
+<style>
+  /* 장비 연결 — 태양(자비스 원) + 행성(장비) 시안 2 (2026-10-10). 위에서 내려다본 평면.
+     항성은 왼쪽 위 구석에 1/4만 보이고, 장비는 동심원 궤도 위에 대각선 아래 방향으로 퍼진다.
+     행성마다 궤도 위 각도(공전 시점)를 다르게 — 한 줄로 늘어서지 않게(그랜드 크로스 피하기). 원은 지금 앱과 같은 글래스 + 보라 연결 표현 */
+  :root {
+    --bg:#1e1f21; --text:#ebe8e3; --muted:#a3a09a; --line:#3b3e42; --fail:#f07a52;
+    --conn:#a9a6f7; --conn-soft:rgb(169 166 247/.55); --conn-glow:rgb(169 166 247/.22); --conn-flash:rgb(169 166 247/.6);
+    --glass-bg:rgb(46 48 52/.24); --glass-line:rgb(255 255 255/.10);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; color:var(--text); font:15px/1.5 'Pretendard Variable','Malgun Gothic',sans-serif;
+    background:
+      radial-gradient(55% 50% at 30% 62%, rgb(92 132 174/.18), transparent 70%),
+      radial-gradient(45% 40% at 74% 36%, rgb(147 105 157/.16), transparent 70%),
+      var(--bg); overflow-x:hidden; }
+  header { display:flex; align-items:baseline; gap:18px; padding:20px 32px 0; flex-wrap:wrap; }
+  h1 { margin:0; font-size:20px; }
+  .lead { margin:0; color:var(--muted); font-size:13.5px; }
+  .tools { display:flex; gap:16px; align-items:center; padding:10px 32px; flex-wrap:wrap; font-size:13.5px; color:var(--muted); }
+  .tools button { height:32px; padding:0 14px; border:1.5px solid var(--line); border-radius:10px; background:none; color:var(--text); font:inherit; cursor:pointer; }
+  .tools button:hover { border-color:var(--conn); }
+  .tools label { display:inline-flex; gap:8px; align-items:center; }
+  .tools input[type=range] { accent-color:var(--conn); width:120px; }
+
+  .stage { position:relative; width:min(1500px, calc(100vw - 32px)); aspect-ratio:1500/760; margin:0 auto; overflow:hidden; }
+  .stars { position:absolute; inset:0; opacity:.5; pointer-events:none;
+    background-image:radial-gradient(1px 1px at 12% 62%, #ddd 50%, transparent 51%), radial-gradient(1px 1px at 68% 64%, #ccc 50%, transparent 51%), radial-gradient(1.2px 1.2px at 41% 83%, #eee 50%, transparent 51%), radial-gradient(1px 1px at 86% 18%, #bbb 50%, transparent 51%), radial-gradient(1px 1px at 55% 41%, #ddd 50%, transparent 51%), radial-gradient(1px 1px at 93% 77%, #ccc 50%, transparent 51%), radial-gradient(1px 1px at 30% 90%, #ccc 50%, transparent 51%); }
+  svg.orbits { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; }
+  .orbit { fill:none; stroke:var(--conn); stroke-width:1.2; opacity:0; stroke-dasharray:1; stroke-dashoffset:1; }
+  .orbit.on { opacity:var(--orbit-a, .03); stroke-dashoffset:0; transition:stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1), opacity .5s; }
+
+  .c { position:absolute; border-radius:50%; display:grid; place-content:center; text-align:center; transform:translate(-50%,-50%);
+    background:var(--glass-bg); backdrop-filter:blur(18px) saturate(1.2); box-shadow:inset 0 0 0 1px var(--glass-line); }
+  .c::before, .c::after { content:''; position:absolute; inset:-6px; border-radius:50%; pointer-events:none; }
+
+  /* 항성: 중심이 무대 왼쪽 위 구석 근처 → 1/4만 보인다. 글자는 보이는 쪽(오른쪽 아래)에 */
+  .sun { z-index:2; width:var(--sun); height:var(--sun); place-content:normal; }
+  .sun .label { position:absolute; left:calc(50% + var(--sun) * .075); top:calc(50% + var(--sun) * .07); text-align:left; }
+  .sun b { display:block; font-size:22px; } .sun span { font-size:14px; color:var(--muted); }
+  /* 태양 이글거림: 테두리 바깥 부드러운 빛줄기(SVG 타원 + 흐림) 두 묶음이 서로 반대로 아주 천천히 돌고 숨 쉬듯 커졌다 작아짐 */
+  svg.corona { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; overflow:visible; }
+  svg.corona g.rays { transform-box:view-box; }
+  svg.corona g.rays.a { animation:coronaA 120s linear infinite; }
+  svg.corona g.rays.b { animation:coronaB 170s linear infinite; }
+  svg.corona ellipse { fill:var(--conn); }
+  @keyframes coronaA { 0% { transform:rotate(0deg) scale(1); } 50% { transform:rotate(180deg) scale(1.03); } 100% { transform:rotate(360deg) scale(1); } }
+  @keyframes coronaB { 0% { transform:rotate(0deg) scale(1.02); } 50% { transform:rotate(-180deg) scale(.99); } 100% { transform:rotate(-360deg) scale(1.02); } }
+  @media (prefers-reduced-motion: reduce) { svg.corona g.rays { animation:none; } }
+  /* 태양 안 장비 변경 (지금 화면 아래 모드 버튼을 옮김) — 공통 Button(quiet, sm) 모양 */
+  .sun .edit { display:block; margin-top:14px; height:34px; padding:0 14px; border:1.5px solid var(--line); border-radius:10px; background:transparent; color:var(--text); font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; }
+  .sun .edit:hover { border-color:var(--conn); }
+  /* 모두 연결된 뒤 4초: 태양 테두리 호가 차오르면 다음 단계 (지금 화면 아래 진행 막대를 옮김) */
+  svg.sunArc { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:3; }
+  svg.sunArc path { fill:none; stroke:var(--conn); stroke-width:3; stroke-linecap:round; }
+  .planet { z-index:3; width:var(--d); height:var(--d); opacity:0; transition:opacity .6s; }
+  .planet.shown { opacity:1; }
+  /* 글자는 행성 크기를 따르되 큰 행성(목성·토성)에서 너무 커지지 않게 --t(글자 기준)로 */
+  .planet b { font-size:calc(var(--t) * .13); line-height:1.25; }
+  .planet span { font-size:calc(var(--t) * .1); color:var(--muted); line-height:1.3; }
+  /* 장비 종류는 아이콘으로 (앱 DeviceIcon과 같은 Lucide), 아래에 제품 이름 */
+  .planet .dev { display:block; justify-self:center; width:calc(var(--t) * .3); height:calc(var(--t) * .3); margin-bottom:calc(var(--t) * .03); stroke-width:1.5; color:var(--muted); }
+  .planet.ok .dev { color:rgb(235 232 227/.78); }
+  /* 연결 표시(V·!)는 행성 안 자리가 모자라 장비 아이콘 오른쪽 아래에 겹쳐서 (2026-10-11) */
+  .planet .devwrap { position:relative; display:block; justify-self:center; }
+  .planet .devwrap i { position:absolute; right:calc(var(--t) * -.1); bottom:calc(var(--t) * -.03); width:calc(var(--t) * .19); height:calc(var(--t) * .19); display:grid; place-items:center; border-radius:50%; background:rgb(30 31 33/.88); font-size:calc(var(--t) * .13); font-weight:700; line-height:1; }
+  .planet .devwrap i:empty { display:none; }
+  .planet.pending .dev { opacity:.55; }
+  /* 목성 대적점: 내용 아래 희미한 붉은 타원 (아무리 그래도 목성) */
+  .grs { position:absolute; left:57%; top:80%; width:24%; height:11%; transform:translate(-50%,-50%) rotate(-4deg); border-radius:50%; pointer-events:none;
+    background:radial-gradient(closest-side, rgb(214 118 86/.2), rgb(214 118 86/.1) 62%, transparent); box-shadow:0 0 0 1px rgb(214 118 86/.08); }
+  .planet i { display:block; height:calc(var(--t) * .16); font-style:normal; color:var(--conn); font-size:calc(var(--t) * .13); }
+  /* 고리: 위에서 본 띠 (토성은 두 겹, 천왕성은 가는 한 줄) — 원 바깥에만 */
+  .ringband { fill:none; stroke:var(--text); transition:stroke .6s; } .ringband.on { stroke:var(--conn); }
+  /* 소행성대: 화성과 목성 사이, 점 몇십 개 */
+  .belt { opacity:0; transition:opacity 1.6s; } .belt.on { opacity:1; }
+  .belt circle { fill:var(--muted); }
+  /* 위성: 작은 점, 주목도 낮게. 행성이 연결되면 나타남 */
+  .moons { opacity:0; transition:opacity 1.2s; } .moons.on { opacity:1; }
+  /* 배경 별과 구분되게: 작은 글래스 원(옅은 면 + 테두리) */
+  .moons circle { fill:rgb(235 232 227/.10); stroke:rgb(235 232 227/.38); stroke-width:1; }
+  .moons.on circle { stroke:var(--conn-soft); }
+
+  .working::before { background:conic-gradient(from 0deg, transparent 0 55%, var(--conn-glow) 70%, var(--conn) 92%, transparent 100%);
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 8px), transparent 100%);
+            mask:radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 8px), transparent 100%);
+    animation:spin 1.6s linear infinite; }
+  .sun.working::before { animation-duration:2.6s; }
+  .ok { box-shadow:inset 0 0 0 1.5px var(--conn-soft), 0 0 18px var(--conn-glow); }
+  .ok::after { animation:flash .9s ease-out; }
+  .fail::after { inset:0; box-shadow:inset 0 0 0 2px var(--fail); animation:blink 2.4s ease-in-out infinite; }
+  .fail i { color:var(--fail); }
+  .pending { box-shadow:inset 0 0 0 1px rgb(255 255 255/.06); }
+  /* 쓰지 않는 장비(N.I.N.A.에 등록 안 됨): 같은 자리·크기의 아주 흐린 점선 원 + 아이콘만. 궤도·고리·위성 없음 */
+  .ghost { background:transparent; backdrop-filter:none; box-shadow:none; border:1.5px dashed rgb(255 255 255/.16); color:var(--muted); }
+  .ghost svg { width:calc(var(--d) * .3); height:calc(var(--d) * .3); opacity:.55; stroke-width:1.6; }
+  .ghost.shown { opacity:.75; }
+  /* 망원경: 연결하는 장비가 아니라 고르는 것 → 행성이 아닌 작은 우주 물체 아이콘. 내행성계의 가장 넓은 빈 곳에, 처음부터 늘 누를 수 있음 */
+  /* 망원경: 행성(원)이 아니라 제임스 웹 망원경 선 아이콘(aira-brand/jwst-icon-line.svg) — 아이콘의 선·면 자체를 누른다 */
+  .scope { position:absolute; z-index:4; transform:translate(-50%,-50%); display:grid; justify-items:center; gap:4px; background:none; border:none; padding:0; color:var(--muted); font:inherit; pointer-events:none; }
+  .scope .jwst { width:69px; height:69px; overflow:visible; transition:transform .18s, color .16s, filter .16s; }
+  .scope .jwst * { pointer-events:visiblePainted; cursor:pointer; }
+  .scope small { pointer-events:auto; cursor:pointer; font-size:12.5px; color:var(--muted); white-space:nowrap; }
+  .scope:hover .jwst, .scope[aria-expanded='true'] .jwst { color:var(--conn); transform:translateY(-3px) scale(1.05); filter:drop-shadow(0 0 8px var(--conn-glow)); }
+  .scope:hover small { color:var(--text); }
+  .scopeList { position:absolute; z-index:6; min-width:220px; padding:6px; border-radius:10px; background:rgb(36 38 41/.92); backdrop-filter:blur(18px); box-shadow:inset 0 0 0 1px var(--glass-line), 0 10px 30px rgb(0 0 0/.35); display:none; }
+  .scopeList.open { display:grid; }
+  .scopeList button { text-align:left; padding:8px 10px; border:none; border-radius:8px; background:none; color:var(--text); font:inherit; font-size:14px; cursor:pointer; }
+  .scopeList button:hover { background:rgb(255 255 255/.06); }
+  .scopeList button[aria-current='true'] { color:var(--conn); }
+  .scopeList small { display:block; color:var(--muted); font-size:12px; }
+  .pending b, .pending span { opacity:.55; }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes flash { 0% { box-shadow:0 0 0 0 var(--conn-flash), inset 0 0 0 2px var(--conn); } 100% { box-shadow:0 0 0 18px transparent, inset 0 0 0 2px transparent; } }
+  @keyframes blink { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+
+  .notes { width:min(1500px, calc(100vw - 32px)); margin:8px auto 32px; color:var(--muted); font-size:13.5px; columns:2; column-gap:40px; }
+  .notes p { margin:0 0 8px; break-inside:avoid; }
+  .notes b { color:var(--text); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>장비 연결 — 위에서 본 궤도 (시안 2)</h1>
+  <p class="lead">항성은 왼쪽 위에 1/4만 · 장비는 동심원 궤도 위, 공전 시점(각도)을 장비마다 다르게</p>
+</header>
+<div class="tools">
+  <button type="button" id="replay">연결 다시 보기</button>
+  <button type="button" id="reseed">다른 배치</button>
+  <label><input type="checkbox" id="failOne"> 필터휠 연결 실패</label>
+  <label><input type="checkbox" id="noHub"> 전원 허브 없는 구성</label>
+  <label><input type="checkbox" id="noExtra" checked> 회전장치·플랫패널 없음</label>
+  <label>궤도 밝기 <input type="range" id="orbitA" min="1" max="40" value="3"><output id="orbitOut">0.03</output></label>
+</div>
+
+<div class="stage" id="stage">
+  <div class="stars"></div>
+  <svg class="orbits" id="orbits"></svg>
+  <button type="button" class="scope" id="scope" aria-expanded="false" title="망원경 바꾸기"><svg class="jwst" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"> <defs> <path id="seg" d="M0 -42 36.37 -21 36.37 21 0 42 -36.37 21 -36.37 -21Z"/> </defs> <g stroke-width="6" fill="currentColor" fill-opacity="0.05"> <path d="M74 384 247 347 438 387 269 445Z"/> </g> <path d="M74 404 269 465 438 407" stroke-width="5" opacity="0.55"/> <path d="M74 424 269 485 438 427" stroke-width="4.5" opacity="0.3"/> <path d="M240 338 262 337 272 372" stroke-width="6"/> <g transform="translate(256 215) rotate(-8)"> <g stroke-width="6.5" fill="currentColor" fill-opacity="0.08"> <use href="#seg" transform="translate(-145.49 0)"/> <use href="#seg" transform="translate(-109.12 63)"/> <use href="#seg" transform="translate(-72.75 126)"/> <use href="#seg" transform="translate(-109.12 -63)"/> <use href="#seg" transform="translate(-72.75 0)"/> <use href="#seg" transform="translate(-36.37 63)"/> <use href="#seg" transform="translate(0 126)"/> <use href="#seg" transform="translate(-72.75 -126)"/> <use href="#seg" transform="translate(-36.37 -63)"/> <use href="#seg" transform="translate(36.37 63)"/> <use href="#seg" transform="translate(72.75 126)"/> <use href="#seg" transform="translate(0 -126)"/> <use href="#seg" transform="translate(36.37 -63)"/> <use href="#seg" transform="translate(72.75 0)"/> <use href="#seg" transform="translate(109.12 63)"/> <use href="#seg" transform="translate(72.75 -126)"/> <use href="#seg" transform="translate(109.12 -63)"/> <use href="#seg" transform="translate(145.49 0)"/> </g> <path d="M0 -166 112 56 -144 84 M112 56 38 145" stroke-width="6.5"/> <circle cx="112" cy="56" r="18" stroke-width="6.5" fill="currentColor" fill-opacity="0.15"/> </g> </svg> <small id="scopeName">Pleiades 68</small></button>
+  <div class="scopeList" id="scopeList"></div>
+  <svg class="corona" id="corona"><defs><filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter></defs></svg>
+  <div class="c sun working" id="sun"><div class="label"><b>장비 연결</b><span id="sunSub">0 / 8</span><button type="button" class="edit" id="editBtn">장비 변경</button></div></div>
+  <svg class="sunArc"><path id="sunArc" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>
+</div>
+
+<div class="notes">
+  <p><b>자리</b> · 항성(자비스 원)의 중심을 무대 왼쪽 위 구석에 두어 1/4만 보이게. 장비마다 정해진 행성 궤도에(아래 "태양계"), 궤도 위 각도는 0°(오른쪽)~90°(아래) 사이에서 장비마다 다르게.</p>
+  <p><b>공전 시점</b> · 바로 안쪽 궤도의 행성과 중심 거리가 지름(둘 중 큰 쪽)의 2배 이상, 모든 원은 고리·위성까지 겹치지 않게 → 한 줄(그랜드 크로스)로 늘어서지 않음. 값은 정해진 씨앗으로 계산해 다시 열어도 같은 모양("다른 배치"는 씨앗만 바꿈).</p>
+  <p><b>궤도</b> · 위에서 본 동심원. 연결되는 순간 행성 자리부터 그려지며 나타나 희미하게 남는다. 실패·대기 장비는 궤도 없음. 행성은 공전하지 않는다.</p>
+  <p><b>태양계</b> · 장비 ↔ 행성 1:1 고정: 수성 플랫패널, 금성 가이딩, 지구 카메라, 화성 포커서, 목성 전원 허브, 토성 적도의, 천왕성 회전장치, 해왕성 필터휠. 연결은 허브부터(궤도를 건너뛰며). 쓰지 않는 장비는 같은 자리·크기의 흐린 점선 원 + 아이콘만(궤도·고리·위성 없음). 크기는 실제 비를 크게 줄임(수성 0.66, 금성 0.8, 지구 0.9, 목성 1.53, 토성 1.25 + 넓고 옅은 고리, 천왕성·해왕성 1.1). 화성과 목성 사이 소행성대, 잘 알려진 위성만 작은 점(달, 포보스·데이모스, 갈릴레이 위성 넷, 타이탄·엔셀라두스, 티타니아·오베론, 트리톤). 궤도 간격은 안쪽 촘촘·바깥 넓게, 궤도 밝기 0.03.</p>
+  <p><b>망원경</b> · 연결하는 장비가 아니라 고르는 것이라 행성이 아닌 제임스 웹 망원경 선 아이콘(+ 이름, 아이콘 모양 자체를 누름). 내행성계~소행성대(목성 궤도 안쪽, 소행성대와 겹쳐도 됨)에서 가장 넓은 빈 곳에 놓고, 연결 상태와 관계없이 처음부터 늘 누를 수 있다 — 누르면 망원경 목록.</p>
+  <p><b>태양 안</b> · "장비 연결 n/n" 아래 테두리 버튼 "장비 변경"(지금 화면 아래 모드 버튼). 모두 연결되면 태양 테두리 호가 4초 동안 차오른 뒤 다음 단계(지금 진행 막대) — 장비 변경을 가리키는 동안 0.3배속. 화면 아래 영역은 없앰.</p>
+  <p><b>태양 이글거림 · 대적점</b> · 태양 테두리 바깥에 고르지 않은 빛줄기 두 겹이 서로 반대로 아주 천천히 돌며 숨 쉬듯 커졌다 작아짐(흐림 + 회전만이라 가벼움, 동작 줄이기면 멈춤). 목성은 내용 아래 희미한 대적점.</p>
+  <p><b>원근 없음</b> · 원과 궤도가 모두 정면에서 본 평면이라 글래스 원과 시점이 맞는다.</p>
+</div>
+
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script>
+// 행성 차례(궤도 안쪽부터) = 장비 1:1 고정 (2026-10-10 사용자 결정 — 목성 전원 허브, 토성 적도의, 지구 카메라 · 10-11 화성 포커서, 금성 가이딩)
+const ALL = [
+  ['flatdevice', '플랫패널', 'Flat Panel', 'sun'],       // 수성
+  ['guider', '가이딩', 'PHD2', 'crosshair'],             // 금성
+  ['camera', '카메라', 'X-T5', 'camera'],                // 지구
+  ['focuser', '포커서', 'EAF', 'focus'],                 // 화성
+  ['switch', '전원 허브', 'WandererBox', 'plug-zap'],    // 목성
+  ['mount', '적도의', 'OnStepX', 'telescope'],           // 토성
+  ['rotator', '회전장치', 'Falcon', 'rotate-3d'],        // 천왕성
+  ['filterwheel', '필터휠', 'EFW', 'disc-3'],            // 해왕성
+]
+/** 연결 차례 (서버 EquipmentConnector와 같게 — 허브 먼저) */
+const CONNECT = ['switch', 'mount', 'camera', 'guider', 'focuser', 'filterwheel', 'rotator', 'flatdevice']
+// 행성: 이름, 크기(지구 = 0.9), 고리. 실제 지름 비를 크게 줄였고(목성이 너무 크고 수성이 너무 작지 않게) 전체 10% 작게,
+// 천왕성·해왕성은 10% 더 작게(느낌상 그리 크지 않음). 토성은 목성과의 차이(실제 지름 약 1.19배)가 보이게 몸은 작게, 고리는 크게
+const PLANETS = [
+  ['수성', 0.66], ['금성', 0.8], ['지구', 0.9], ['화성', 0.78],
+  ['목성', 1.53], ['토성', 1.25, 'saturn'], ['천왕성', 1.1, 'uranus'], ['해왕성', 1.09],
+]
+/** 고리 바깥 반지름 ÷ 행성 반지름 (차지하는 자리 계산용) */
+const RING = { saturn: 2.05, uranus: 1.3 }
+/** 고리 띠: [반지름 ÷ 행성 반지름, 굵기(1보다 작으면 행성 지름 비), 진하기] — 토성은 넓지만 옅게 */
+const RINGS = { saturn: [[1.62, 0.32, 0.018], [1.3, 1.2, 0.13], [1.46, 1, 0.09], [1.72, 1.2, 0.07], [1.98, 1, 0.045]], uranus: [[1.24, 1.2, 0.16]] }
+/** 위성(잘 알려진 것만): 행성 이름 → [[거리 ÷ 행성 반지름, 점 반지름 px]] */
+const MOONS = {
+  '지구': [[1.95, 5]], // 달
+  '화성': [[1.45, 2.6], [1.78, 2.2]], // 포보스, 데이모스
+  '목성': [[1.32, 4.2], [1.56, 3.8], [1.86, 5.4], [2.24, 5]], // 이오, 유로파, 가니메데, 칼리스토
+  '토성': [[2.4, 5.4], [1.14, 2.4]], // 타이탄(고리 밖), 엔셀라두스(고리 안쪽)
+  '천왕성': [[1.66, 3.4], [1.96, 3.2]], // 티타니아, 오베론
+  '해왕성': [[1.66, 4.4]], // 트리톤
+}
+let belt = null
+const stage = document.getElementById('stage'), svg = document.getElementById('orbits')
+const sun = document.getElementById('sun'), sunSub = document.getElementById('sunSub')
+const NS = 'http://www.w3.org/2000/svg'
+let timers = [], planets = [], seed = 7
+
+// 씨앗이 같으면 같은 수열
+function rng(s) { return () => { s |= 0; s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+
+function layout() {
+  const W = stage.clientWidth, H = stage.clientHeight
+  const n = ALL.length
+  const unused = new Set([...(document.getElementById('noHub').checked ? ['switch'] : []), ...(document.getElementById('noExtra').checked ? ['rotator', 'flatdevice'] : [])])
+  const sunD = H * 0.66, R = sunD / 2
+  const base = H * 0.152 // 지구 크기. 수성(가장 작은 원)도 글자가 들어가게
+  const cx = W * 0.015, cy = H * 0.02 // 항성 중심: 왼쪽 위 구석 (1/4만 보임)
+  stage.style.setProperty('--sun', sunD + 'px')
+  sun.style.left = cx + 'px'; sun.style.top = cy + 'px'
+  drawCorona(cx, cy, R)
+  // 진행 호: 태양 테두리 중 화면에 보이는 부분 (오른쪽 → 아래, 시계 방향)
+  const ra = R + 1, a0 = Math.asin(Math.min(1, Math.max(0, -cy / ra))), a1 = Math.PI / 2 - Math.asin(Math.min(1, Math.max(0, -cx / ra)))
+  document.getElementById('sunArc').setAttribute('d', 'M ' + (cx + ra * Math.cos(a0)) + ' ' + (cy + ra * Math.sin(a0)) + ' A ' + ra + ' ' + ra + ' 0 0 1 ' + (cx + ra * Math.cos(a1)) + ' ' + (cy + ra * Math.sin(a1)))
+  setArc(0)
+  // 궤도 자리: 행성 n개 + 화성 뒤 소행성대 한 칸. 수성은 예전 금성 자리부터 (항성에 너무 붙지 않게)
+  const hasBelt = n >= 5
+  const slots = n + (hasBelt ? 1 : 0)
+  const rFirst = R + base * 0.75
+  const rMax = Math.hypot(W - cx - 90, H - cy - 90) * 0.94
+  const rStart = rFirst + (rMax - rFirst) / (slots - 1)
+  const slotR = (k) => rStart + (rMax - rStart) * Math.pow(k / (slots - 1), 1.45) // 안쪽 궤도는 촘촘, 바깥은 넓게
+  svg.innerHTML = ''; stage.querySelectorAll('.planet').forEach((p) => p.remove())
+  const rand = rng(seed)
+  const placed = []
+  planets = ALL.map(([id, kind, name, icon], i) => {
+    const ghost = unused.has(id)
+    const [, size, ring] = PLANETS[i]
+    const moons = MOONS[PLANETS[i][0]] ?? []
+    const d = base * size
+    const fp = (d / 2) * Math.max(1, ring ? RING[ring] : 1, ...moons.map(([k]) => k + 0.1)) // 차지하는 반지름 (고리·위성 포함)
+    const r = slotR(hasBelt && i >= 4 ? i + 1 : i)
+    const m = fp + 14
+    // 이 궤도에서 무대 안에 들어오는 각도 범위 (0 = 오른쪽, 90 = 아래). 가장자리에 잘리지 않게
+    const lo = Math.max(Math.acos(Math.min(1, (W - cx - m) / r)), Math.asin(Math.min(1, Math.max(0, (m - cy) / r))))
+    const hi = Math.min(Math.asin(Math.min(1, (H - cy - m) / r)), Math.acos(Math.min(1, Math.max(0, (m - cx) / r))))
+    const loD = Math.max(3, (lo * 180) / Math.PI), hiD = Math.min(87, (hi * 180) / Math.PI)
+    let best = null, bestScore = -Infinity
+    for (let k = 0; k < 900; k++) {
+      const a = loD + rand() * Math.max(0, hiD - loD)
+      const th = (a * Math.PI) / 180, x = cx + r * Math.cos(th), y = cy + r * Math.sin(th)
+      // 모든 원끼리: 고리·위성까지 겹치지 않게 띄움
+      const gap = Math.min(Infinity, ...placed.map((p) => Math.hypot(p.x - x, p.y - y) - p.fp - fp))
+      // 바로 안쪽 궤도의 행성과는 중심 거리가 지름(둘 중 큰 쪽)의 2배 이상 — 화면에 흩뿌려지게 (2026-10-10 사용자 규칙)
+      const prev = placed[placed.length - 1]
+      const near = prev ? Math.hypot(prev.x - x, prev.y - y) / (2 * Math.max(prev.d, d)) : 9
+      if (gap > 22 && near >= 1) { best = { a, x, y, fp, d }; break }
+      const score = Math.min(gap / 22, near) // 규칙을 다 못 지키면 가장 가까운 것
+      if (score > bestScore) { bestScore = score; best = { a, x, y, fp, d } }
+    }
+    placed.push(best)
+    // 궤도: 행성 자리에서 시작해 한 바퀴 (그려질 때 행성에서 출발하는 것처럼)
+    const th = (best.a * Math.PI) / 180
+    const sx = cx + r * Math.cos(th), sy = cy + r * Math.sin(th), ox = cx - r * Math.cos(th), oy = cy - r * Math.sin(th)
+    const path = document.createElementNS(NS, 'path')
+    path.setAttribute('d', 'M ' + sx + ' ' + sy + ' A ' + r + ' ' + r + ' 0 1 1 ' + ox + ' ' + oy + ' A ' + r + ' ' + r + ' 0 1 1 ' + sx + ' ' + sy)
+    path.setAttribute('pathLength', '1'); path.setAttribute('class', 'orbit')
+    svg.appendChild(path)
+    const el = document.createElement('div')
+    el.className = 'c planet ' + (ghost ? 'ghost' : 'pending')
+    el.style.left = best.x + 'px'; el.style.top = best.y + 'px'
+    el.style.setProperty('--d', d + 'px'); el.style.setProperty('--t', Math.min(Math.max(d, base * 0.95), base * 1.15) + 'px') // 작은 행성도 글자는 읽히게
+    el.title = ghost ? kind + ' (등록 안 됨)' : kind
+    el.innerHTML = ghost ? '<em data-lucide="' + icon + '"></em>' : '<span class="devwrap"><em class="dev" data-lucide="' + icon + '"></em><i></i></span><span>' + name + '</span>' + (PLANETS[i][0] === '목성' ? '<u class="grs"></u>' : '')
+    stage.appendChild(el)
+    // 고리: 위에서 본 띠 — 토성은 두 겹, 천왕성은 가는 한 줄 (궤도와 같은 층에 그림)
+    const bands = (ghost ? [] : RINGS[ring] ?? []).map(([k, w, op]) => {
+      const c = document.createElementNS(NS, 'circle')
+      c.setAttribute('cx', best.x); c.setAttribute('cy', best.y); c.setAttribute('r', (d / 2) * k)
+      c.setAttribute('stroke-width', w < 1 ? d * w : w); c.setAttribute('stroke-opacity', op); c.setAttribute('class', 'ringband')
+      svg.appendChild(c); return c
+    })
+    const mg = document.createElementNS(NS, 'g'); mg.setAttribute('class', 'moons')
+    const mr = rng(seed * 97 + i * 13)
+    moons.forEach(([k, dot]) => {
+      const t = mr() * Math.PI * 2, c = document.createElementNS(NS, 'circle')
+      c.setAttribute('cx', best.x + (d / 2) * k * Math.cos(t)); c.setAttribute('cy', best.y + (d / 2) * k * Math.sin(t)); c.setAttribute('r', dot)
+      mg.appendChild(c)
+    })
+    svg.appendChild(mg)
+    return { id, el, arc: path, bands, moons: mg, ghost, outer: i >= 4, fp }
+  })
+  // 소행성대: 화성(4번째) 궤도와 목성(5번째) 궤도 사이 칸에 점 몇십 개
+  belt = null
+  if (hasBelt) {
+    const rb = slotR(4), wBand = (slotR(5) - slotR(3)) * 0.16, br = rng(seed * 31 + 5)
+    belt = document.createElementNS(NS, 'g'); belt.setAttribute('class', 'belt')
+    for (let k = 0; k < 70; k++) {
+      const th = ((-4 + br() * 100) * Math.PI) / 180, rr = rb + (br() + br() - 1) * wBand
+      const c = document.createElementNS(NS, 'circle')
+      c.setAttribute('cx', cx + rr * Math.cos(th)); c.setAttribute('cy', cy + rr * Math.sin(th))
+      c.setAttribute('r', (0.6 + br() * 1.3).toFixed(2)); c.setAttribute('opacity', (0.12 + br() * 0.3).toFixed(2))
+      belt.appendChild(c)
+    }
+    svg.appendChild(belt)
+  }
+  placeScope(cx, cy, R, hasBelt ? slotR(5) : slotR(4), W, H) // 내행성계 + 소행성대까지 (목성 궤도 안쪽)
+  window.lucide?.createIcons()
+  sunSub.textContent = '0 / ' + order().length
+}
+
+/** 연결할 행성들(쓰지 않는 장비 빼고), 연결 차례대로 */
+const order = () => CONNECT.map((id) => planets.find((p) => p.id === id)).filter((p) => p && !p.ghost)
+
+/**
+ * 망원경 아이콘 자리: 내행성계와 소행성대(항성 바깥 ~ 목성 궤도 안쪽, 소행성대와 겹쳐도 됨)에서 행성·위성·고리·항성·무대 가장자리와 가장 멀리 떨어진 점.
+ * 격자로 훑어 "가장 가까운 것까지의 거리"가 가장 큰 곳 (가장 넓은 빈 곳)
+ */
+function placeScope(cx, cy, R, rOut, W, H) {
+  const el = document.getElementById('scope'), half = 44
+  const blocks = planets.map((p) => ({ x: parseFloat(p.el.style.left), y: parseFloat(p.el.style.top), r: p.fp }))
+  let best = null
+  for (let x = half; x < W - half; x += 8)
+    for (let y = half; y < H - half; y += 8) {
+      const rr = Math.hypot(x - cx, y - cy)
+      if (rr < R + half || rr > rOut - half) continue
+      const clear = Math.min(rr - R, rOut - rr, x, y, W - x, H - y, ...blocks.map((b) => Math.hypot(b.x - x, b.y - y) - b.r))
+      if (!best || clear > best.clear) best = { x, y, clear }
+    }
+  if (!best) return
+  el.style.left = best.x + 'px'; el.style.top = best.y + 'px'
+  const list = document.getElementById('scopeList')
+  list.style.left = best.x + 40 + 'px'; list.style.top = best.y - 20 + 'px'
+}
+
+const SCOPES = [['Pleiades 68', '384mm f/5.6'], ['Askar FRA400', '400mm f/5.6'], ['RedCat 51', '250mm f/4.9']]
+let scope = 0
+function drawScope() {
+  document.getElementById('scopeName').textContent = SCOPES[scope][0]
+  document.getElementById('scopeList').innerHTML = SCOPES.map(([n, o], i) => '<button type="button" data-i="' + i + '" aria-current="' + (i === scope) + '">' + n + '<small>' + o + '</small></button>').join('')
+}
+document.getElementById('scope').addEventListener('click', (e) => {
+  const list = document.getElementById('scopeList'), open = !list.classList.contains('open')
+  list.classList.toggle('open', open); e.currentTarget.setAttribute('aria-expanded', open)
+})
+// 목록 바깥 아무 데나 누르거나 Esc면 닫힘
+function closeScopeList() { document.getElementById('scopeList').classList.remove('open'); document.getElementById('scope').setAttribute('aria-expanded', 'false') }
+document.addEventListener('click', (e) => { if (!e.target.closest('#scope, #scopeList')) closeScopeList() })
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeScopeList() })
+document.getElementById('scopeList').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return
+  scope = +b.dataset.i; drawScope()
+  document.getElementById('scopeList').classList.remove('open'); document.getElementById('scope').setAttribute('aria-expanded', 'false')
+})
+drawScope()
+
+function setOk(p, fail, instant) {
+  p.el.classList.remove('pending', 'working')
+  if (fail && p.id === 'filterwheel') { p.el.classList.add('fail'); p.el.querySelector('i').textContent = '!'; return }
+  p.el.classList.add('ok'); p.el.querySelector('i').textContent = '✓'
+  if (instant) p.arc.style.transition = 'none'
+  p.arc.classList.add('on')
+  p.bands.forEach((b) => b.classList.add('on'))
+  p.moons.classList.add('on')
+  if (belt && (p.outer || p.id === 'focuser')) belt.classList.add('on') // 화성이나 바깥 행성이 연결되면 소행성대도
+}
+
+// 4초 진행 (장비 변경을 가리키는 동안 0.3배속 — 지금 막대와 같은 규칙)
+let arcRaf = 0, slow = false
+function setArc(f) { document.getElementById('sunArc').setAttribute('stroke-dashoffset', 1 - f) }
+function startArc() {
+  cancelAnimationFrame(arcRaf)
+  let f = 0, last = performance.now()
+  const step = (now) => {
+    f = Math.min(1, f + ((now - last) / 4000) * (slow ? 0.3 : 1)); last = now
+    setArc(f)
+    if (f < 1) arcRaf = requestAnimationFrame(step)
+    else document.getElementById('sunSub').textContent = '다음 단계로 넘어갑니다'
+  }
+  arcRaf = requestAnimationFrame(step)
+}
+document.getElementById('editBtn').addEventListener('mouseenter', () => (slow = true))
+document.getElementById('editBtn').addEventListener('mouseleave', () => (slow = false))
+
+/** 태양 빛줄기: 테두리 바로 바깥에 크기·간격·밝기가 고르지 않은 타원들 (값은 고정 씨앗) */
+function drawCorona(cx, cy, R) {
+  const svgC = document.getElementById('corona')
+  svgC.querySelectorAll('g.rays, circle.halo').forEach((g) => g.remove())
+  // 빛줄기를 하나로 잇는 옅은 띠
+  const halo = document.createElementNS(NS, 'circle')
+  halo.setAttribute('class', 'halo'); halo.setAttribute('cx', cx); halo.setAttribute('cy', cy); halo.setAttribute('r', R * 1.03)
+  halo.setAttribute('fill', 'none'); halo.setAttribute('stroke', 'var(--conn)'); halo.setAttribute('stroke-width', R * 0.06); halo.setAttribute('stroke-opacity', '0.07'); halo.setAttribute('filter', 'url(#soft)')
+  svgC.appendChild(halo)
+  const r = rng(11)
+  ;['a', 'b'].forEach((name, gi) => {
+    const g = document.createElementNS(NS, 'g')
+    g.setAttribute('class', 'rays ' + name); g.setAttribute('filter', 'url(#soft)')
+    g.style.transformOrigin = cx + 'px ' + cy + 'px'
+    const n = gi ? 30 : 40
+    for (let k = 0; k < n; k++) {
+      const ang = (k / n) * 360 + r() * 9, len = R * (0.04 + r() * 0.09), wid = R * (0.015 + r() * 0.025)
+      const e = document.createElementNS(NS, 'ellipse')
+      e.setAttribute('cx', cx + R + len * 0.35); e.setAttribute('cy', cy)
+      e.setAttribute('rx', len); e.setAttribute('ry', wid)
+      e.setAttribute('opacity', (0.07 + r() * 0.14).toFixed(2))
+      e.setAttribute('transform', 'rotate(' + ang + ' ' + cx + ' ' + cy + ')')
+      g.appendChild(e)
+    }
+    svgC.appendChild(g)
+  })
+}
+
+function run() {
+  cancelAnimationFrame(arcRaf)
+  timers.forEach(clearTimeout); timers = []
+  layout()
+  const fail = document.getElementById('failOne').checked
+  sun.className = 'c sun working'
+  planets.forEach((p, i) => timers.push(setTimeout(() => p.el.classList.add('shown'), 150 + i * 90)))
+  let t = 900, done = 0
+  const list = order()
+  list.forEach((p) => {
+    timers.push(setTimeout(() => { p.el.classList.remove('pending'); p.el.classList.add('working') }, t))
+    t += 1300
+    timers.push(setTimeout(() => { setOk(p, fail); done++; sunSub.textContent = `${done} / ${list.length}` }, t))
+  })
+  timers.push(setTimeout(() => { sun.className = 'c sun ok'; startArc() }, t + 400))
+}
+
+// 주소 끝 ?done · ?mid · ?done-fail : 애니메이션 없이 그 모습
+function still(upTo, fail) {
+  layout()
+  planets.forEach((p) => p.el.classList.add('shown'))
+  const list = order()
+  list.forEach((p, i) => {
+    if (i < upTo) setOk(p, fail, true)
+    else if (i === upTo) { p.el.classList.remove('pending'); p.el.classList.add('working') }
+  })
+  sun.className = upTo >= list.length ? 'c sun ok' : 'c sun working'
+  if (upTo >= list.length) setArc(0.6) // 정지 그림: 진행 60%쯤
+  sunSub.textContent = `${Math.min(upTo, list.length)} / ${list.length}`
+}
+const mode = (location.hash || location.search).replace(/^[#?]/, '')
+function render() {
+  if (mode === 'done') still(99, false)
+  else if (mode === 'done-fail') { document.getElementById('failOne').checked = true; still(99, true) }
+  else if (mode === 'mid') still(4, false)
+  else run()
+}
+
+document.getElementById('noHub').addEventListener('change', render)
+document.getElementById('noExtra').addEventListener('change', render)
+document.getElementById('orbitA').addEventListener('input', (e) => { document.getElementById('orbitOut').textContent = (e.target.value / 100).toFixed(2); stage.style.setProperty('--orbit-a', e.target.value / 100) })
+document.getElementById('replay').addEventListener('click', render)
+document.getElementById('reseed').addEventListener('click', () => { seed++; render() })
+document.getElementById('failOne').addEventListener('change', render)
+let resizing = 0
+window.addEventListener('resize', () => { clearTimeout(resizing); resizing = setTimeout(render, 200) })
+render()
+</script>
+</body>
+</html>

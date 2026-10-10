@@ -1,4 +1,5 @@
-/* 2단계 장비 연결: 가운데 작아진 원형 표시 + 방사형 장비 원 + 연결 선 */
+/* 2단계 장비 연결: 태양계 (2026-10-11, 시안 mockups/aira-equipment-orbits-top.html)
+   항성(자비스 원, 왼쪽 위 1/4) + 장비 행성(동심원 궤도) + 망원경(제임스 웹 아이콘). 자리 계산은 equipmentOrbits.ts */
 
 /*
  * 누를 수 있는 것의 상태 네 가지 (이 화면에서 먼저 적용 — DESIGN.md 공통 규칙 후보)
@@ -7,100 +8,200 @@
  * - selected : 고른 것. 강조색 고리(바깥 2px) — 오류 색과 섞이지 않게 항상 강조색
  * - disabled : 투명도 40%, 가리켜도 바뀌지 않음, 커서 기본
  * 키보드 포커스는 selected와 같은 고리를 포커스 색으로.
- * 누를 수 없는 표시(연결된 장비 원 등)는 disabled처럼 흐리게 하지 않는다. 대신 가리키면 살짝 떠오른다(lift: 위로 조금 + 약간 커짐 + 그림자)
- * — 면·테두리 색은 그대로라 누를 수 있는 것의 hover와 구분된다 (2026-10-01 사용자 결정)
+ * 누를 수 없는 표시(연결된 장비 행성 등)는 disabled처럼 흐리게 하지 않는다. 대신 가리키면 살짝 떠오른다(lift)
  */
 .stage {
   /* --state-disabled-opacity · --state-focus-ring은 index.css(앱 전체) */
   --state-ring: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent);
-}
-
-.stage {
+  /* 연결된 장비의 궤도 밝기 (2026-10-11 사용자 — 선이 많으면 이상해서 아주 희미하게) */
+  --orbit-alpha: 0.03;
   flex: 1;
   position: relative;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 20px;
-  padding: 16px 16px 64px;
+  overflow: hidden;
 }
 
-/* 그래프 영역. 안의 원 자리·크기는 이 영역을 재서 px로 계산한다 (EquipmentScreen.tsx의 layout) */
+/* 화면 영역 전체 (아래 영역 없음 — 진행은 항성 테두리 호, 버튼은 항성 안) */
 .graph {
-  --graph-h: clamp(380px, calc(100cqh - 240px - var(--rail-h)), 100cqh);
-  position: relative;
-  /* 기준 화면(1920×1200)에서 약 1475×922. 예전 고정 상한(1100×680)을 없애고 틀 높이를 다 쓴다 (2026-10-01).
-     가로는 높이의 1.6배까지 — 원형 배치가 좌우로 휑하게 벌어지지 않게 */
-  width: min(calc(100cqw - 32px), calc(var(--graph-h) * 1.6));
-  /* 아래 영역(모드 버튼·막대 약 60px)과 상태 줄·레일을 뺀 높이 */
-  height: var(--graph-h);
+  position: absolute;
+  inset: 0;
 }
 
-.links {
+/* ── 우주 층: 궤도 · 고리 · 위성 · 소행성대 · 항성 빛줄기 · 진행 호 ───────── */
+.space {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
+  pointer-events: none;
 }
 
-/* 연결 선: 연결에 성공하면 가운데에서 장비 쪽으로 그려진다 */
-.link {
-  stroke: var(--conn-soft);
-  stroke-width: 2;
-  stroke-linecap: round;
+/* 궤도: 연결되면 행성 자리부터 한 바퀴 그려지며 나타나 아주 희미하게 남는다 */
+.orbit {
+  fill: none;
+  stroke: var(--conn);
+  stroke-width: 1.2;
+  opacity: 0;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  transition: stroke-dashoffset 500ms ease-out;
+  transition: stroke-dashoffset 1.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s;
 }
 
-.link[data-on='true'] {
+g[data-on='true'] > .orbit {
+  opacity: var(--orbit-alpha);
   stroke-dashoffset: 0;
 }
 
-/* 가운데 원: 1단계 원의 자리·크기에서 옮겨 오며 작아진다.
-   장비 원들보다 앞에 있고 글래스(반투명 + 뒤 흐림, 2026-10-09)라서, 흡수·펼침 때 장비 원들이 흐려지며 원 뒤로 들어가고 나온다.
-   배경 효과(성운)는 은은하게 비치고, 연결선은 원 안에서 흐려져 가려진다 */
-.center {
+/* 고리 (토성·천왕성): 위에서 본 가는 선 몇 줄 — 연결되면 보라 */
+.ringBand {
+  fill: none;
+  stroke: var(--text);
+  transition: stroke 0.6s;
+}
+
+g[data-on='true'] > .ringBand {
+  stroke: var(--conn);
+}
+
+/* 위성: 작은 글래스 원 (배경 별과 구분되게), 주목도 낮게. 행성이 연결되면 나타난다 */
+.moons {
+  opacity: 0;
+  transition: opacity 1.2s;
+}
+
+g[data-on='true'] > .moons {
+  opacity: 1;
+}
+
+.moons circle {
+  fill: color-mix(in srgb, var(--text) 10%, transparent);
+  stroke: var(--conn-soft);
+  stroke-width: 1;
+}
+
+/* 소행성대: 화성과 목성 사이 점들 */
+.belt {
+  opacity: 0;
+  transition: opacity 1.6s;
+}
+
+.belt[data-on='true'] {
+  opacity: 1;
+}
+
+.belt circle {
+  fill: var(--muted);
+}
+
+/* 항성 이글거림: 테두리 바깥 흐린 빛줄기 두 묶음이 서로 반대로 아주 천천히 돌며 숨 쉬듯 (회전·크기만 — 가볍다) */
+.corona {
+  opacity: 0;
+  animation: appear 1.2s ease-out 900ms both;
+}
+
+.halo {
+  fill: none;
+  stroke: var(--conn);
+  stroke-opacity: 0.07;
+}
+
+.rays {
+  transform-box: view-box;
+  animation: coronaA 120s linear infinite;
+}
+
+.rays[data-dir='1'] {
+  animation: coronaB 170s linear infinite;
+}
+
+.rays ellipse {
+  fill: var(--conn);
+}
+
+@keyframes coronaA {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.03); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes coronaB {
+  0% { transform: rotate(0deg) scale(1.02); }
+  50% { transform: rotate(-180deg) scale(0.99); }
+  100% { transform: rotate(-360deg) scale(1.02); }
+}
+
+/* 진행 호: 모두 연결되면 4초 동안 항성 테두리를 따라 차오른다 (지금 길이는 EquipmentScreen.tsx가 프레임마다 정한다) */
+.sunArc {
+  fill: none;
+  stroke: var(--conn);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+.sunArc[data-shown='true'] {
+  opacity: 1;
+}
+
+/* ── 항성: 1단계 원의 자리·크기에서 왼쪽 위 구석으로 옮겨 가며 커진다 ───────── */
+.sun {
   position: absolute;
   z-index: 2;
+  aspect-ratio: 1;
   border-radius: 50%;
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   box-shadow: inset 0 0 0 1px var(--glass-line);
   transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
-.center:not([data-ready='true']) {
+.sun:not([data-ready='true']) {
   visibility: hidden;
 }
 
-.center[data-ready='true'] {
-  animation: shrink 900ms cubic-bezier(0.45, 0, 0.25, 1) both;
+.sun[data-ready='true'] {
+  animation: moveIn 900ms cubic-bezier(0.45, 0, 0.25, 1) both;
+}
+
+@keyframes moveIn {
+  from {
+    transform: translate(calc(-50% + var(--from-dx, 0px)), calc(-50% + var(--from-dy, 0px))) scale(var(--move-from, 1));
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 .ring {
   width: 100%;
-  --ring-font: clamp(11px, calc(var(--cd) * 0.06), 16px);
+  --ring-font: 16px;
 }
 
-/* 가운데(자비스) 원의 테두리 빛·반짝임·실패 점멸은 JarvisRing이 그린다 (2026-10-10, 모든 화면 같은 표현).
-   이 화면만: 원 둘레가 글래스 원의 가장자리라 JarvisRing의 안쪽 고리(92%)는 감추고 빛을 가장자리에 둔다 */
-.center .ring > svg {
+/* 항성 테두리 빛·반짝임·실패 점멸은 JarvisRing이 그린다. 항성 둘레가 글래스 원의 가장자리라 안쪽 고리는 감추고 빛을 가장자리에 */
+.sun .ring > svg {
   opacity: 0;
 }
 
-.center .ring::before {
+.sun .ring::before {
   inset: -8px;
 }
 
-.center .ring[data-state='done']::before,
-.center .ring[data-state='failed']::before {
+/* 항성의 가운데(대부분 화면 밖)는 비워 둔다 — 글자·체크는 보이는 1/4의 sunInfo에. JarvisRing의 가운데 글자·체크 아이콘을 감춘다 */
+.sunRing > div {
+  visibility: hidden;
+}
+
+.sun .ring[data-state='done']::before,
+.sun .ring[data-state='failed']::before {
   inset: 0;
 }
 
-/* 1단계 완료 원 → 장비 연결 진행 중 원 크로스페이드 (작아지는 1초 중 앞쪽에 겹쳐 있다가 흐려진다) */
+/* 1단계 완료 원 → 항성 크로스페이드 (옮겨 가는 동안 앞쪽에 겹쳐 있다가 흐려진다) */
 .fromRing {
   position: absolute;
   inset: 0;
@@ -110,18 +211,12 @@
   opacity: 0;
 }
 
-.center[data-ready='true'] .fromRing {
+.sun[data-ready='true'] .fromRing {
   animation: fromRingOut 630ms ease-in-out 160ms both;
 }
 
-/* 글자는 겹치지 않게 차례로: 옛 글자("준비되었습니다")가 먼저 빠르게 사라지고 → 새 글자가 그 뒤에 나타난다
-   ([data-visible]은 JarvisRing의 글자 줄) */
-.center[data-ready='true'] .fromRing [data-visible] {
+.sun[data-ready='true'] .fromRing [data-visible] {
   animation: textOut 180ms ease-out both;
-}
-
-.center[data-ready='true'] > .ring [data-visible] {
-  animation: textIn 260ms ease-out 200ms both;
 }
 
 @keyframes fromRingOut {
@@ -134,40 +229,85 @@
   to { opacity: 0; }
 }
 
-@keyframes textIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .center[data-ready='true'] .fromRing,
-  .center[data-ready='true'] .fromRing [data-visible],
-  .center[data-ready='true'] > .ring [data-visible] { animation: none; }
-}
-
-/* 모드를 한 번 바꾼 뒤에는 처음의 줄어드는 움직임을 다시 하지 않는다 */
-.graph[data-returned='true'] .center {
-  animation: none;
-  transition: transform 960ms cubic-bezier(0.45, 0, 0.25, 1);
-}
-
-/* 변경 모드: 가운데 원이 조금 작아져 장비 원들이 둘러쌀 자리를 만든다 (EDIT_CENTER_SCALE) */
-.graph[data-mode='edit'] .center {
-  transform: translate(-50%, -50%) scale(0.72);
-}
-
-@keyframes shrink {
-  from {
-    transform: translate(calc(-50% + var(--from-dx, 0px)), calc(-50% + var(--from-dy, 0px))) scale(var(--shrink-from, 1));
-  }
-  to {
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-
-/* 장비 원 */
-.node {
+/* 항성 안(보이는 1/4)의 글자·버튼: 항성이 자리를 잡은 뒤 나타난다 */
+.sunInfo {
   position: absolute;
+  z-index: 3;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  max-width: 320px;
+  animation: appear 400ms ease-out 900ms both;
+}
+
+.headline {
+  margin: 0;
+  /* 두 줄 문장(예: "연결되지 않은 장비가\n2개 있습니다")도 자리가 같게 */
+  min-height: calc(2 * 1.35em);
+  display: flex;
+  align-items: flex-end;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: pre-line;
+}
+
+.count {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.count[data-shown='false'] {
+  visibility: hidden;
+}
+
+.modeRow {
+  min-height: 34px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+}
+
+/* "장비 변경" 버튼을 감싼 칸: 꺼진 버튼 위에서도 가리킴을 받는다 */
+.slowZone {
+  display: inline-flex;
+}
+
+/* 지금 관측지: 자리는 항상 있고 진행 호가 차오를 때만 보인다 */
+.siteLine {
+  min-height: 26px;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  visibility: hidden;
+}
+
+.siteLine[data-shown='true'] {
+  visibility: visible;
+}
+
+.siteLine[data-none='true'] {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.siteCoord {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 장비 행성 ───────── */
+.node {
+  /* 행성 안 글자·아이콘 크기 기준: 작은 행성도 읽히게, 큰 행성(목성·토성)에서 너무 커지지 않게 */
+  --t: clamp(96px, var(--d), 150px);
+  position: absolute;
+  z-index: 3;
   aspect-ratio: 1;
   display: grid;
   grid-template-rows: 1fr auto auto 1fr;
@@ -177,7 +317,6 @@
   padding: 0 6px;
   border: 1.5px solid var(--glass-line);
   border-radius: 50%;
-  /* 글래스 원 (2026-10-09 — 채운 회색이 배경 효과 위에서 어색해서) */
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
@@ -185,49 +324,76 @@
   text-align: center;
   cursor: default;
   opacity: 0;
-  /* 가운데 원이 작아진 뒤 차례로 나타난다 (투명도만) */
+  /* 항성이 자리를 잡은 뒤 차례로 나타난다 (투명도만) */
   animation: appear 300ms ease-out both;
   animation-delay: calc(900ms + var(--i) * 90ms);
-  transition: background-color 260ms, border-color 260ms, color 260ms;
+  transition: background-color 260ms, border-color 260ms, color 260ms, transform var(--lift-ms), box-shadow var(--lift-ms);
 }
 
-/* 이름·장비명·상태 아이콘은 한 열에 고정 (가리킬 때 겹쳐 보이는 다시 연결 층과 같은 칸) */
-.kind,
-.name,
-.mark {
+/* 장비 종류는 아이콘으로 (이름은 가리키면 — title), 연결 표시는 아이콘 오른쪽 아래에 겹쳐서 */
+.devWrap,
+.name {
   grid-column: 1;
 }
 
-.kind {
+.devWrap {
   grid-row: 2;
-  font-size: clamp(12px, calc(var(--d) * 0.12), 20px);
-  font-weight: 700;
-  line-height: 1.2;
+  position: relative;
+  display: block;
+}
+
+.dev {
+  display: block;
+  width: calc(var(--t) * 0.3);
+  height: calc(var(--t) * 0.3);
+  stroke-width: 1.5;
 }
 
 .name {
   grid-row: 3;
-  font-size: clamp(10px, calc(var(--d) * 0.085), 14px);
-  opacity: 0.8;
+  margin-top: calc(var(--t) * 0.03);
+  font-size: calc(var(--t) * 0.1);
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
+/* 연결 표시(V·!): 아이콘 오른쪽 아래 작은 원 — 아이콘과 겹쳐도 보이게 어두운 바탕 */
 .mark {
-  grid-row: 4;
-  align-self: start;
-  width: clamp(14px, calc(var(--d) * 0.13), 24px);
-  height: clamp(14px, calc(var(--d) * 0.13), 24px);
-  margin-top: 4px;
+  position: absolute;
+  right: calc(var(--t) * -0.1);
+  bottom: calc(var(--t) * -0.03);
+  width: calc(var(--t) * 0.19);
+  height: calc(var(--t) * 0.19);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  visibility: hidden;
+}
+
+.mark[data-shown='true'] {
+  visibility: visible;
 }
 
 .mark svg {
-  width: 100%;
-  height: 100%;
+  width: 70%;
+  height: 70%;
 }
 
-/* 연결 중: 원 둘레를 도는 호 (원과 글자는 제자리) */
-/* 연결 중: 원 테두리를 따라 도는 빛 (2026-10-10 사용자 — 원 안의 호 대신 테두리 글로우). 원뿔 그라데이션을 테두리 띠로만 남긴다:
-   테두리 안팎 8px에서 서서히 사라지는 띠(마스크)라 흐림 필터 없이도 번져 보인다 */
+/* 목성 대적점: 내용 아래 희미한 붉은 타원 */
+.spot {
+  position: absolute;
+  left: 57%;
+  top: 80%;
+  width: 24%;
+  height: 11%;
+  transform: translate(-50%, -50%) rotate(-4deg);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--fail) 20%, transparent), color-mix(in srgb, var(--fail) 10%, transparent) 62%, transparent);
+  pointer-events: none;
+}
+
+/* 연결 중: 행성 테두리를 따라 도는 빛 (원뿔 그라데이션을 테두리 띠로만) */
 .node::before {
   content: '';
   position: absolute;
@@ -250,8 +416,7 @@
   animation: spin 1.6s linear infinite;
 }
 
-/* 상태 빛 층 (::after): 연결됨의 반짝임·은은한 빛, 실패의 점멸 외곽선. 원 자체에 애니메이션을 걸면 처음 나타나기(appear — 원은 투명에서 시작)가
-   덮여 연결된 원이 투명한 채로 남았다 (2026-10-10 버그) → 빛은 이 층에만 */
+/* 상태 빛 층 (::after): 연결됨의 반짝임·은은한 빛, 실패의 점멸 외곽선 — 행성 자체에 애니메이션을 걸면 처음 나타나기가 덮여 투명한 채로 남는다 (2026-10-10 버그) */
 .node::after {
   content: '';
   position: absolute;
@@ -260,10 +425,14 @@
   pointer-events: none;
 }
 
-/* 연결됨: 한 번 또렷하게 반짝였다가(약 0.9초) 옅은 보라 테두리 + 은은한 빛으로 남는다 (초록 대신 — 배경과 어울리게) */
+/* 연결됨: 한 번 또렷하게 반짝였다가 옅은 보라 테두리 + 은은한 빛 */
 .node[data-status='Pass'] {
   border-color: var(--conn-soft);
   color: var(--text);
+}
+
+.node[data-status='Pass'] .dev {
+  color: color-mix(in srgb, var(--text) 78%, transparent);
 }
 
 .node[data-status='Pass']::after {
@@ -281,7 +450,7 @@
   100% { box-shadow: inset 0 0 0 1.5px transparent, 0 0 0 0 transparent, 0 0 18px var(--conn-glow); }
 }
 
-/* 실패: 붉은 선이 고정으로 있지 않고 외곽선이 느리게 점멸 (2026-10-10 — 다크(빨강) 테마에서도 성공(은은한 빛)과 구분되게 움직임으로) */
+/* 실패: 외곽선이 느리게 점멸 */
 .node[data-status='Fail'] {
   color: var(--text);
 }
@@ -300,7 +469,7 @@
   color: var(--fail);
 }
 
-/* 없이 진행: 경고색 점선 외곽선 + 경고 아이콘 (멈추지 않음) */
+/* 없이 진행: 경고색 점선 외곽선 + 경고 표시 (멈추지 않음) */
 .node[data-status='Warn'] {
   border-color: var(--warn);
   border-style: dashed;
@@ -316,7 +485,7 @@
   border-color: var(--line);
 }
 
-/* 장비 원의 상태: 연결되지 않은 원(실패·경고)만 누를 수 있다 */
+/* 연결되지 않은 행성(실패·경고)만 누를 수 있다 */
 .node[data-selectable='true'] {
   cursor: pointer;
 }
@@ -335,8 +504,7 @@
   box-shadow: var(--state-focus-ring);
 }
 
-/* 연결 안 된 원을 가리키면(hover·포커스): 이름·경고 아이콘은 자리만 남기고 숨기고,
-   그 위에 다시 연결 아이콘(원형) + 준필수는 그 아래 "없이 진행"을 겹쳐 보인다 (원 크기·위치는 그대로) */
+/* 연결 안 된 행성을 가리키면(hover·포커스): 아이콘·이름은 자리만 남기고 숨기고, 다시 연결 아이콘 + 준필수는 "없이 진행" */
 .hoverBody {
   grid-row: 1 / -1;
   grid-column: 1;
@@ -352,15 +520,13 @@
   visibility: visible;
 }
 
-.node[data-selectable='true']:hover > :is(.kind, .name, .mark),
-.node[data-selectable='true']:focus-within > :is(.kind, .name, .mark) {
+.node[data-selectable='true']:hover > :is(.devWrap, .name),
+.node[data-selectable='true']:focus-within > :is(.devWrap, .name) {
   visibility: hidden;
 }
 
-/* 다시 연결 아이콘: 예전(0.42배·36~56px)의 두 배 (2026-10-01 사용자 결정).
-   "없이 진행" 글자가 아래에 붙는 원은 글자 자리만큼 줄여 원 밖으로 나가지 않게 */
 .retryIcon {
-  --retry: clamp(72px, calc(var(--d) * 0.84), 112px);
+  --retry: clamp(56px, calc(var(--d) * 0.7), 112px);
   width: var(--retry);
   height: var(--retry);
   display: grid;
@@ -374,7 +540,7 @@
 }
 
 .hoverBody[data-without='true'] .retryIcon {
-  --retry: clamp(48px, min(calc(var(--d) * 0.84), calc(var(--d) - 64px)), 112px);
+  --retry: clamp(40px, min(calc(var(--d) * 0.7), calc(var(--d) - 56px)), 112px);
 }
 
 .retryIcon svg {
@@ -393,19 +559,14 @@
   box-shadow: var(--state-focus-ring);
 }
 
-.retryIcon:disabled {
-  opacity: var(--state-disabled-opacity);
-  cursor: default;
-}
-
-/* 글자로 된 행동 (없이 진행 · 변경 · 등록 · 제거 · 새로고침) */
+/* 글자로 된 행동 (없이 진행 · 변경 · 제거 · 새로고침) */
 .textAction {
   padding: 0;
   border: none;
   background: none;
   color: var(--accent);
   font: inherit;
-  font-size: clamp(11.5px, calc(var(--d) * 0.1), 13.5px);
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -426,185 +587,114 @@
   text-decoration: none;
 }
 
-/* 모드 버튼(장비 변경 · 변경 완료)은 공통 Button — 모양은 Button.module.css */
-
-/* ── 아래 영역: 상태 줄 · 모드 버튼 · 5초 막대 (높이 고정) ───────── */
-.bottom {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  width: min(1100px, 100%);
-}
-
-.modeRow {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-}
-
-.progress {
-  width: min(560px, 80%);
-  height: 4px;
-  border-radius: 2px;
-  background: var(--line);
-  overflow: hidden;
-}
-
-/* 모두 연결되어 막대가 돌 때만 보인다 (자리는 항상 있어서 위의 원이 움직이지 않는다) */
-.progress {
-  opacity: 0;
-  transition: opacity 200ms ease-out;
-}
-
-.progress[data-shown='true'] {
-  opacity: 1;
-}
-
-/* 길이는 EquipmentScreen.tsx가 프레임마다 정한다 (변경 버튼을 가리키면 0.3배속) */
-.progressFill {
-  width: 0;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--accent);
-}
-
-/* "장비 변경" 버튼을 감싼 칸: 꺼진 버튼 위에서도 가리킴을 받는다 */
-.slowZone {
-  display: inline-flex;
-}
-
-/* 막대 위 지금 관측지 문장: 자리는 항상 있고 막대가 돌 때만 보인다 */
-.siteLine {
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 16px;
-  visibility: hidden;
-}
-
-.siteLine[data-shown='true'] {
-  visibility: visible;
-}
-
-.siteLine[data-none='true'] {
-  color: var(--warn);
-  font-weight: 600;
-}
-
-.siteCoord {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.siteChange {
-  padding: 4px 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.siteChange:hover:not(:disabled) {
-  background: var(--surface);
-}
-
-.siteChange:focus-visible {
-  outline: none;
-  box-shadow: var(--state-focus-ring);
-}
-
-/* ── 등록 안 된 장비: 아이콘만 있는 작은 원, 흐린 톤, 연결 선 없음 ───────── */
+/* ── 등록 안 된 장비: 같은 자리·크기의 흐린 점선 행성, 아이콘만 (궤도·고리·위성 없음) ───────── */
 .node[data-absent='true'] {
-  padding: 0;
-  place-items: center;
   grid-template-rows: 1fr;
-  border: 1.5px dashed var(--line);
-  background: transparent;
-  color: var(--muted);
-  cursor: default;
-  filter: saturate(0.4);
-}
-
-.smallIcon {
-  display: grid;
   place-items: center;
-  opacity: 0.75;
+  border: 1.5px dashed color-mix(in srgb, var(--text) 16%, transparent);
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: var(--muted);
 }
 
-.smallIcon svg {
-  width: calc(var(--d) * 0.55);
-  height: calc(var(--d) * 0.55);
+.node[data-absent='true'] .devWrap {
+  grid-row: 1;
+  opacity: 0.55;
 }
 
-/* 연결된 원·등록 안 된 작은 원: 가리키면 살짝 떠오른다 (공통 토큰 --lift, DESIGN.md 9장) */
-.graph[data-phase='connect'] .node[data-status='Pass']:hover,
-.graph[data-phase='connect'] .node[data-absent='true']:hover {
-  z-index: 2;
+/* 연결된 행성·등록 안 된 행성: 가리키면 살짝 떠오른다 (공통 토큰 --lift) */
+.graph[data-mode='connect'] .node[data-status='Pass']:hover,
+.graph[data-mode='connect'] .node[data-absent='true']:hover {
+  z-index: 4;
   transform: var(--lift);
   box-shadow: var(--lift-shadow);
 }
 
-/* 등록 안 된 작은 원의 이름표: 가리키면 원 위에 */
-.nodeTip {
+/* 전원 허브가 연결되지 않았을 때만: 행성 바깥에 오류 색 고리가 천천히 깜빡인다 (가장 먼저 해결할 곳) */
+.node[data-hub='true'][data-status='Fail']::after {
+  inset: -7px;
+  border: 2px solid var(--fail);
+  box-shadow: none;
+  animation: hubBlink 1.2s ease-in-out infinite;
+}
+
+@keyframes hubBlink {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+/* ── 망원경: 제임스 웹 망원경 아이콘. 아이콘의 선·면 자체를 누른다 ───────── */
+.scope {
   position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  translate: -50% 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  animation: appear 300ms ease-out 900ms both;
+}
+
+.scopeButton {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
   border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: var(--size-small);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  /* 네모 칸이 아니라 그림·이름만 누른다 */
+  pointer-events: none;
+}
+
+.jwst {
+  width: 69px;
+  height: 69px;
+  overflow: visible;
+  transition: transform 180ms ease-out, color 160ms, filter 160ms;
+}
+
+.jwst * {
+  pointer-events: visiblePainted;
+  cursor: pointer;
+}
+
+.scopeName {
+  pointer-events: auto;
+  cursor: pointer;
+  font-size: 12.5px;
   white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 140ms ease-out, translate 140ms ease-out;
 }
 
-.node[data-absent='true']:hover .nodeTip {
-  opacity: 1;
-  translate: -50% 0;
+.scopeButton:hover,
+.scopeButton[aria-expanded='true'] {
+  color: var(--conn);
 }
 
-/* ── 모드 전환: 원들이 가운데로 작아지며 흡수됐다가, 다른 배치로 펼쳐진다 ───────── */
-.node,
-.editNode {
-  transition-property: left, top, width, background-color, border-color, color, transform, box-shadow;
-  transition-duration: 960ms, 960ms, 960ms, 260ms, 260ms, 260ms, var(--lift-ms), var(--lift-ms);
-  transition-timing-function: cubic-bezier(0.45, 0, 0.25, 1);
+.scopeButton:hover .jwst,
+.scopeButton[aria-expanded='true'] .jwst {
+  transform: translateY(-3px) scale(1.05);
+  filter: drop-shadow(0 0 8px var(--conn-glow));
 }
 
-.graph[data-phase='absorb'] .node,
-.graph[data-phase='absorb'] .editNode {
-  animation: vanish 960ms linear forwards;
-  pointer-events: none;
+.scopeButton:hover .scopeName {
+  color: var(--text);
 }
 
-.graph[data-phase='spread'] .node,
-.graph[data-phase='spread'] .editNode {
-  animation: none;
-  opacity: 0;
+.scopeButton:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
 }
 
-/* 변경 모드에서 돌아온 뒤에는 기다리지 않고 바로 나타난다 */
-.graph[data-returned='true'] .node {
-  animation-delay: 0ms;
+/* 망원경을 고르지 않음(필수): 오류 색으로 느리게 점멸 */
+.scope[data-status='Fail'] .scopeButton {
+  color: var(--fail);
+  animation: failBlink 2.4s ease-in-out infinite;
 }
 
-/* 가운데 원 뒤로 들어가는 동안은 보이다가 마지막에만 사라진다 */
-@keyframes vanish {
-  0%, 80% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-/* ── 변경 모드: 장비 8종 아이콘 원 ───────── */
+/* ── 변경 모드: 행성은 제자리, 눌러서 바꾼다 ───────── */
 .editNode {
   position: absolute;
+  z-index: 3;
   aspect-ratio: 1;
   animation: appear 300ms ease-out both;
 }
@@ -612,7 +702,7 @@
 .editNode:hover,
 .editNode:focus-within,
 .editNode[data-selected='true'] {
-  z-index: 3;
+  z-index: 5;
 }
 
 .editCircle {
@@ -631,8 +721,8 @@
 }
 
 .editCircle svg {
-  width: 44%;
-  height: 44%;
+  width: clamp(28px, 32%, 48px);
+  height: clamp(28px, 32%, 48px);
 }
 
 .editNode[data-absent='true'] .editCircle {
@@ -642,15 +732,14 @@
   color: var(--muted);
 }
 
-/* hover(가리킴·포커스·탭): 커지고 테두리가 강조색 / selected(목록이 열림): 더 커지고 강조색 고리 */
 .editCircle:hover {
-  transform: scale(1.12);
+  transform: scale(1.06);
   border-color: var(--accent);
   background: var(--surface-2);
 }
 
 .editNode[data-selected='true'] .editCircle {
-  transform: scale(1.18);
+  transform: scale(1.09);
   border-color: var(--accent);
   background: var(--surface-2);
   box-shadow: var(--state-ring);
@@ -661,7 +750,7 @@
   box-shadow: var(--state-focus-ring);
 }
 
-/* 이름: 원 바로 아래 (항상) */
+/* 이름: 행성 바로 아래 (항상) */
 .editLabel {
   position: absolute;
   top: calc(100% + 8px);
@@ -677,14 +766,13 @@
   transition: transform 160ms ease-out;
 }
 
-/* 원이 커지면(가리킴 1.12배, 고름 1.18배) 늘어난 반지름만큼 이름·제거도 아래로 밀린다 (원과 겹치지 않게) */
+/* 행성이 커지면(가리킴 1.06배, 고름 1.09배) 늘어난 반지름만큼 이름·제거도 아래로 */
 .editNode:has(.editCircle:hover) :is(.editLabel, .actions) {
-  transform: translate(-50%, calc(var(--d) * 0.06));
+  transform: translate(-50%, calc(var(--d) * 0.03));
 }
 
-/* 고름: 커진 만큼 + 바깥 고리(5px)만큼 더. 가리키고 있어도 이 규칙이 이기도록 우선순위를 올린다 */
 .editNode.editNode[data-selected='true'] :is(.editLabel, .actions) {
-  transform: translate(-50%, calc(var(--d) * 0.09 + 6px));
+  transform: translate(-50%, calc(var(--d) * 0.045 + 6px));
 }
 
 .editLabel b {
@@ -696,8 +784,7 @@
   color: var(--muted);
 }
 
-/* 변경 · 등록 · 제거: 버튼 모양이 아닌 글자. 원을 가리키면(포커스·탭) 이름 아래에 나타난다 */
-/* 제거: 원을 눌러 목록이 열렸을 때만 이름 아래에 (가리키기만 해서는 보이지 않는다) */
+/* 제거: 행성을 눌러 목록이 열렸을 때만 이름 아래에 */
 .actions {
   position: absolute;
   top: calc(100% + 44px);
@@ -713,12 +800,7 @@
   visibility: visible;
 }
 
-.actions .textAction,
-.listNote .textAction {
-  font-size: 13px;
-}
-
-/* 설치된 드라이버 목록: 원 옆에 작게 */
+/* 설치된 드라이버 목록: 행성 옆에 작게 */
 .deviceList {
   position: absolute;
   top: 50%;
@@ -728,7 +810,6 @@
   display: grid;
   gap: 2px;
   width: 280px;
-  /* 2026-10-10 사용자 요청: 300px은 짧음 — 화면 높이의 절반쯤까지 (바닥까지는 아님), 넘치면 안에서 스크롤 */
   max-height: min(540px, 50cqh);
   overflow-y: auto;
   padding: 6px;
@@ -808,27 +889,29 @@
   font-weight: 700;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .node,
-  .editNode,
-  .editCircle {
-    transition: none;
-  }
-  .graph[data-phase='absorb'] .node,
-  .graph[data-phase='absorb'] .editNode {
-    animation: none;
-  }
-  /* 동작 줄이기: 도는 빛·반짝임·점멸 없이 — 연결 중은 멈춘 빛 띠, 연결됨은 바로 은은한 상태, 실패는 켜진 외곽선 (가운데 원은 JarvisRing이 처리) */
-  .node[data-status='Running']::before,
-  .node[data-status='Pass']::after,
-  .node[data-status='Fail']::after {
-    animation: none;
-  }
+/* 바꾸기·제거 실패: 행성 아래(이름 밑)에 오류 색 문장. 원래 장비는 그대로다 */
+.editError {
+  position: absolute;
+  top: calc(100% + 44px);
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  width: 240px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--fail);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fail);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 /* [임시] 화면 설계용 버튼: 오른쪽 아래 구석, 배치에 영향 없음 */
 .temp {
   position: absolute;
+  z-index: 6;
   right: var(--gutter);
   bottom: 18px;
   display: flex;
@@ -864,45 +947,29 @@
   to { transform: rotate(360deg); }
 }
 
-/* 전원 허브가 연결되지 않았을 때만: 원 바깥에 오류 색 고리가 천천히 깜빡인다.
-   허브가 다른 장비의 전원이라 가장 먼저 해결할 곳임을 알린다. 원 자체(크기·투명도)는 바뀌지 않는다 */
-.node[data-hub='true'][data-status='Fail']::after {
-  content: '';
-  position: absolute;
-  inset: -7px;
-  border: 2px solid var(--fail);
-  border-radius: 50%;
-  pointer-events: none;
-  animation: hubBlink 1.2s ease-in-out infinite;
-}
-
-@keyframes hubBlink {
-  0%, 100% { opacity: 0; }
-  50% { opacity: 1; }
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .node,
+  .editNode,
+  .editCircle {
+    transition: none;
+  }
+  .orbit {
+    transition: opacity 0.5s;
+  }
+  /* 동작 줄이기: 도는 빛·반짝임·점멸·빛줄기 회전 없이 */
+  .node[data-status='Running']::before,
+  .node[data-status='Pass']::after,
+  .node[data-status='Fail']::after,
+  .rays,
+  .scope[data-status='Fail'] .scopeButton {
+    animation: none;
+  }
   .node[data-hub='true'][data-status='Fail']::after {
     animation: none;
     opacity: 0.8;
   }
-}
-
-/* 바꾸기·제거 실패: 원 아래(이름 밑)에 오류 색 문장. 원래 장비는 그대로다 */
-.editError {
-  position: absolute;
-  top: calc(100% + 44px);
-  left: 50%;
-  z-index: 4;
-  transform: translateX(-50%);
-  width: 240px;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--fail);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--fail);
-  font-size: 12.5px;
-  line-height: 1.45;
-  text-align: center;
+  .sun[data-ready='true'],
+  .sun[data-ready='true'] .fromRing {
+    animation: none;
+  }
 }

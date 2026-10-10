@@ -1,4 +1,5 @@
 import logo from '../assets/aira-logo.svg?raw'
+import { scopedSvg } from '../inlineSvg'
 import { PRODUCT, VERSION } from '../product'
 import styles from './BootScreen.module.css'
 
@@ -8,7 +9,7 @@ import styles from './BootScreen.module.css'
  */
 export default function BootScreen({ error }: { error?: string | null }) {
   const theme = document.documentElement.dataset.theme ?? 'dark'
-  const svg = logo.replace(/data-theme="[^"]*"/, `data-theme="${theme}"`)
+  const svg = scopedSvg(logo, 'aira-logo', theme) // 그림 안의 스타일·id는 그림 안에 가둔다
   return (
     <main className={styles.boot} aria-label={`${PRODUCT.reul} 시작하는 중`}>
       <div className={styles.logo} dangerouslySetInnerHTML={{ __html: svg }} />

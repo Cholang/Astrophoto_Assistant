@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">JWST · 허니컴 거울 아이콘</title>
+  <desc id="desc">크게 강조한 18개의 금빛 육각 거울과 세 개의 보조경 지지대, 작게 단순화한 은빛 차양막. 투명 배경.</desc>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0.75" y2="1">
+      <stop stop-color="#FFE79A"/><stop offset="0.5" stop-color="#F8CA53"/><stop offset="1" stop-color="#DDA52E"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0.6" y2="1">
+      <stop stop-color="#F4F5FA"/><stop offset="1" stop-color="#B9C0D0"/>
+    </linearGradient>
+    <path id="segment" d="M0 -42 36.37 -21 36.37 21 0 42 -36.37 21 -36.37 -21Z"/>
+  </defs>
+  <!-- Compact sunshield: three quiet planes rather than a detailed chassis. -->
+  <path d="M74 402 247 365 438 405 269 463Z" fill="#737D94" stroke="#343C50" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M74 393 247 356 438 396 269 454Z" fill="#A3ADC1" stroke="#343C50" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M74 384 247 347 438 387 269 445Z" fill="url(#shield)" stroke="#343C50" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M235 337 265 336 279 389 Q257 402 232 390Z" fill="#343C50"/>
+  <!-- The mirror is the dominant silhouette. Exactly 18 segments, with a central opening. -->
+  <g transform="translate(256 215) rotate(-8)">
+    <g fill="url(#gold)" stroke="#343C50" stroke-width="5.5" stroke-linejoin="round">
+      <use href="#segment" transform="translate(-145.49 0)"/>
+      <use href="#segment" transform="translate(-109.12 63)"/>
+      <use href="#segment" transform="translate(-72.75 126)"/>
+      <use href="#segment" transform="translate(-109.12 -63)"/>
+      <use href="#segment" transform="translate(-72.75 0)"/>
+      <use href="#segment" transform="translate(-36.37 63)"/>
+      <use href="#segment" transform="translate(0 126)"/>
+      <use href="#segment" transform="translate(-72.75 -126)"/>
+      <use href="#segment" transform="translate(-36.37 -63)"/>
+      <use href="#segment" transform="translate(36.37 63)"/>
+      <use href="#segment" transform="translate(72.75 126)"/>
+      <use href="#segment" transform="translate(0 -126)"/>
+      <use href="#segment" transform="translate(36.37 -63)"/>
+      <use href="#segment" transform="translate(72.75 0)"/>
+      <use href="#segment" transform="translate(109.12 63)"/>
+      <use href="#segment" transform="translate(72.75 -126)"/>
+      <use href="#segment" transform="translate(109.12 -63)"/>
+      <use href="#segment" transform="translate(145.49 0)"/>
+    </g>
+    <use href="#segment" fill="#343C50" stroke="#343C50" stroke-width="5.5"/>
+    <path d="M-14 -14 11 -20 20 9 -7 17Z" fill="#596174"/>
+    <!-- Secondary mirror and a simplified three-arm support. -->
+    <g fill="none" stroke="#343C50" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 -166 112 56 -144 84"/>
+      <path d="M112 56 38 145"/>
+    </g>
+    <path d="M2 -163 112 56 -141 84" fill="none" stroke="#687084" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="112" cy="56" r="20" fill="#343C50"/>
+    <circle cx="110" cy="53" r="13" fill="#596174"/>
+  </g>
+</svg>

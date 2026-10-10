@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>장비 연결 궤도 시안</title>
+<style>
+  /* 장비 연결 — 태양(자비스 원) + 행성(장비) 시안 (2026-10-10).
+     자비스 원은 왼쪽, 장비는 오른쪽으로 궤도를 따라 흩어 놓음. 비스듬히 내려다본 시점이라 궤도는 납작한 타원.
+     연결선 없음 — 장비가 연결되면 그 장비의 궤도가 희미하게 그려진다. 원은 지금 앱과 같은 글래스 + 보라 연결 표현 */
+  :root {
+    --bg:#1e1f21; --text:#ebe8e3; --muted:#a3a09a; --line:#3b3e42; --warn:#e0a54a; --fail:#f07a52;
+    --conn:#a9a6f7; --conn-soft:rgb(169 166 247/.55); --conn-glow:rgb(169 166 247/.22); --conn-flash:rgb(169 166 247/.6);
+    --glass-bg:rgb(46 48 52/.24); --glass-line:rgb(255 255 255/.10);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; color:var(--text); font:15px/1.5 'Pretendard Variable','Malgun Gothic',sans-serif;
+    background:
+      radial-gradient(55% 50% at 28% 60%, rgb(92 132 174/.18), transparent 70%),
+      radial-gradient(45% 40% at 74% 36%, rgb(147 105 157/.16), transparent 70%),
+      var(--bg); overflow-x:hidden; }
+  header { display:flex; align-items:baseline; gap:18px; padding:20px 32px 0; flex-wrap:wrap; }
+  h1 { margin:0; font-size:20px; }
+  .lead { margin:0; color:var(--muted); font-size:13.5px; }
+  .tools { display:flex; gap:16px; align-items:center; padding:10px 32px; flex-wrap:wrap; font-size:13.5px; color:var(--muted); }
+  .tools button { height:32px; padding:0 14px; border:1.5px solid var(--line); border-radius:10px; background:none; color:var(--text); font:inherit; cursor:pointer; }
+  .tools button:hover { border-color:var(--conn); }
+  .tools label { display:inline-flex; gap:8px; align-items:center; }
+  .tools input[type=range] { accent-color:var(--conn); width:120px; }
+
+  /* 무대: 앱 화면 영역(레일 제외)과 비슷한 비율 */
+  .stage { position:relative; width:min(1500px, calc(100vw - 32px)); aspect-ratio:1500/760; margin:0 auto; overflow:hidden; }
+  .stars { position:absolute; inset:0; opacity:.5; pointer-events:none;
+    background-image:radial-gradient(1px 1px at 12% 22%, #ddd 50%, transparent 51%), radial-gradient(1px 1px at 68% 64%, #ccc 50%, transparent 51%), radial-gradient(1.2px 1.2px at 41% 83%, #eee 50%, transparent 51%), radial-gradient(1px 1px at 86% 18%, #bbb 50%, transparent 51%), radial-gradient(1px 1px at 55% 41%, #ddd 50%, transparent 51%), radial-gradient(1px 1px at 93% 77%, #ccc 50%, transparent 51%), radial-gradient(1px 1px at 30% 10%, #ccc 50%, transparent 51%); }
+  svg.orbits { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+  svg.back { z-index:1; } svg.front { z-index:3; }
+  /* 궤도는 자비스 원 왼쪽으로 갈수록 사라진다 — 바깥 궤도가 화면 전체를 긋지 않게 */
+  svg.orbits { -webkit-mask-image:linear-gradient(to right, transparent 4%, #000 26%); mask-image:linear-gradient(to right, transparent 4%, #000 26%); }
+  .orbit { fill:none; stroke:var(--conn); stroke-width:1.2; opacity:0; stroke-dasharray:1; stroke-dashoffset:1; }
+  .orbit.on { opacity:var(--orbit-a, .16); stroke-dashoffset:0; transition:stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1), opacity .5s; }
+  svg.back .orbit.on { opacity:calc(var(--orbit-a, .16) * .55); } /* 뒤쪽 반은 더 옅게 — 깊이감 */
+
+  /* 원 공통: 글래스 */
+  .c { position:absolute; border-radius:50%; display:grid; place-content:center; text-align:center; transform:translate(-50%,-50%);
+    background:var(--glass-bg); backdrop-filter:blur(18px) saturate(1.2); box-shadow:inset 0 0 0 1px var(--glass-line); }
+  .c::before, .c::after { content:''; position:absolute; inset:-6px; border-radius:50%; pointer-events:none; }
+
+  .sun { z-index:2; width:var(--sun); height:var(--sun); }
+  .sun b { font-size:20px; } .sun span { font-size:13px; color:var(--muted); }
+  .planet { z-index:4; width:var(--d); height:var(--d); opacity:0; transition:opacity .6s, filter .6s; }
+  .planet.shown { opacity:1; }
+  .planet b { font-size:calc(var(--d) * .13); line-height:1.25; }
+  .planet span { font-size:calc(var(--d) * .095); color:var(--muted); }
+  .planet i { display:block; height:calc(var(--d) * .16); font-style:normal; color:var(--conn); font-size:calc(var(--d) * .13); }
+  .planet[data-depth='back'] { filter:brightness(.88); }
+
+  /* 연결 중: 테두리를 따라 도는 빛 (앱과 같은 방식 — 원뿔 그라데이션을 테두리 띠로만) */
+  .working::before { background:conic-gradient(from 0deg, transparent 0 55%, var(--conn-glow) 70%, var(--conn) 92%, transparent 100%);
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 8px), transparent 100%);
+            mask:radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 8px), transparent 100%);
+    animation:spin 1.6s linear infinite; }
+  .sun.working::before { animation-duration:2.2s; }
+  /* 연결됨: 한 번 반짝 → 은은한 빛 */
+  .ok { box-shadow:inset 0 0 0 1.5px var(--conn-soft), 0 0 18px var(--conn-glow); }
+  .ok::after { animation:flash .9s ease-out; }
+  /* 실패: 외곽선이 느리게 점멸 */
+  .fail::after { inset:0; box-shadow:inset 0 0 0 2px var(--fail); animation:blink 2.4s ease-in-out infinite; }
+  .fail i { color:var(--fail); }
+  .pending { box-shadow:inset 0 0 0 1px rgb(255 255 255/.06); }
+  .pending b, .pending span { opacity:.55; }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes flash { 0% { box-shadow:0 0 0 0 var(--conn-flash), inset 0 0 0 2px var(--conn); } 100% { box-shadow:0 0 0 18px transparent, inset 0 0 0 2px transparent; } }
+  @keyframes blink { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+
+  .caption { position:absolute; left:0; right:0; bottom:14px; text-align:center; color:var(--muted); font-size:14px; z-index:5; }
+  .notes { width:min(1500px, calc(100vw - 32px)); margin:8px auto 32px; color:var(--muted); font-size:13.5px; columns:2; column-gap:40px; }
+  .notes p { margin:0 0 8px; break-inside:avoid; }
+  .notes b { color:var(--text); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>장비 연결 — 태양(자비스 원)과 행성(장비)</h1>
+  <p class="lead">시안 · 연결선 대신, 연결된 장비의 궤도가 희미하게 그려짐 · 비스듬히 내려다본 시점</p>
+</header>
+<div class="tools">
+  <button type="button" id="replay">연결 다시 보기</button>
+  <label><input type="checkbox" id="failOne"> 필터휠 연결 실패</label>
+  <label>장비 수 <input type="range" id="count" min="4" max="8" value="8"><output id="countOut">8</output></label>
+  <label>기울기(납작함) <input type="range" id="tilt" min="18" max="55" value="34"><output id="tiltOut">0.34</output></label>
+  <label>궤도 밝기 <input type="range" id="orbitA" min="6" max="40" value="16"><output id="orbitOut">0.16</output></label>
+</div>
+
+<div class="stage" id="stage">
+  <div class="stars"></div>
+  <svg class="orbits back" id="back"></svg>
+  <div class="c sun working" id="sun"><b>장비 연결</b><span id="sunSub">0 / 8</span></div>
+  <svg class="orbits front" id="front"></svg>
+  <div class="caption" id="caption"></div>
+</div>
+
+<div class="notes">
+  <p><b>자리</b> · 자비스 원은 왼쪽(무대 너비의 20%), 장비는 연결 차례대로 안쪽 궤도부터 바깥으로. 궤도 위 각도를 장비마다 위·아래로 번갈아 흔들어 일렬로 보이지 않게(값은 장비 id로 고정 — 다시 열어도 같은 모양).</p>
+  <p><b>깊이</b> · 궤도 아래쪽 반(앞)은 자비스 원 앞으로 지나가고, 위쪽 반(뒤)은 자비스 원 뒤로 지나가며 더 옅다. 앞쪽 행성은 조금 크고, 뒤쪽은 조금 작고 어둡다. 행성 자체는 납작하게 누르지 않는다(글자를 읽어야 해서).</p>
+  <p><b>궤도</b> · 연결되는 순간 행성 자리부터 한 바퀴 그려지며 나타남(1.4초) → 희미하게 남음. 실패·없이 진행·대기 장비는 궤도 없음. 행성은 공전하지 않는다(눌러야 하는 원이 움직이면 안 됨).</p>
+  <p><b>앱에 옮길 때 바뀌는 것</b> · 연결선 없앰, 방사형 무작위 배치 규칙 → 궤도 배치, 1단계 원이 가운데 대신 왼쪽으로 옮겨 감, 장비 변경 모드(흡수·펼침)의 자리도 함께 정해야 함.</p>
+</div>
+
+<script>
+const ALL = [
+  ['switch', '전원 허브', 'WandererBox'],
+  ['mount', '적도의', 'OnStepX'],
+  ['camera', '카메라', 'X-T5'],
+  ['guider', '가이딩', 'PHD2'],
+  ['focuser', '포커서', 'EAF'],
+  ['filterwheel', '필터휠', 'EFW'],
+  ['rotator', '회전장치', 'Falcon'],
+  ['flatdevice', '플랫패널', 'Flat Panel'],
+]
+// 궤도 위 각도(도, 0 = 오른쪽, + = 앞/아래). 위·아래로 번갈아
+const ANGLES = [30, -26, 17, -32, 11, -21, 23, -9]
+const stage = document.getElementById('stage'), back = document.getElementById('back'), front = document.getElementById('front')
+const sun = document.getElementById('sun'), sunSub = document.getElementById('sunSub'), caption = document.getElementById('caption')
+const NS = 'http://www.w3.org/2000/svg'
+let timers = [], planets = []
+
+function layout() {
+  const W = stage.clientWidth, H = stage.clientHeight
+  const n = +document.getElementById('count').value
+  const flat = +document.getElementById('tilt').value / 100
+  const tilt = -5 * Math.PI / 180 // 궤도면 전체를 살짝 기울임
+  const sunD = H * 0.42, d = H * 0.19
+  const cx = W * 0.2, cy = H * 0.52
+  stage.style.setProperty('--sun', sunD + 'px')
+  stage.style.setProperty('--d', d + 'px')
+  sun.style.left = cx + 'px'; sun.style.top = cy + 'px'
+  const r0 = sunD * 0.95, rMax = W - cx - d * 0.75 // 바깥 행성도 화면 안에
+  back.innerHTML = ''; front.innerHTML = ''
+  stage.querySelectorAll('.planet').forEach((p) => p.remove())
+  planets = ALL.slice(0, n).map(([id, kind, name], i) => {
+    const rx = n === 1 ? r0 : r0 + (i * (rMax - r0)) / (n - 1), ry = rx * flat
+    const th = ANGLES[i] * Math.PI / 180
+    // 궤도 위 점 → 기울임 회전
+    const ex = rx * Math.cos(th), ey = ry * Math.sin(th)
+    const x = cx + ex * Math.cos(tilt) - ey * Math.sin(tilt), y = cy + ex * Math.sin(tilt) + ey * Math.cos(tilt)
+    const g = (layer, d) => {
+      const p = document.createElementNS(NS, 'path')
+      p.setAttribute('d', d); p.setAttribute('pathLength', '1'); p.setAttribute('class', 'orbit')
+      p.setAttribute('transform', `rotate(${tilt * 180 / Math.PI} ${cx} ${cy})`)
+      layer.appendChild(p); return p
+    }
+    const backArc = g(back, `M ${cx - rx} ${cy} A ${rx} ${ry} 0 0 1 ${cx + rx} ${cy}`)
+    const frontArc = g(front, `M ${cx + rx} ${cy} A ${rx} ${ry} 0 0 1 ${cx - rx} ${cy}`)
+    const el = document.createElement('div')
+    el.className = 'c planet pending'
+    el.dataset.depth = th < 0 ? 'back' : 'front'
+    el.style.left = x + 'px'; el.style.top = y + 'px'
+    el.style.setProperty('--d', d * (1 + 0.1 * Math.sin(th)) + 'px')
+    el.innerHTML = `<b>${kind}</b><span>${name}</span><i></i>`
+    stage.appendChild(el)
+    return { id, kind, el, arcs: [backArc, frontArc] }
+  })
+  sunSub.textContent = `0 / ${n}`
+}
+
+function run() {
+  timers.forEach(clearTimeout); timers = []
+  layout()
+  const fail = document.getElementById('failOne').checked
+  sun.className = 'c sun working'; caption.textContent = '장비를 차례로 연결하는 중'
+  planets.forEach((p, i) => timers.push(setTimeout(() => p.el.classList.add('shown'), 150 + i * 90)))
+  let t = 900, done = 0
+  planets.forEach((p) => {
+    timers.push(setTimeout(() => { p.el.classList.remove('pending'); p.el.classList.add('working') }, t))
+    t += 1300
+    timers.push(setTimeout(() => {
+      p.el.classList.remove('working')
+      if (fail && p.id === 'filterwheel') {
+        p.el.classList.add('fail'); p.el.querySelector('i').textContent = '!'
+      } else {
+        p.el.classList.add('ok'); p.el.querySelector('i').textContent = '✓'
+        p.arcs.forEach((a) => a.classList.add('on'))
+      }
+      done++; sunSub.textContent = `${done} / ${planets.length}`
+    }, t))
+  })
+  timers.push(setTimeout(() => {
+    sun.className = 'c sun ok'
+    caption.textContent = fail ? '필터휠 없이 진행합니다' : '모든 장비가 연결되었습니다'
+  }, t + 400))
+}
+
+const bind = (id, out, f) => { const el = document.getElementById(id); el.addEventListener('input', () => { document.getElementById(out).textContent = f(el.value); run() }) }
+bind('count', 'countOut', (v) => v)
+bind('tilt', 'tiltOut', (v) => (v / 100).toFixed(2))
+document.getElementById('orbitA').addEventListener('input', (e) => { document.getElementById('orbitOut').textContent = (e.target.value / 100).toFixed(2); stage.style.setProperty('--orbit-a', e.target.value / 100) })
+document.getElementById('replay').addEventListener('click', run)
+document.getElementById('failOne').addEventListener('change', run)
+// 주소 끝 #done: 애니메이션 없이 끝난 모습 (#done-fail은 필터휠 실패, #mid는 절반쯤 연결된 모습)
+function still(upTo, fail) {
+  layout()
+  planets.forEach((p, i) => {
+    p.el.classList.add('shown')
+    if (i < upTo) {
+      p.el.classList.remove('pending')
+      if (fail && p.id === 'filterwheel') { p.el.classList.add('fail'); p.el.querySelector('i').textContent = '!' }
+      else { p.el.classList.add('ok'); p.el.querySelector('i').textContent = '✓'; p.arcs.forEach((a) => { a.style.transition = 'none'; a.classList.add('on') }) }
+    } else if (i === upTo) { p.el.classList.remove('pending'); p.el.classList.add('working') }
+  })
+  sun.className = upTo >= planets.length ? 'c sun ok' : 'c sun working'
+  sunSub.textContent = `${Math.min(upTo, planets.length)} / ${planets.length}`
+}
+const mode = (location.hash || location.search).replace(/^[#?]/, '')
+function render() {
+  if (mode === 'done') still(99, false)
+  else if (mode === 'done-fail') { document.getElementById('failOne').checked = true; still(99, true) }
+  else if (mode === 'mid') still(4, false)
+  else run()
+}
+let resizing = 0
+window.addEventListener('resize', () => { clearTimeout(resizing); resizing = setTimeout(render, 200) })
+render()
+</script>
+</body>
+</html>
