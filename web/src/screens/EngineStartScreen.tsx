@@ -1,5 +1,6 @@
 import { RotateCw } from 'lucide-react'
 import { useEffect } from 'react'
+import Button from '../components/Button'
 import InfoTip from '../components/InfoTip'
 import JarvisRing from '../components/JarvisRing'
 import { pending, useCheckStream } from '../checks'
@@ -49,10 +50,10 @@ export default function EngineStartScreen({ onContinue }: { onContinue: () => vo
       {/* 실패했을 때만: 해결 방법(?)과 다시 시도. 자리는 항상 확보 */}
       <div className={styles.actions} data-shown={state === 'failed'}>
         {problem?.diagnosis?.fix && <InfoTip label="해결 방법" text={problem.diagnosis.fix} />}
-        <button type="button" className={styles.retry} onClick={restart} disabled={state !== 'failed'}>
+        <Button variant="primary" onClick={restart} disabled={state !== 'failed'}>
           <RotateCw strokeWidth={2} aria-hidden="true" />
           다시 시도
-        </button>
+        </Button>
       </div>
     </main>
   )

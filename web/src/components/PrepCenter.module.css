@@ -139,28 +139,8 @@
 
 .actions[data-empty='true'] { visibility: hidden; }
 
-.primary,
-.quiet {
-  height: 56px;
-  border-radius: var(--radius);
-  font: inherit;
-  cursor: pointer;
-  text-shadow: none;
-  transition: filter 150ms, border-color 150ms, background-color 150ms;
-}
-
-.primary {
-  width: 280px;
-  padding: 8px 16px;
-  border: 1.5px solid var(--primary-border);
-  background: var(--primary-bg);
-  color: var(--primary-text);
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.primary:not(:disabled):hover { filter: brightness(1.06); }
+/* 주 버튼은 칸 너비 그대로. 모양은 공통 Button(lg, 하늘 위) */
+.primary { width: 100%; }
 
 .secondary {
   position: absolute;
@@ -171,28 +151,7 @@
   white-space: nowrap;
 }
 
-.quiet {
-  padding: 0 18px;
-  border: 1.5px solid var(--sky-line);
-  background: rgb(0 0 0 / 0.35);
-  color: var(--star);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.quiet:not(:disabled):hover { border-color: var(--sky-muted); }
-
-.primary:disabled,
-.quiet:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.primary:focus-visible,
-.quiet:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 4px;
-}
+.quiet { white-space: nowrap; }
 
 /* 다크 장수 고르기: 숫자 좌우 쉐브론 (마무리 — 시안 v10) */
 .stepper {

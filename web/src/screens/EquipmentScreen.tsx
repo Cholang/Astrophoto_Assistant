@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, RotateCw } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import Button from '../components/Button'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DeviceIcon from '../components/DeviceIcon'
 import ScopeList from '../components/ScopeList'
@@ -372,14 +373,14 @@ function EquipmentGraph({
                   mode === 'connect' ? (
                     // 막대가 도는 동안 가리키면 시간이 느리게 흐른다. 버튼이 꺼져도 가리킨 상태를 놓치지 않게 감싼 칸에서 받는다
                     <span className={styles.slowZone} {...slowProps}>
-                      <button type="button" className={styles.quiet} onClick={startEdit} disabled={!done || late || phase !== 'connect'}>
+                      <Button onClick={startEdit} disabled={!done || late || phase !== 'connect'}>
                         장비 변경
-                      </button>
+                      </Button>
                     </span>
                   ) : (
-                    <button type="button" className={styles.primary} onClick={finishEdit} disabled={phase !== 'edit'}>
+                    <Button variant="primary" onClick={finishEdit} disabled={phase !== 'edit'}>
                       변경 완료
-                    </button>
+                    </Button>
                   )
                 }
               >

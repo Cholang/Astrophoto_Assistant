@@ -218,34 +218,19 @@
   padding: 0 var(--gutter);
 }
 
-.skip {
-  min-width: 200px;
-  height: 48px;
-  padding: 0 28px;
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 320ms ease-in, opacity 320ms ease-in, border-color 200ms;
+/* 모두 확인 완료: 공통 Button(테두리, lg). 누르면 감싼 칸째 아래로 가라앉으며 사라진다 */
+.sink {
+  transition: transform 320ms ease-in, opacity 320ms ease-in;
 }
 
-.skip:hover {
-  border-color: var(--primary-border);
-}
-
-.skip:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-}
-
-.skip[data-sunk='true'] {
+.sink[data-sunk='true'] {
   transform: translateY(28px);
   opacity: 0;
   pointer-events: none;
+}
+
+.skip {
+  min-width: 200px;
 }
 
 /* 좁은 화면: 덱 위, 설명 아래 */

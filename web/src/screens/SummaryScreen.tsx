@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import LiveView from '../components/LiveView'
 import PrepCenter from '../components/PrepCenter'
 import PrepGuide from '../components/PrepGuide'
+import { useScreenSky } from '../components/ScreenSky'
 import { useRailExtra } from '../components/StepRail'
 import { closeApp } from '../host'
 import { PRODUCT } from '../product'
@@ -20,7 +21,9 @@ export default function SummaryScreen() {
     void nightSummary().then(setS)
   }, [])
 
-  useRailExtra({ stage: '마무리', sky: true, complete: true, hideExit: true })
+  useScreenSky(true)
+  // 레일 아래 종료 버튼은 App이 이 화면에서 숨긴다(가운데에 종료 버튼이 있어서)
+  useRailExtra({ stage: '마무리', complete: true })
 
   const openFolder = async () => {
     const r = await fetch('/api/night/open-folder', { method: 'POST' }).catch(() => null)

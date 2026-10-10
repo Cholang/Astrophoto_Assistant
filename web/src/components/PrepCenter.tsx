@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { PrepAction, ReadoutView, Tone } from '../prepare'
+import Button from './Button'
 import StatusIcon, { type Status } from './StatusIcon'
 import styles from './PrepCenter.module.css'
 
@@ -51,15 +52,15 @@ export default function PrepCenter({
 
       <div className={styles.actions} data-empty={!primary}>
         {primary && (
-          <button type="button" className={styles.primary} onClick={() => onAct(primary.id)} disabled={disabled}>
+          <Button variant="primary" size="lg" surface="sky" className={styles.primary} onClick={() => onAct(primary.id)} disabled={disabled}>
             {primary.label}
-          </button>
+          </Button>
         )}
         <div className={styles.secondary}>
           {rest.map((a) => (
-            <button key={a.id} type="button" className={styles.quiet} onClick={() => onAct(a.id)} disabled={disabled}>
+            <Button key={a.id} size="lg" surface="sky" className={styles.quiet} onClick={() => onAct(a.id)} disabled={disabled}>
               {a.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

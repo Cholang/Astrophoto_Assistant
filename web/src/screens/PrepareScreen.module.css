@@ -54,17 +54,7 @@
   z-index: 4;
 }
 
-.tool {
-  padding: 10px 18px;
-  border: 1px solid var(--sky-line);
-  border-radius: var(--radius);
-  background: rgb(0 0 0 / 0.45);
-  color: var(--star);
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.tool:hover { border-color: var(--sky-muted); }
+/* 사진만 보기 · 9칸 확대 보기: 공통 Button(하늘 위) */
 
 /* [임시] 모의 실패: 왼쪽 아래 구석에 조용히 */
 .temp {

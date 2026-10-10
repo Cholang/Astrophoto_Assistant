@@ -10,6 +10,7 @@ import styles from './SkyBackdrop.module.css'
 const LEVEL = 1.1
 
 type Theme = 'dark' | 'night'
+const THEMES_ALL: Theme[] = ['dark', 'night']
 
 /** 별·혜성 색 (r, g, b) — 시안의 --star */
 const STAR: Record<Theme, string> = { dark: '235, 232, 227', night: '150, 0, 0' }
@@ -200,22 +201,27 @@ export default function SkyBackdrop() {
       draw()
     }
 
-    // 성운 무늬는 무거워(수백 ms) 첫 화면이 그려진 뒤에 만들고, 다 되면 천천히 나타난다
+    // 성운 무늬는 무거워(수백 ms) 첫 화면이 그려진 뒤에 만들고, 다 되면 천천히 나타난다.
+    // 두 테마의 무늬를 미리 만들어 두어 테마를 바꾸면 바탕색과 같은 순간에 바뀐다 (2026-10-10 — 전에는 바꿀 때 새로 만들어 한 박자 늦었다)
+    const made: Partial<Record<Theme, HTMLCanvasElement[]>> = {}
+    const cloudsOf = (t: Theme) => (made[t] ??= [nebula(0, t), nebula(1, t)])
     let paint = 0
     const makeClouds = () => {
       window.clearTimeout(paint)
       paint = window.setTimeout(() => {
-        color = STAR[theme]
-        clouds = [nebula(0, theme), nebula(1, theme)]
+        clouds = cloudsOf(theme)
         cv.dataset.ready = 'true'
         draw()
+        // 다른 테마 무늬는 조금 뒤 한가할 때
+        paint = window.setTimeout(() => THEMES_ALL.forEach(cloudsOf), 1500)
       }, 300)
     }
     const themeWatch = new MutationObserver(() => {
       if (themeOf() === theme) return
       theme = themeOf()
       color = STAR[theme]
-      makeClouds()
+      // 아직 못 만들었으면 지금 만든다 (바탕색이 바뀌는 같은 프레임에)
+      if (cv.dataset.ready === 'true') clouds = cloudsOf(theme)
       draw()
     })
     themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })

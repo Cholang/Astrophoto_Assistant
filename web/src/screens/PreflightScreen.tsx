@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import Button from '../components/Button'
 import styles from './PreflightScreen.module.css'
 
 interface Item {
@@ -223,9 +224,11 @@ export default function PreflightScreen({ onContinue }: { onContinue: () => void
 
       {/* 하단: 버튼 하나. 영역 높이는 고정이라 버튼이 사라져도 덱은 움직이지 않는다 */}
       <div className={styles.foot}>
-        <button type="button" className={styles.skip} data-sunk={sunk} onClick={skip} disabled={locked}>
+        <div className={styles.sink} data-sunk={sunk}>
+          <Button size="lg" className={styles.skip} onClick={skip} disabled={locked}>
           모두 확인 완료
-        </button>
+          </Button>
+        </div>
       </div>
     </main>
   )

@@ -92,6 +92,9 @@
   --size-bar: 12.5px;
   /* 모든 도형은 둥근 모서리 (DESIGN.md 3장). 상자·버튼·입력창은 이 값, 쉐브론은 SVG로 같은 느낌의 곡선 */
   --radius: 10px;
+  /* 누를 수 있는 것의 공통 상태 (처음 장비 연결 화면에서 정한 규칙을 앱 전체로 — 2026-10-10) */
+  --state-disabled-opacity: 0.4;
+  --state-focus-ring: 0 0 0 3px var(--bg), 0 0 0 5px var(--focus);
   /* 창 기준 기본값. 앱 틀 안에서는 App.module.css의 .shell이 틀 기준(cqw)으로 다시 정한다 */
   --gutter: clamp(20px, 6vw, 96px);
   /* 하단 단계 레일 높이 (모든 화면 같은 높이) */

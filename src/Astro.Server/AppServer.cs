@@ -95,6 +95,15 @@ public static class AppServer
         var app = builder.Build();
         // 새 버전 확인은 앱이 켜지자마자 시작한다 — 프로필 화면이 열릴 때 결과가 준비돼 있게 (오늘 이미 받았으면 기억한 값)
         _ = Task.Run(() => app.Services.GetRequiredService<UpdateChecker>().CheckAsync(CancellationToken.None));
+        // 서버를 멈출 때 끝나지 않는 실시간 연결(SSE, 화면의 EventSource)을 바로 끊는다 — 안 그러면 Kestrel이 이 연결들이 끝나길
+        // 멈춤 한도(데스크톱 10초)까지 기다려, 프로그램을 다 닫은 뒤에도 아이라 창이 한참 늦게 닫혔다 (2026-10-10)
+        var stopping = app.Lifetime.ApplicationStopping;
+        app.Use(async (ctx, next) =>
+        {
+            if (!ctx.Request.Headers.Accept.ToString().Contains("text/event-stream")) { await next(ctx); return; }
+            using var _ = stopping.Register(ctx.Abort);
+            await next(ctx);
+        });
         app.UseDefaultFiles();
         // index.html은 캐시하지 않는다: 웹을 다시 빌드해도 WebView2가 옛 index.html(옛 화면)을 띄우던 문제. assets는 이름에 해시가 있어 그대로 캐시
         app.UseStaticFiles(new StaticFileOptions
@@ -155,8 +164,11 @@ public static class AppServer
         // 포커서 0에 두기: 점검이 "포커서 0점" 카드를 건너뛸지(ready) · 아이라 종료 전에 0으로 보내기 (못 하면 이유, 종료는 그대로)
         api.MapGet("/focuser/parked", async (Prepare.FocuserPark park, CancellationToken ct) => Results.Ok(new { ready = await park.ReadyAsync(ct) }));
         // 아이라 종료 마지막: 아이라가 켠 N.I.N.A.면 PHD2와 함께 닫는다 (촬영 중이면 두기). 사용자가 켜 둔 N.I.N.A.는 그대로
-        api.MapPost("/engine/close", async (ProgramCloser programs, Shoot.ShootSession shoot, CancellationToken ct) =>
-            Results.Ok(new { closed = programs.LaunchedNina && !shoot.Active && await programs.CloseAsync(ct) }));
+        // 아이라 종료: 닫을 프로그램 목록(아이라가 N.I.N.A.를 켰고 촬영 중이 아닐 때만) → 화면이 하나씩 닫으며 체크 (2026-10-10)
+        api.MapGet("/engine/close", (ProgramCloser programs, Shoot.ShootSession shoot) =>
+            Results.Ok(new { apps = programs.LaunchedNina && !shoot.Active ? programs.Targets() : [] }));
+        api.MapPost("/engine/close/{id}", async (string id, ProgramCloser programs, Shoot.ShootSession shoot, CancellationToken ct) =>
+            Results.Ok(new { closed = programs.LaunchedNina && !shoot.Active && await programs.CloseOneAsync(id, ct) }));
         // 화면의 단계 이동·버튼 기록 (같은 로그 파일에 "화면"으로)
         api.MapPost("/log", (ClientLog input) =>
         {

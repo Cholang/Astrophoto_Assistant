@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import Button from '../components/Button'
 import LiveView from '../components/LiveView'
 import PrepCenter from '../components/PrepCenter'
 import PrepGuide from '../components/PrepGuide'
+import { useScreenSky } from '../components/ScreenSky'
 import { useRailExtra, type RailItem } from '../components/StepRail'
 import { prepareAbort, prepareAct, watchPrepare, type PrepGroup, type PrepTaskStatus, type PrepView } from '../prepare'
 import styles from './PrepareScreen.module.css'
@@ -87,9 +89,9 @@ export default function PrepareScreen({
           state: t.id === cur?.taskId && statusProblem ? 'problem' : RAIL_STATE[t.status],
         }))
       : undefined
+  useScreenSky(skyBg)
   useRailExtra({
     stage: group === 'rig' ? '장비 준비' : group === 'wrap' ? '마무리' : '대상',
-    sky: skyBg,
     items: group === 'target' ? [PLAN_ITEM, ...(items ?? [])] : items,
     // 마무리에는 중단 버튼을 두지 않는다 (건너뛰기는 화면 버튼으로)
     action: group === 'wrap' ? undefined : { label: group === 'rig' ? '준비 중단' : '대상 중단', onClick: () => prepareAbort(group) },
@@ -142,14 +144,14 @@ export default function PrepareScreen({
           <div className={styles.viewTools}>
             {/* 9칸 확대 보기는 아직 모의 그림만 — 실장비에서는 숨긴다 (실제 사진 9칸 자르기는 저장 형식 확인 뒤, CX-APP-R5) */}
             {liveKind === 'test-photo' && !peek && view?.simulated && (
-              <button type="button" className={styles.tool} onClick={() => setGrid((g) => !g)}>
+              <Button surface="sky" onClick={() => setGrid((g) => !g)}>
                 {grid ? '사진 전체 보기' : '9칸 확대 보기'}
-              </button>
+              </Button>
             )}
             {photo && (
-              <button type="button" className={styles.tool} onClick={() => setPeek((p) => !p)} aria-pressed={peek}>
+              <Button surface="sky" onClick={() => setPeek((p) => !p)} aria-pressed={peek}>
                 {peek ? '글 다시 보기' : '사진만 보기'}
-              </button>
+              </Button>
             )}
           </div>
 

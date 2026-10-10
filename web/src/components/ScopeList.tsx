@@ -1,5 +1,6 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import Button from './Button'
 import styles from './ScopeList.module.css'
 
 /** 서버 OpticsStore.Scope (ScopeView) */
@@ -142,12 +143,12 @@ export default function ScopeList({
             {error}
           </p>
           <div className={styles.actions}>
-            <button type="button" className={styles.quiet} onClick={() => setEditing(null)}>
+            <Button size="sm" onClick={() => setEditing(null)}>
               취소
-            </button>
-            <button type="submit" className={styles.primary}>
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
               {editing.id ? '고치기' : '추가하기'}
-            </button>
+            </Button>
           </div>
         </form>
       ) : (

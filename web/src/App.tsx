@@ -7,7 +7,9 @@ import NinaNoticeCard from './components/NinaNoticeCard'
 import StepRail, { RailProvider, type RailExtra, type Stage } from './components/StepRail'
 import SkyBackdrop from './components/SkyBackdrop'
 import { logClicks, logEvent } from './log'
-import { QuitProvider } from './components/QuitControl'
+import MountHomeButton from './components/MountHomeButton'
+import { QuitButton, QuitProvider } from './components/QuitControl'
+import { ScreenSkyProvider } from './components/ScreenSky'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
 import EngineStartScreen from './screens/EngineStartScreen'
@@ -108,6 +110,8 @@ export default function App() {
   const [settled, setSettled] = useState(true)
   // 지금 화면이 진행 표시에 넘긴 작업 목록·버튼 (예: 준비의 7작업, 준비 중단)
   const [railExtra, setRailExtra] = useState<RailExtra | null>(null)
+  // 화면 바탕이 하늘인가 — 화면이 useScreenSky로 알린다 (레일과 따로)
+  const [sky, setSky] = useState(false)
   const phaseNow = useRef<Phase>('boot')
   phaseNow.current = phase
   const fadeTo = useCallback((next: Phase) => {
@@ -336,8 +340,8 @@ export default function App() {
   const siteInfo = describeSite(site ?? null, profile, profiles ?? [])
 
   return (
-    // 종료 확인은 앱 전체에서 (레일을 숨기거나 빼도 동작). 창 ×도 확인은 단계 화면에서만, 마지막 요약(hideExit)은 바로 닫음
-    <QuitProvider stage={STAGE_OF[phase] ?? null} confirmOnClose={!!STAGE_OF[phase] && !(railExtra?.hideExit && railExtra.stage === STAGE_OF[phase])}>
+    // 종료 확인은 앱 전체에서 (레일을 숨기거나 빼도 동작). 창 ×도 확인은 단계 화면에서만, 마지막 요약은 바로 닫음
+    <QuitProvider stage={STAGE_OF[phase] ?? null} confirmOnClose={!!STAGE_OF[phase] && phase !== 'summary'}>
     <div className={styles.window}>
     {/* 앱 전체 배경 효과 (성운과 별) — 틀 바깥 여백까지. 틀은 그 위에 투명 */}
     <SkyBackdrop />
@@ -376,8 +380,9 @@ export default function App() {
       )}
       {/* 전환 중(settled=false)에는 화면 전체를 누를 수 없고 초점도 받지 않는다 (inert) */}
       {/* 화면 영역(왼쪽) + 진행 표시(오른쪽 세로 열). 화면 영역이 크기 기준 틀이라 화면 안의 cqw·cqh는 이 영역 기준 */}
-      <div className={styles.body} data-sky={!!railExtra?.sky}>
+      <div className={styles.body} data-sky={sky}>
       <ScreenReady.Provider value={settled}>
+      <ScreenSkyProvider onChange={setSky}>
       <RailProvider onChange={setRailExtra}>
       <div className={styles.screen} data-shown={shown} data-boot={phase === 'boot'} inert={!settled}>
         {phase === 'boot' && <BootScreen error={loadError ? `${PRODUCT.name} 내부 서버에 연결하지 못했습니다. ${PRODUCT.reul} 다시 실행해 주세요.` : null} />}
@@ -444,12 +449,23 @@ export default function App() {
         {phase === 'summary' && <SummaryScreen />}
       </div>
       </RailProvider>
+      </ScreenSkyProvider>
       </ScreenReady.Provider>
       {/* 진행 표시는 화면 전환 페이드 밖에 둔다: 화면이 바뀌어도 같은 자리에 그대로 */}
       {STAGE_OF[phase] && (
         // 관측지 목록 화면에서는 숨긴다: 지도·목록을 레일이 가렸다 (2026-10-10 사용자 요청). 종료는 QuitProvider가 맡으니 상관없고, 빼지 않고 숨겨서 단계별 작업 목록 기억은 그대로
         <div className={styles.rail} hidden={phase === 'site'}>
-          <StepRail current={STAGE_OF[phase]} extra={railExtra} />
+          <StepRail
+            current={STAGE_OF[phase]}
+            extra={railExtra}
+            // 레일 아래 늘 있는 도구. 마지막 요약은 가운데에 종료 버튼이 있어 여기서는 숨긴다(같은 버튼 두 개 금지)
+            foot={
+              <>
+                <MountHomeButton />
+                {phase !== 'summary' && <QuitButton />}
+              </>
+            }
+          />
         </div>
       )}
       </div>

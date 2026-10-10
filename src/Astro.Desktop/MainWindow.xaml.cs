@@ -200,6 +200,7 @@ public partial class MainWindow : Window
         if (_server is null) return;
         e.Cancel = true;
         _stopping = true;
+        Hide(); // 종료를 확인했으니 창은 바로 감춘다 — 서버가 멈추는 동안 남아 보이지 않게 (2026-10-10)
         var server = _server;
         _server = null;
         try

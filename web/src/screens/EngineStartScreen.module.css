@@ -39,21 +39,4 @@
   visibility: visible;
 }
 
-.retry {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 18px;
-  border: 1px solid var(--primary-border);
-  border-radius: var(--radius);
-  background: var(--primary-bg);
-  color: var(--primary-text);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.retry svg {
-  width: 18px;
-  height: 18px;
-}
+/* 다시 시도 버튼은 공통 Button(주) */

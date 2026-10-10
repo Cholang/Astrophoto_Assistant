@@ -26,36 +26,7 @@
   gap: 10px;
 }
 
-.primary,
-.quiet {
-  min-height: 42px;
-  padding: 0 20px;
-  border-radius: var(--radius);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.primary {
-  min-width: 96px;
-  border: 1px solid var(--primary-border);
-  background: var(--primary-bg);
-  color: var(--primary-text);
-}
-
-.quiet {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
-  font-weight: 500;
-}
-
-.primary:focus-visible,
-.quiet:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--focus);
-}
+/* 버튼 모양은 공통 Button */
 
 /* 확인한 일을 하는 중: 버튼을 잠근다 */
 .actions button:disabled {

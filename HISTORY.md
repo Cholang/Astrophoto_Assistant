@@ -8,7 +8,25 @@
 
 ---
 
-## 2026-10-10 · [Claude] 레일 보라, Empire 시작 로고 실측 고침, 알림 모두 숨김, 종료 때 N.I.N.A. 오류, [임시] 건너뛰기, 부팅 로고 천천히, 사진 없을 때 배경 유지
+## 2026-10-10 · [Claude] 버튼 공통 Button으로 통일, 레일에서 홈·종료·배경 분리, 종료 창 프로그램 목록, 종료 지연, 테마 배경
+
+**요청**: 레일에 종료가 엮여 관계없는 수정이 다른 기능에 번지고 버튼 모양을 바꿔도 하나만 바뀌던 문제 — 기능 단위로 나뉘지 않은 곳을 전체 코드에서 찾아 검토(A 버튼 중복, B 레일에 엮인 기능, C 서버 큰 클래스·창 제어 중복, D 웹 중복 보고) → A·B는 지금 고치기. 이어서 종료 창을 "앱을 종료 중입니다." + 아이라가 켠 프로그램 목록을 하나씩 체크, 마지막 체크 1초 뒤 종료. 버그: 테마를 바꾸면 배경이 한 박자 늦게 바뀜, 프로그램이 다 닫혔는데 아이라가 한참 늦게 꺼짐, 기본 테마에 붉은 성운. Gemini 리뷰 파일 보관
+
+**변경**
+- A 버튼: `Button`에 `size`(sm·md·lg)·`surface`(app·sky)·`variant` ghost·`aria-disabled` 추가, 모양은 `Button.module.css` 한 곳. 화면마다 따로 있던 `.primary`/`.quiet`/`.retry`/`.skip`/`.tool`(EquipmentScreen·PrepCenter·ScopeList·ConfirmDialog·EngineStartScreen·PreflightScreen·PrepareScreen)을 `Button`으로. `--state-disabled-opacity`·`--state-focus-ring`을 장비 화면 지역 값에서 `index.css`로
+- B 레일: 적도의 홈 → `MountHomeButton`, 종료 → `QuitButton`(QuitControl), App이 `StepRail`의 `foot` 자리에 넣음. 화면 하늘 바탕은 `RailExtra.sky` 대신 `useScreenSky`(ScreenSky.tsx). `hideExit` 없앰 — 요약 화면 여부는 App이 phase로. `useRailExtra`는 값 전체(JSON)로 바뀜을 보고 onClick은 늘 최신 것을 부름
+- 종료 목록: `ProgramCloser.Targets()`·`CloseOneAsync(id)`(N.I.N.A. → PHD2 → SharpCap → 아이라가 켠 Empire, Empire는 N.I.N.A.가 남아 있으면 안 닫음), `GET /api/engine/close`·`POST /api/engine/close/{id}`(예전 `POST /engine/close` 대체). `QuitControl`이 하나씩 닫으며 체크(`QuitControl.module.css`), 1초 뒤 `closeApp`. `ConfirmDialog`에 children
+- 종료 지연: 원인 = 화면의 SSE 연결(EventSource)이 끝나지 않아 서버 멈춤이 한도(10초)까지 기다림 → `AppServer`에서 `ApplicationStopping` 때 `text/event-stream` 요청을 끊음, `MainWindow.OnClosing`은 멈추기 전에 `Hide()`
+- 테마 배경: `SkyBackdrop`이 두 테마 성운을 미리 만들어 두고 바꿀 때 바로 교체, `useTheme`은 `useLayoutEffect`로 data-theme. (중간에 테마 감시 `observe` 줄을 실수로 지워 배경이 켤 때 테마로 고정됐던 것도 이 커밋에서 되살림)
+- DESIGN.md: "버튼은 공통 Button 하나로" 절, 레일은 단계·작업 표시만, 종료 순서·목록. `docs/codex/REVIEW_GEMINI.md`(490cd41..a42a945 Gemini 리뷰 원문) 추가 — 판단은 Codex 리뷰와 함께
+
+**확인**: 웹 타입 검사·빌드, 서버·데스크톱 빌드, 서버 테스트 195 통과·1 건너뜀. 시험 서버(5211)·브라우저: 엔진 화면 "다시 시도"·레일 아래 "적도의 홈"·확인 창이 공통 Button으로 나옴(DOM), 성운 색이 기본↔다크 전환 0.2초 안에 따라 바뀜(캔버스 픽셀). 사용자 실행: 종료 목록 4개 체크됨. 확인 못 함: 장비 준비·하늘 화면·점검·요약의 버튼 모양, 고친 뒤 실제 앱의 종료 속도
+
+**남은 것**: 리뷰 C(EquipmentConnector 나누기·창 제어 Win32 모으기·프로그램 이름 상수)·D(API 호출 모듈, 동작 줄이기 확인 함수)는 Codex 리뷰와 함께 판단. 공통 버튼에서 긴 글자가 두 줄이 되는 곳은 사용자가 모아서 문구 조정 예정
+
+---
+
+## 2026-10-10 · a42a945 [Claude] 레일 보라, Empire 시작 로고 실측 고침, 알림 모두 숨김, 종료 때 N.I.N.A. 오류, [임시] 건너뛰기, 부팅 로고 천천히, 사진 없을 때 배경 유지
 
 **요청**: 실행해 본 뒤 — 오른쪽 레일의 초록도 보라로, Empire 시작 로고가 아직 보임, N.I.N.A. 알림이 어떤 건 사라지고 어떤 건 남음, 극축 정렬 중 아이라를 끄자 N.I.N.A. 오류 창이 떴는데 꺼지는 중이라 내용을 못 봄(확인 요청), 극축 정렬·캘리브레이션을 바로 넘기는 임시 버튼(쉽게 지울 수 있게), 부팅 로고가 자연스럽게 투명해지며 사라지게, 극축 정렬로 넘어갈 때 갑자기 검은 배경 → 실제 카메라 화면이 아니면 기존 배경 유지. Windows MCP 권한 받음
 

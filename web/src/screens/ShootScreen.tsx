@@ -3,6 +3,7 @@ import LiveView from '../components/LiveView'
 import PrepCenter from '../components/PrepCenter'
 import PrepGuide from '../components/PrepGuide'
 import { FlipSteps, ShootGauges, ShootGrades } from '../components/ShootPanels'
+import { useScreenSky } from '../components/ScreenSky'
 import { useRailExtra } from '../components/StepRail'
 import type { CurrentView, PrepAction, Tone } from '../prepare'
 import { answerShoot, recheckShootStop, stopShoot, watchShoot, type ShootView } from '../shoot'
@@ -85,9 +86,9 @@ export default function ShootScreen({ onWrap, onRetarget }: { onWrap: () => void
     else onRetarget()
   }, [ended, then, stopped, onWrap, onRetarget])
 
+  useScreenSky(true)
   useRailExtra({
     stage: '촬영',
-    sky: true,
     action: view && !ended && !then ? { label: '촬영 중단', onClick: () => setAsking(true) } : undefined,
   })
 

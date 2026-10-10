@@ -1,9 +1,6 @@
-import { Check, House, Lock, LogOut } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { inDesktop } from '../host'
-import { PRODUCT } from '../product'
-import ConfirmDialog from './ConfirmDialog'
-import { useQuit } from './QuitControl'
+import Button from './Button'
 import styles from './StepRail.module.css'
 
 /** 촬영 단계 (DESIGN.md "진행 표시", "단계 재구성" 2026-10-07). 연결 = 설치 확인·엔진 켜기·장비 연결 */
@@ -23,10 +20,6 @@ export interface RailExtra {
   stage: Stage
   items?: RailItem[]
   action?: { label: string; onClick: () => void }
-  /** 화면이 하늘 화면(장비 준비·대상)이면 진행 표시도 하늘 위에 얹는다 */
-  sky?: boolean
-  /** 화면 가운데에 종료 버튼이 있으면(마지막 요약) 아래 종료 버튼을 숨긴다 — 같은 버튼이 두 곳에 보이지 않게 */
-  hideExit?: boolean
   /** 모든 단계 끝 (오늘 밤 요약): 마지막 단계까지 완료로, 작업 묶음은 접는다 */
   complete?: boolean
 }
@@ -41,9 +34,12 @@ export function RailProvider({ children, onChange }: { children: ReactNode; onCh
 /** 화면에서: 지금 단계의 작업 목록·버튼을 진행 표시에 보낸다 (화면을 떠나면 지움) */
 export function useRailExtra(extra: RailExtra | null) {
   const set = useContext(RailContext)
-  const key = (extra?.stage ?? '') + JSON.stringify(extra?.items ?? null) + (extra?.action?.label ?? '') + (extra?.sky ? 'sky' : '') + (extra?.hideExit ? 'noexit' : '') + (extra?.complete ? 'complete' : '')
+  // 바뀌었는지는 값 전체로 본다 (필드를 새로 더해도 빠지지 않게). 함수(버튼 onClick)는 JSON에서 빠지므로 늘 최신 것을 부르게 감싼다
+  const latest = useRef(extra)
+  latest.current = extra
+  const key = JSON.stringify(extra)
   useEffect(() => {
-    set(extra)
+    set(extra && { ...extra, action: extra.action && { label: extra.action.label, onClick: () => latest.current?.action?.onClick() } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, set])
   useEffect(() => () => set(null), [set])
@@ -87,16 +83,14 @@ function progressKey(stage: number, items: RailItem[] | undefined) {
 
 /**
  * 진행 표시: 화면 오른쪽 세로 열 (2026-10-05 사용자 결정, 시안 v8·v9). 단계 → (지금 단계의) 작업.
- * 작업은 제목만(결과·세부 과정 없음). 지금 작업만 보이고, 나머지는 마우스를 올리거나 키보드 초점일 때 보인다. 맨 아래 화면 버튼(준비 중단)·AA 종료(진행 중이면 확인 창, 마지막 요약 화면에서는 숨김).
+ * 작업은 제목만(결과·세부 과정 없음). 지금 작업만 보이고, 나머지는 마우스를 올리거나 키보드 초점일 때 보인다. 맨 아래 화면 버튼(준비 중단)과 App이 넣는 도구 자리(foot — 적도의 홈·종료). 레일은 단계·작업 표시만 맡는다(2026-10-10).
  * 화면이 바뀌어도 같은 자리·같은 너비. 단계·작업이 바뀌면 상태만 바꿔 부드럽게 넘어간다.
  */
-export default function StepRail({ current, extra: given }: { current: Stage; extra?: RailExtra | null }) {
+export default function StepRail({ current, extra: given, foot }: { current: Stage; extra?: RailExtra | null; foot?: ReactNode }) {
   const extra = given?.stage === current ? given : null
   // 모든 단계가 끝났으면 "지금 단계"는 마지막 다음 (마무리까지 체크, 펼친 묶음 없음)
   const now = extra?.complete ? STAGES.length : STAGES.indexOf(current)
   const [open, setOpen] = useState<string | null>(null)
-  // 종료는 QuitProvider(앱 전체)가 맡는다 — 레일은 버튼만 (2026-10-10 분리)
-  const askQuit = useQuit()
 
   // 단계마다 마지막으로 받은 작업 목록: 지난 단계의 묶음을 접는 동안, 돌아왔을 때 보이게
   const known = useRef<Record<number, RailItem[]>>({})
@@ -307,82 +301,14 @@ export default function StepRail({ current, extra: given }: { current: Stage; ex
       </ol>
       <div className={styles.end}>
         {extra?.action && (
-          <button type="button" className={styles.action} onClick={extra.action.onClick}>
+          <Button size="sm" onClick={extra.action.onClick}>
             {extra.action.label}
-          </button>
+          </Button>
         )}
-        <div className={styles.endRow}>
-          {/* 적도의 홈 (2026-10-09 사용자 요청): 종료 왼쪽. 움직이면 안 되는 때는 자물쇠 아이콘·흐리게, 이유는 가리키면 */}
-          <HomeButton />
-          {/* AA 종료: 전체화면이라 창 닫기 버튼이 없어서 둔다 (데스크톱 창에서만). 진행 중이면 한 번 묻는다 (2026-10-07 사용자 결정) */}
-          {inDesktop() && !extra?.hideExit && (
-            <button type="button" className={styles.exit} onClick={askQuit}>
-              <LogOut strokeWidth={2} aria-hidden="true" />
-              <span>{PRODUCT.name} 종료</span>
-            </button>
-          )}
-        </div>
+        {/* 늘 있는 도구(적도의 홈 · 아이라 종료)는 App이 넣는다 — 레일은 자리만 (2026-10-10 분리) */}
+        {foot && <div className={styles.endRow}>{foot}</div>}
       </div>
     </nav>
   )
 }
 
-/**
- * 적도의 홈 (2026-10-09 사용자 요청): 서버가 지금 움직여도 되는지(촬영·적도의를 쓰는 작업·가이딩·미연결이면 안 됨)와 이유를 알려 준다 (2초마다).
- * 움직여도 되면 집 아이콘, 안 되면 자물쇠 아이콘 + 흐리게 — 아이콘만 봐도 구분되게. 누르면 한 번 묻고 홈으로 보낸 뒤 추적을 끈다
- */
-function HomeButton() {
-  const [state, setState] = useState<{ available: boolean; homing: boolean; reason: string | null } | null>(null)
-  const [asking, setAsking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    let alive = true
-    const poll = () =>
-      fetch('/api/mount/home')
-        .then((r) => (r.ok ? r.json() : null))
-        .then((s) => alive && setState(s))
-        .catch(() => alive && setState(null))
-    void poll()
-    const t = window.setInterval(poll, 2000)
-    return () => {
-      alive = false
-      window.clearInterval(t)
-    }
-  }, [])
-  if (!state) return null
-  const on = state.available
-  const label = state.homing ? '홈으로 가는 중' : '적도의 홈'
-  return (
-    <>
-      <button
-        type="button"
-        className={styles.exit}
-        data-locked={!on}
-        aria-disabled={!on}
-        title={on ? '적도의를 홈 위치로 보내고 추적을 끕니다' : (state.reason ?? undefined)}
-        aria-label={on ? '적도의 홈으로 보내기' : `적도의 홈 — ${state.reason ?? '지금은 쓸 수 없음'}`}
-        onClick={() => on && setAsking(true)}
-      >
-        {on || state.homing ? <House strokeWidth={2} aria-hidden="true" /> : <Lock strokeWidth={2} aria-hidden="true" />}
-        <span>{label}</span>
-      </button>
-      <ConfirmDialog
-        open={asking || error !== null}
-        message={error ?? '적도의를 홈 위치로 보내고 추적을 끕니다. 경통 주변에 걸리는 것이 없는지 확인해 주세요.'}
-        confirmLabel={error ? '확인' : '홈으로 보내기'}
-        single={error !== null}
-        onConfirm={() => {
-          if (error) return setError(null)
-          setAsking(false)
-          void fetch('/api/mount/home', { method: 'POST' }).then(async (r) => {
-            if (!r.ok) setError(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? '적도의를 홈으로 보내지 못했습니다')
-          })
-        }}
-        onCancel={() => {
-          setAsking(false)
-          setError(null)
-        }}
-      />
-    </>
-  )
-}

@@ -1,0 +1,82 @@
+/* 종료 중 닫는 프로그램 목록: 하나씩 닫히면 체크 (2026-10-10). 표시가 바뀌어도 줄이 움직이지 않게 표시·글자 자리를 고정 */
+.apps {
+  display: grid;
+  gap: 10px;
+  margin: -6px 0 22px;
+  padding: 0;
+  list-style: none;
+}
+
+.apps li {
+  display: grid;
+  grid-template-columns: 22px 1fr 72px;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  transition: color 200ms;
+}
+
+.apps li[data-state='closing'],
+.apps li[data-state='done'] {
+  color: var(--text);
+}
+
+.mark {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1.5px dashed var(--line);
+  border-radius: 50%;
+}
+
+.mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 닫는 중: 테두리 빛이 돈다 (연결 중 원과 같은 색) */
+.apps li[data-state='closing'] .mark {
+  border: 2px solid var(--conn-glow);
+  border-top-color: var(--conn);
+  animation: spin 900ms linear infinite;
+}
+
+.apps li[data-state='done'] .mark {
+  border: 1.5px solid var(--conn);
+  background: var(--conn);
+  color: var(--on-accent);
+  animation: pop 320ms ease-out;
+}
+
+.apps li[data-state='failed'] .mark {
+  border: 1.5px solid var(--fail);
+  color: var(--fail);
+}
+
+.note {
+  font-size: var(--size-small);
+  text-align: right;
+  color: var(--muted);
+}
+
+.apps li[data-state='failed'] .note {
+  color: var(--fail);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apps li[data-state='closing'] .mark,
+  .apps li[data-state='done'] .mark {
+    animation: none;
+  }
+}

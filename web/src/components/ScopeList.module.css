@@ -194,24 +194,4 @@
   gap: 8px;
 }
 
-.quiet,
-.primary {
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.quiet {
-  border: 1.5px solid var(--line);
-  background: transparent;
-  color: var(--text);
-}
-
-.primary {
-  border: 1px solid var(--primary-border);
-  background: var(--primary-bg);
-  color: var(--primary-text);
-}
+/* 취소 · 추가하기는 공통 Button(sm) */
