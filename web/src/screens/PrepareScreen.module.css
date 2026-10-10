@@ -7,6 +7,15 @@
   background: var(--sky);
 }
 
+/* 실제 사진이 없을 때(실장비): 하늘 바탕·아래 그늘 없이 앱 배경(성운)이 비치게 */
+.stage[data-sky='false'] {
+  background: transparent;
+}
+
+.stage[data-sky='false'] .scrim {
+  opacity: 0;
+}
+
 /* 글이 얹히는 아래쪽만 하늘색으로 어둡게 */
 .scrim {
   position: absolute;

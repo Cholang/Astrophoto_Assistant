@@ -85,6 +85,8 @@ const LABEL_OF: Partial<Record<Phase, string>> = {
 
 /** 화면 전환 페이드 한쪽 시간. App.module.css의 .screen transition과 같은 값 */
 const FADE_MS = 280
+// 부팅 로고는 더 천천히 투명해진다 (2026-10-10 사용자 — 큰 로고가 0.28초에 사라지면 뚝 끊겨 보임). App.module.css .screen[data-boot]와 같게
+const BOOT_FADE_MS = 800
 
 export default function App() {
   const { theme, setTheme } = useTheme()
@@ -106,11 +108,14 @@ export default function App() {
   const [settled, setSettled] = useState(true)
   // 지금 화면이 진행 표시에 넘긴 작업 목록·버튼 (예: 준비의 7작업, 준비 중단)
   const [railExtra, setRailExtra] = useState<RailExtra | null>(null)
+  const phaseNow = useRef<Phase>('boot')
+  phaseNow.current = phase
   const fadeTo = useCallback((next: Phase) => {
     if (fading.current) return
     fading.current = true
     setSettled(false)
     setShown(false)
+    const out = phaseNow.current === 'boot' ? BOOT_FADE_MS : FADE_MS
     setTimeout(() => {
       setPhase(next)
       // 다음 화면이 투명한 상태로 한 번 그려진 뒤에 보이게 해야 페이드인이 된다
@@ -121,7 +126,7 @@ export default function App() {
           setTimeout(() => setSettled(true), FADE_MS)
         }),
       )
-    }, FADE_MS)
+    }, out)
   }, [])
 
   useEffect(() => {
@@ -374,7 +379,7 @@ export default function App() {
       <div className={styles.body} data-sky={!!railExtra?.sky}>
       <ScreenReady.Provider value={settled}>
       <RailProvider onChange={setRailExtra}>
-      <div className={styles.screen} data-shown={shown} inert={!settled}>
+      <div className={styles.screen} data-shown={shown} data-boot={phase === 'boot'} inert={!settled}>
         {phase === 'boot' && <BootScreen error={loadError ? `${PRODUCT.name} 내부 서버에 연결하지 못했습니다. ${PRODUCT.reul} 다시 실행해 주세요.` : null} />}
         {phase === 'profiles' && (
           <ProfileScreen

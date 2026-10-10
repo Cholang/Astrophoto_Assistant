@@ -633,6 +633,40 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
     /// 진행 중 작업을 취소하고 장비 정지를 확인한다 (IMPL-01). 정지 호출은 취소된 토큰과 무관한 별도 토큰으로.
     /// 확인 못 하면 then을 기억해 두고 false — 사용자가 "장비 상태 다시 확인"을 누르면 다시 확인 후 then.
     /// </summary>
+    // ── [임시] 시험용 건너뛰기 (2026-10-10 사용자 요청 — 실내에서 극축 정렬·캘리브레이션을 바로 넘기려고).
+    //    지울 때: 이 메서드 · AppServer의 /prepare/{group}/temp-skip · 웹 PrepareScreen의 TEMP_SKIP 버튼 (모두 "[임시] 건너뛰기"로 찾으면 됨)
+    public static readonly string[] TempSkippable = ["polar", "calibration"];
+
+    /// <summary>[임시] 지금 하는 극축 정렬·캘리브레이션을 멈추고(장비 정지 확인) "건너뜀" 결과로 끝내고 다음 작업으로. 안 되면 이유</summary>
+    public async Task<string?> TempSkipAsync()
+    {
+        Current? cur;
+        lock (_gate) cur = _cur;
+        if (cur is null || _ctx is null || !TempSkippable.Contains(cur.Task.Id)) return "지금은 넘길 작업이 없습니다";
+        if (!await StopCurrentAsync(() => Task.CompletedTask)) return "장비가 멈췄는지 확인하지 못했습니다";
+        var now = _ctx.Now();
+        object result = cur.Task.Id == "polar"
+            ? new PolarResult(null, 0, 0, "건너뜀(임시)", now, Skipped: true)
+            : new CalibrationResult(false, null, "", Sky.TonightService.EveningOf(now), now, Skipped: true);
+        _ctx.Results.Set(result);
+        log.LogInformation("[임시] 건너뛰기: {Task}", cur.Task.Id);
+        lock (_gate)
+        {
+            if (_cur != cur) return null;
+            cur.Finished = true;
+            cur.Ask = null;
+            cur.Actions = [];
+            cur.Status = null;
+            cur.Guide = new GuideView("[임시] 건너뛰었습니다", $"{cur.Task.Title}을 시험용으로 넘깁니다.");
+            _rows[cur.Task.Id] = (PrepTaskStatus.Done, "[임시] 건너뜀");
+            // 다음 작업은 평소처럼 끝 버튼으로 (캘리브레이션은 적도의를 움직이므로 바로 시작하지 않는다)
+            var next = _tasks.FirstOrDefault(t => _rows[t.Id].Status is PrepTaskStatus.Pending or PrepTaskStatus.NeedsRecheck);
+            cur.Actions = next is null ? [_setup.Finish] : [new PrepAction("next", next.StartLabel, true), .. next.StartAlternatives];
+            Changed();
+        }
+        return null;
+    }
+
     private async Task<bool> StopCurrentAsync(Func<Task> then)
     {
         Current? cur;

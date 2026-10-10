@@ -147,7 +147,8 @@ public static class BackgroundWindows
         EnumWindows((h, _) =>
         {
             GetWindowThreadProcessId(h, out var pid);
-            if (pids.Contains(pid) && IsWindowVisible(h) && GetWindow(h, GwOwner) == 0) found.Add(h);
+            // 주인 창이 없는 창 + 주인이 있어도 스스로 "항상 위"인 창 (Wanderer Empire 시작 로고 "startup" — 숨은 창에 딸려 있어 전에는 빠졌음, 2026-10-10 실측)
+            if (pids.Contains(pid) && IsWindowVisible(h) && (GetWindow(h, GwOwner) == 0 || (GetWindowLongPtr(h, GwlExStyle) & WsExTopmost) != 0)) found.Add(h);
             return true;
         }, 0);
         return found;

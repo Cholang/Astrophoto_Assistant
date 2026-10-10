@@ -24,6 +24,9 @@ const RAIL_STATE: Record<PrepTaskStatus, RailItem['state']> = {
   Skipped: 'skipped',
 }
 
+/** [임시] 건너뛰기 버튼을 보일 작업 (서버 PrepareRunner.TempSkippable과 같게) */
+const TEMP_SKIP = ['polar', 'calibration']
+
 /** [임시] 작업마다 걸어 볼 수 있는 모의 실패 (서버 SimFaults.Known) — 실제 장비(P3)를 붙이면 뺀다 */
 const FAULTS: Record<string, [string, string][]> = {
   polar: [['polar.dialog', 'PHD2 장비 연결 창'], ['polar.handover', '넘겨받기'], ['polar.stars', '별 찾기'], ['polar.giveback', '돌려주기']],
@@ -65,6 +68,8 @@ export default function PrepareScreen({
   const cur = view?.current ?? null
   const liveKind = cur?.live?.kind ?? 'none'
   const photo = liveKind === 'test-photo' || liveKind === 'solved-photo'
+  // 실장비: 실제 카메라 사진이 들어올 때만 검은 하늘 바탕. 그 전에는 앱 배경(성운)을 그대로 둔다 (2026-10-10 사용자 — 극축 정렬로 넘어갈 때 갑자기 검게 바뀜)
+  const skyBg = (view?.simulated ?? true) || !!cur?.live?.url
   // 사진이 바뀌면(다른 작업·다른 사진) 보기를 처음 상태로
   useEffect(() => {
     if (!photo) setPeek(false)
@@ -84,7 +89,7 @@ export default function PrepareScreen({
       : undefined
   useRailExtra({
     stage: group === 'rig' ? '장비 준비' : group === 'wrap' ? '마무리' : '대상',
-    sky: true,
+    sky: skyBg,
     items: group === 'target' ? [PLAN_ITEM, ...(items ?? [])] : items,
     // 마무리에는 중단 버튼을 두지 않는다 (건너뛰기는 화면 버튼으로)
     action: group === 'wrap' ? undefined : { label: group === 'rig' ? '준비 중단' : '대상 중단', onClick: () => prepareAbort(group) },
@@ -122,7 +127,7 @@ export default function PrepareScreen({
   const status = actError ? { text: actError, tone: 'Fail' as const } : (cur?.center.status ?? null)
 
   return (
-    <main className={styles.stage} data-peek={peek}>
+    <main className={styles.stage} data-peek={peek} data-sky={skyBg}>
       <LiveView current={cur} extras={{ grid }} simulated={view?.simulated ?? true} />
       <div className={styles.scrim} />
 
@@ -147,6 +152,21 @@ export default function PrepareScreen({
               </button>
             )}
           </div>
+
+          {/* [임시] 건너뛰기 (2026-10-10 사용자 요청 — 실내 시험에서 극축 정렬·캘리브레이션을 바로 넘김. 지울 때: 이 버튼 + 서버 PrepareRunner.TempSkipAsync·/temp-skip) */}
+          {TEMP_SKIP.includes(cur.taskId) && task && (task.status === 'Running' || task.status === 'Waiting') && (
+            <div className={styles.temp} style={{ bottom: view?.simulated ? 56 : 20 }}>
+              <button
+                type="button"
+                className={styles.tempToggle}
+                onClick={() => void fetch(`/api/prepare/${group}/temp-skip`, { method: 'POST' }).then(async (r) => {
+                  if (!r.ok) setActError(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? '건너뛰지 못했습니다')
+                })}
+              >
+                [임시] 건너뛰기
+              </button>
+            </div>
+          )}
 
           {/* [임시] 모의 실패 걸기: 다음 동작 하나를 실패시킨다 (모의 장비일 때만) */}
           {view?.simulated && (

@@ -329,6 +329,11 @@ public static class AppServer
             flow.Runner(group) is not { } r ? Results.NotFound()
             : await r.AbortAsync() ? Results.NoContent() : Results.Conflict(new { error = "장비가 멈췄는지 확인하지 못했습니다. 장비 상태를 확인해 주세요." }));
 
+        // [임시] 건너뛰기 — 극축 정렬·캘리브레이션을 바로 넘김 (2026-10-10, PrepareRunner.TempSkipAsync — 지울 때 같이)
+        prepare.MapPost("/{group}/temp-skip", async (string group, Prepare.Flow.PrepareFlow flow) =>
+            flow.Runner(group) is not { } r ? Results.NotFound()
+            : await r.TempSkipAsync() is { } problem ? Results.BadRequest(new { error = problem }) : Results.NoContent());
+
         // [모의] 화면·시험용: 다음 동작 하나 실패시키기(키는 SimFaults.Known), 대상이 보인다고 가정, 모의 속도
         prepare.MapPost("/sim/fail-next/{key}", (string key, Prepare.Sim.SimFaults faults) =>
         {

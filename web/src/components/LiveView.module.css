@@ -6,6 +6,11 @@
   pointer-events: none;
 }
 
+/* 실장비에서 실제 사진 없이 그리는 그림(위치 지도 등): 바탕 없이 */
+.view[data-clear='true'] {
+  background: transparent;
+}
+
 .view > svg {
   position: absolute;
   inset: 0;

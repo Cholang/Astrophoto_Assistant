@@ -316,10 +316,9 @@ public sealed class NinaLogWatcher(NinaNotices notices, ILogger<NinaLogWatcher> 
 /// </summary>
 public sealed class NinaToastHider(NinaNotices notices) : BackgroundService
 {
-    // 숨긴 알림 창과 숨긴 시각. 5초 안에 아이라 알림이 생기지 않으면 다시 보이고, 그 창이 스스로 닫힐 때까지 다시 숨기지 않는다
+    // 숨긴 알림 창과 숨긴 시각 (5초 안에 아이라 알림이 없으면 로그 원문으로 아이라 알림 — 창은 돌려주지 않음)
     private nint _hidden;
     private DateTimeOffset _hiddenAt;
-    private nint _givenBack;
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -333,28 +332,31 @@ public sealed class NinaToastHider(NinaNotices notices) : BackgroundService
 
     private void Tick()
     {
-        // 숨긴 뒤 5초 안에 아이라 알림이 없으면(로그에 없거나 해석하지 못한 알림) 되돌려 보인다 — 알림이 아무 데도 안 보이는 일이 없게
+        // 숨긴 뒤 5초 안에 아이라 알림이 없으면: 해석 못 한 오류·경고 로그 원문으로 아이라 알림을 만든다. 로그에 오류·경고가 없으면 N.I.N.A.의 안내성 알림
+        // ("연결되었습니다" 등 — 로그에 오류로 남지 않음)이라 그대로 숨겨 둔다 (2026-10-10 사용자: 어떤 알림은 사라지고 어떤 건 남음 — 남은 것이 돌려준 안내 알림이었음).
+        // 다시 보여 주지 않는다 — 돌려준 알림을 닫으면 N.I.N.A.가 아이라 위로 올라옴
         if (_hidden != 0 && DateTimeOffset.Now - _hiddenAt > TimeSpan.FromSeconds(5))
         {
-            // 해석 못 한 알림도 원문으로 아이라 알림을 만들고 창은 돌려주지 않는다 (2026-10-10 — 돌려준 알림을 닫으면 N.I.N.A.가 아이라 위로 올라옴).
-            // 로그에도 없을 때만 돌려주되, 눌러도 앞으로 오지 않는 창으로
-            if (notices.LastAddedAt < _hiddenAt - TimeSpan.FromSeconds(3) && !notices.AddFallback(_hiddenAt - TimeSpan.FromSeconds(5)))
-            {
-                NoActivate(_hidden);
-                ShowWindowAsync(_hidden, SwShowNoActivate);
-                _givenBack = _hidden;
-            }
+            if (notices.LastAddedAt < _hiddenAt - TimeSpan.FromSeconds(3)) notices.AddFallback(_hiddenAt - TimeSpan.FromSeconds(5));
             _hidden = 0;
         }
         var toast = ToastWindow();
-        if (toast == 0) { _givenBack = 0; return; } // 알림 창이 닫혔다 — 다음 알림부터 다시 숨긴다
-        if (toast == _givenBack) return;
-        if (toast == _hidden) { ShowWindowAsync(toast, SwHide); return; } // 숨긴 창에 새 알림이 쌓이며 다시 보임 — 기다리는 동안은 계속 숨김
-        var own = Process.GetCurrentProcess().MainWindowHandle;
-        if (own == 0 || GetForegroundWindow() != own) return; // 개발 서버(창 없음)·다른 창을 보는 중이면 그대로
+        if (toast == 0) return;
+        // 사용자가 N.I.N.A. 창을 보고 있을 때만 그대로 둔다 (아이라가 앞이 아니어도 — 다른 프로그램을 보는 중에도 숨김)
+        if (IsNinaForeground()) return;
         ShowWindowAsync(toast, SwHide);
         _hidden = toast;
         _hiddenAt = DateTimeOffset.Now;
+    }
+
+    /// <summary>지금 맨 앞 창이 N.I.N.A.(알림 창 말고 본 창·대화 창)인가</summary>
+    private static bool IsNinaForeground()
+    {
+        var fg = GetForegroundWindow();
+        if (fg == 0) return false;
+        GetWindowThreadProcessId(fg, out var pid);
+        try { using var p = Process.GetProcessById((int)pid); return p.ProcessName == "NINA"; }
+        catch (ArgumentException) { return false; }
     }
 
     /// <summary>보이는 N.I.N.A. 알림 창 (없으면 0)</summary>
@@ -378,17 +380,6 @@ public sealed class NinaToastHider(NinaNotices notices) : BackgroundService
         return found;
     }
 
-    /// <summary>눌러도 활성화되지 않는 창으로 (알림을 닫을 때 N.I.N.A. 본 창이 앞으로 오지 않게)</summary>
-    private static void NoActivate(nint h)
-    {
-        var ex = GetWindowLongPtr(h, GwlExStyle);
-        if ((ex & WsExNoActivate) == 0) SetWindowLongPtr(h, GwlExStyle, ex | WsExNoActivate);
-    }
-
-    private const int GwlExStyle = -20;
-    private const nint WsExNoActivate = 0x08000000;
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hWnd, int index);
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern nint SetWindowLongPtr(nint hWnd, int index, nint value);
     private const int SwShowNoActivate = 4;
     private const int SwHide = 0;
     private delegate bool EnumProc(nint hWnd, nint lParam);

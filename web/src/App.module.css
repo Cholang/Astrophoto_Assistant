@@ -83,6 +83,12 @@
   opacity: 0;
 }
 
+/* 부팅 로고는 천천히(0.8초) 투명해진다 — App.tsx BOOT_FADE_MS */
+.screen[data-boot='true'] {
+  transition-duration: 800ms;
+  transition-timing-function: ease-in-out;
+}
+
 .placeholder {
   padding: clamp(32px, 9cqh, 88px) var(--gutter);
   display: grid;

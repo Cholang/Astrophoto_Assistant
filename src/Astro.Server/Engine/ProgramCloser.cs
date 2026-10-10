@@ -15,12 +15,16 @@ public sealed class ProgramCloser(NinaWatcher watcher, ILogger<ProgramCloser> lo
     public bool LaunchedNina => _launched;
     public void NinaLaunched() => _launched = true;
 
-    /// <summary>PHD2 → N.I.N.A. 순으로 창을 닫게 하고 15초씩 기다린다. 다 닫혔으면 true (저장 확인 창 등으로 안 닫히면 false)</summary>
+    /// <summary>
+    /// N.I.N.A. → PHD2 → SharpCap 순으로 창을 닫게 하고 15초씩 기다린다. 다 닫혔으면 true (저장 확인 창 등으로 안 닫히면 false).
+    /// N.I.N.A.를 먼저 닫는다 (2026-10-10 기록: PHD2를 먼저 닫자 N.I.N.A.가 "PHD2 서버 연결이 끊어졌습니다" 오류 창을 띄웠고, 아이라가 꺼지는 중이라
+    /// 사용자가 내용을 볼 수도 없었다). SharpCap은 극축 정렬 중에 끄면 남아 있을 수 있어 같이 닫는다
+    /// </summary>
     public async Task<bool> CloseAsync(CancellationToken ct)
     {
         var all = true;
         watcher.ExpectExit(); // 정상 종료 — 화면에 "N.I.N.A.가 꺼졌어요"를 띄우지 않는다 (CX-APP-R4)
-        foreach (var name in new[] { "phd2", "NINA" })
+        foreach (var name in new[] { "NINA", "phd2", "SharpCap" })
             foreach (var p in Process.GetProcessesByName(name))
             {
                 try
