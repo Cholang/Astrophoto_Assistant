@@ -55,6 +55,8 @@ public sealed record RunnerSetup(string Group, IReadOnlyDictionary<string, strin
 /// </summary>
 public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareRunner> log, RunnerSetup? setup = null)
 {
+    /// <summary>작업 화면 기록용 (RunHandle이 씀)</summary>
+    private ILogger Log => log;
     private readonly RunnerSetup _setup = setup ?? RunnerSetup.Single;
 
     private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(3);
@@ -755,19 +757,36 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
         public PrepContext Context => r._ctx!;
         public int RunId => runId;
 
-        public void SubStep(int index) => r.Update(runId, c => c.SubIndex = index);
-        public void Guide(string title, string text) => r.Update(runId, c => c.Guide = new GuideView(title, text));
+        // 작업이 화면에 보이는 것을 기록 파일에도 (2026-10-10 — 모든 단계 로그). 계속 들어오는 측정값(live)은 남기지 않는다
+        private string Task => r._cur?.Task.Id ?? "?";
+
+        public void SubStep(int index)
+        {
+            r.Log.LogInformation("[{Task}] 세부 과정 {Index}", Task, index);
+            r.Update(runId, c => c.SubIndex = index);
+        }
+
+        public void Guide(string title, string text)
+        {
+            r.Log.LogInformation("[{Task}] 안내: {Title} — {Text}", Task, title, text);
+            r.Update(runId, c => c.Guide = new GuideView(title, text));
+        }
 
         public void Readout(string kind, string big, string caption, Tone tone, IReadOnlyDictionary<string, double>? values = null, bool live = false, bool unverified = false, DateTimeOffset? observedAt = null) =>
             r.Update(runId, c =>
             {
+                if (!live) r.Log.LogInformation("[{Task}] 결과 {Kind}: {Big} — {Caption} ({Tone})", Task, kind, big, caption, tone);
                 c.Readout = new ReadoutView(kind, big, caption, tone, values ?? new Dictionary<string, double>(), observedAt ?? DateTimeOffset.Now,
                     unverified ? Freshness.Unverified : Freshness.Fresh);
                 c.ReadoutLive = live;
             });
 
         public void ClearReadout() => r.Update(runId, c => { c.Readout = null; c.ReadoutLive = false; });
-        public void Status(string? text, Tone tone = Tone.Busy) => r.Update(runId, c => c.Status = text is null ? null : new StatusLine(text, tone));
+        public void Status(string? text, Tone tone = Tone.Busy)
+        {
+            if (text is not null) r.Log.Log(tone is Tone.Fail ? LogLevel.Warning : LogLevel.Information, "[{Task}] 상태({Tone}): {Text}", Task, tone, text);
+            r.Update(runId, c => c.Status = text is null ? null : new StatusLine(text, tone));
+        }
         public void Live(string kind, string? url = null, object? data = null) => r.Update(runId, c => c.Live = new LiveView(kind, url, data, DateTimeOffset.Now));
 
         public async Task<string> AskAsync(IReadOnlyList<PrepAction> actions, CancellationToken ct)
@@ -787,7 +806,10 @@ public sealed class PrepareRunner(IEnumerable<IPrepTask> tasks, ILogger<PrepareR
                 if (tcs.TrySetCanceled(ct))
                     r.Update(runId, c => { if (c.Ask == tcs) { c.Ask = null; c.Actions = []; } });
             });
-            return await tcs.Task;
+            r.Log.LogInformation("[{Task}] 물음: {Actions}", Task, string.Join(" / ", actions.Select(a => a.Label)));
+            var picked = await tcs.Task;
+            r.Log.LogInformation("[{Task}] 고름: {Picked}", Task, picked);
+            return picked;
         }
     }
 }

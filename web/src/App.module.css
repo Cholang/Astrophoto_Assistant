@@ -46,12 +46,12 @@
   display: flex;
 }
 
-/* 하늘 화면(준비 단계): 진행 표시도 하늘 위에. 밝게 테마는 진행 표시 글자가 어두워 제 바탕을 둔다 */
+/* 하늘 화면(준비 단계): 진행 표시도 하늘 위에 */
 .body[data-sky='true'] {
   background: var(--sky);
 }
 
-:root:not([data-theme='light']) .body[data-sky='true'] .rail {
+.body[data-sky='true'] .rail {
   --rail-bg: var(--sky); /* 점 속을 하늘색으로 (세로선을 가린다) */
   background: transparent;
 }

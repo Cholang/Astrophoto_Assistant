@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" data-theme="dark" role="img" aria-labelledby="title"><title id="title">AIRA 촬영 망원경과 별자리 A</title><style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" data-theme="default" role="img" aria-labelledby="title"><title id="title">AIRA 촬영 망원경과 별자리 A</title><style>
 svg{--bg:#1e1f21;--ink:#9290f5;--accent:#c6ad80;color:var(--ink)}
-svg[data-theme="light"]{--bg:#f1f1ef;--ink:#5146a3;--accent:#8a6631}
+
 svg[data-theme="night"]{--bg:#000;--ink:#a62626;--accent:#d04444}
 .ink{stroke:var(--ink);fill:none;stroke-linecap:round;stroke-linejoin:round}
 .solid{fill:var(--ink)}.accent{fill:var(--accent)}

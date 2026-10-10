@@ -140,6 +140,20 @@ public sealed class ProfileStore
         lock (_gate) return Load().Where(p => p.LastUsedAt is not null).MaxBy(p => p.LastUsedAt);
     }
 
+    /// <summary>프로필 지우기 (프로필 편집 화면의 "프로필 삭제" — 확인 창을 거친 뒤). 사진도 지운다. 없으면 false</summary>
+    public bool Delete(string id)
+    {
+        lock (_gate)
+        {
+            var all = Load();
+            if (all.RemoveAll(p => p.Id == id) == 0) return false;
+            Save(all);
+            try { if (File.Exists(ImagePath(id))) File.Delete(ImagePath(id)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            return true;
+        }
+    }
+
     public Profile? Get(string id)
     {
         lock (_gate) return Load().FirstOrDefault(p => p.Id == id);

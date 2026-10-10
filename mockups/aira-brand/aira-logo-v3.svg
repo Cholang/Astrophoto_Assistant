@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 420" data-theme="default" role="img" aria-labelledby="title"><title id="title">아이라 — Astrophotography Imaging &amp; Rig Assistant</title><style>
+svg{--ink:#9290f5;--accent:#c6ad80;color:var(--ink)}
+
+svg[data-theme="night"]{--ink:#a62626;--accent:#d04444}
+.ink{stroke:var(--ink);fill:none;stroke-linecap:round;stroke-linejoin:round}
+.solid{fill:var(--ink)}.accent{fill:var(--accent)}
+/* Restrained material tones; no white light in observing mode. */
+svg{--ink-hi:#b6b2ff;--ink-low:#7875cb;--gold-hi:#dfcca8;--gold-low:#a68b60;--shine:#e4e0ff;--shadow:#080912}
+
+svg[data-theme="night"]{--ink-hi:#b92e2e;--ink-low:#741616;--gold-hi:#ce4141;--gold-low:#902121;--shine:#df5555;--shadow:#000000}
+.material .ink{stroke:url(#violet-material)}
+.material .solid{fill:url(#violet-material)}
+.material .accent{fill:url(#gold-material)}
+svg{--constellation-hi:#d0cdff;--constellation-mid:#b0acff;--constellation-low:#9994ea}
+
+svg[data-theme="night"]{--constellation-hi:#d33b3b;--constellation-mid:#bd3030;--constellation-low:#9e2424}
+.material #aira-v3 .ink{stroke:url(#constellation-material)}
+.material #aira-v3 .solid{fill:url(#constellation-material)}
+</style><defs><path id="spark" fill-rule="evenodd" d="M0-10 C1.2-10 1.1-5.8 2.9-3.1 C4.4-1.1 8-1.1 8 0 C8 1.1 4.4 1.1 2.9 3.1 C1.1 5.8 1.2 10 0 10 C-1.2 10-1.1 5.8-2.9 3.1 C-4.4 1.1-8 1.1-8 0 C-8-1.1-4.4-1.1-2.9-3.1 C-1.1-5.8-1.2-10 0-10 Z M0-3.4 Q1-1 2.7 0 Q1 1 0 3.4 Q-1 1-2.7 0 Q-1-1 0-3.4 Z"/><linearGradient id="violet-material" gradientUnits="userSpaceOnUse" x1="0" y1="45" x2="90" y2="360"><stop stop-color="var(--ink-hi)"/><stop offset=".48" stop-color="var(--ink)"/><stop offset="1" stop-color="var(--ink-low)"/></linearGradient>
+<linearGradient id="gold-material" gradientUnits="userSpaceOnUse" x1="0" y1="30" x2="0" y2="150"><stop stop-color="var(--gold-hi)"/><stop offset=".55" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--gold-low)"/></linearGradient>
+<filter id="soft-depth" x="-5%" y="-12%" width="110%" height="128%" color-interpolation-filters="sRGB">
+<feGaussianBlur in="SourceAlpha" stdDeviation="1.6" result="shadow-blur"/>
+<feOffset in="shadow-blur" dx="0" dy="2.6" result="shadow-offset"/>
+<feFlood flood-color="var(--shadow)" flood-opacity=".32" result="shadow-color"/>
+<feComposite in="shadow-color" in2="shadow-offset" operator="in" result="shadow"/>
+<feOffset in="SourceAlpha" dx=".2" dy=".9" result="edge-offset"/>
+<feComposite in="SourceAlpha" in2="edge-offset" operator="out" result="upper-edge"/>
+<feGaussianBlur in="upper-edge" stdDeviation=".35" result="edge-soft"/>
+<feFlood flood-color="var(--shine)" flood-opacity=".28" result="edge-color"/>
+<feComposite in="edge-color" in2="edge-soft" operator="in" result="highlight"/>
+<feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/><feMergeNode in="highlight"/></feMerge>
+</filter><linearGradient id="constellation-material" gradientUnits="userSpaceOnUse" x1="0" y1="40" x2="0" y2="150"><stop stop-color="var(--constellation-hi)"/><stop offset=".5" stop-color="var(--constellation-mid)"/><stop offset="1" stop-color="var(--constellation-low)"/></linearGradient><linearGradient id="tube-shade" x1="0" y1="0" x2="0" y2="1"><stop stop-color="var(--ink-hi)" stop-opacity=".16"/><stop offset=".5" stop-color="var(--ink)" stop-opacity=".07"/><stop offset="1" stop-color="var(--ink-low)" stop-opacity=".13"/></linearGradient></defs><g class="material" filter="url(#soft-depth)"><g id="telescope-v3" transform="translate(181 325.12470227527854) scale(.81) translate(-181 -325.12470227527854)"><g class="ink" stroke-width="6.325">
+<path d="M176 249 L112 337.379 M181 250 L181 325.125 M186 249 L240 318.553"/>
+<path d="M175 218 L181 232"/><circle cx="181" cy="241" r="9"/>
+<g transform="rotate(-25 165 198)">
+<path fill="url(#tube-shade)" d="M121 176 H262 Q266 176 266 181 V215 Q266 220 262 220 H121Z"/>
+<path d="M248 177 V219 M121 189 H103 V207 H121"/>
+<rect x="62" y="180" width="41" height="36" rx="5" fill="url(#tube-shade)"/><path d="M72 181 V215"/>
+<path d="M152 175 V158 M205 175 V158"/>
+<rect x="139" y="143" width="82" height="15" rx="3"/>
+<rect x="122" y="143" width="17" height="15" rx="3"/>
+</g></g></g><g id="aira-v3" transform="translate(436 99) scale(1.21) translate(-436 -99)"><g class="ink" stroke-width="3.3">
+<path d="M303.252 119.246 L309.748 105.754 M315.867 91.917 L327.133 64.083 M333.339 63.678 L348.661 94.322 M355.418 107.608 L363.582 123.392 M320.960 99.408 L344.040 100.592 M396.095 66.667 L390.905 116.333 M432.704 122.969 L436.296 106.031 M438.000 88.600 L438.000 71.400 M445.187 63.902 L464.813 69.098 M474.567 78.333 L476.433 83.667 M471.482 92.284 L445.518 96.716 M443.318 102.670 L473.682 129.330 M506.929 130.860 L515.071 118.140 M522.587 105.544 L535.413 82.456 M542.156 82.837 L553.844 108.163 M560.677 121.374 L568.323 134.626 M526.855 112.620 L549.145 114.380"/>
+</g><g class="solid"><use href="#spark" transform="translate(300 126) scale(.62)"/><use href="#spark" transform="translate(330 57) scale(.62)"/><use href="#spark" transform="translate(367 130) scale(.62)"/><use href="#spark" transform="translate(313 99) scale(.62)"/><use href="#spark" transform="translate(352 101) scale(.62)"/><use href="#spark" transform="translate(397 58) scale(.62)"/><use href="#spark" transform="translate(390 125) scale(.62)"/><use href="#spark" transform="translate(431 131) scale(.62)"/><use href="#spark" transform="translate(438 62) scale(.62)"/><use href="#spark" transform="translate(472 71) scale(.62)"/><use href="#spark" transform="translate(479 91) scale(.62)"/><use href="#spark" transform="translate(438 98) scale(.62)"/><use href="#spark" transform="translate(479 134) scale(.62)"/><use href="#spark" transform="translate(503 137) scale(.62)"/><use href="#spark" transform="translate(539 76) scale(.62)"/><use href="#spark" transform="translate(572 141) scale(.62)"/><use href="#spark" transform="translate(519 112) scale(.62)"/><use href="#spark" transform="translate(557 115) scale(.62)"/></g></g><g class="ink" stroke-width="5"><path stroke-width="5.75" d="M35 360 Q290 273 590 362"/><path d="M105 365 L102 355 M114 366 L119 358 M278 371 V360 M267 369 L262 362 M290 369 L295 362 M455 374 V364 M445 373 L440 366 M465 373 L470 366"/></g><use href="#spark" class="accent" transform="translate(85 77) scale(1.3)"/><g class="solid"><use href="#spark" transform="translate(353 193)"/><use href="#spark" transform="translate(524 217)"/><circle cx="188" cy="82" r="3"/><circle cx="104" cy="131" r="3"/><circle cx="290" cy="247" r="3"/><circle cx="437" cy="256" r="3"/></g><g class="ink" stroke-width="24">
+<ellipse cx="714" cy="192" rx="29" ry="26"/><path d="M778 143 Q790 191 782 237 M787 183 L818 180"/>
+<ellipse cx="878" cy="192" rx="29" ry="26"/><path d="M941 143 Q954 190 946 237"/>
+<path d="M1000 154 Q1025 152 1054 161 L1007 196 L1006 224 Q1038 232 1061 218 M1100 143 Q1112 190 1105 237 M1110 183 L1141 180"/>
+</g></g><text x="912" y="300" text-anchor="middle" class="solid" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="600"><tspan class="accent">A</tspan>strophotography <tspan class="accent">I</tspan>maging &amp; <tspan class="accent">R</tspan>ig <tspan class="accent">A</tspan>ssistant</text></svg>

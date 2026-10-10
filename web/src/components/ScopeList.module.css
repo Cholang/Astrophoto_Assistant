@@ -28,7 +28,7 @@
   padding: 0;
   display: grid;
   gap: 2px;
-  max-height: 300px;
+  max-height: min(480px, 44cqh); /* 장비 드라이버 목록과 같이 길게 (2026-10-10) */
   overflow-y: auto;
 }
 

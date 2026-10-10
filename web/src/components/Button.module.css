@@ -32,5 +32,5 @@
 }
 
 .quiet:not(:disabled):hover {
-  border-color: var(--muted);
+  border-color: var(--accent); /* 호버 외곽선은 강조색(보라) — 2026-10-10 */
 }

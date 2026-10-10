@@ -9,6 +9,7 @@ import ProfileAvatar from './ProfileAvatar'
 import SiteMenu from './SiteMenu'
 import styles from './StatusBar.module.css'
 import ThemeSwitch from './ThemeSwitch'
+import BrandMark from './BrandMark'
 
 export interface DeviceState {
   name: string
@@ -63,7 +64,7 @@ export default function StatusBar({
 
   return (
     <header className={styles.bar}>
-      <span className={styles.brand}>{PRODUCT.name}</span>
+      <BrandMark theme={theme} className={styles.brand} />
       <span className={styles.version}>{VERSION}</span>
 
       {profile && <ProfileSwitcher profile={profile} profiles={profiles} onSwitch={onSwitchProfile} />}

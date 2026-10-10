@@ -37,6 +37,12 @@ export async function editProfile(id: string, nickname: string, memo: string): P
   return profileResult(res, '프로필을 고치지 못했습니다.')
 }
 
+/** 프로필 삭제 (사진도 함께) */
+export async function deleteProfile(id: string): Promise<void> {
+  const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' })
+  if (!res.ok && res.status !== 404) throw new Error('프로필을 삭제하지 못했습니다.')
+}
+
 /** 관측지 추가. 고도를 모르면 비워 두면 서버가 좌표로 조회한다 */
 export async function addSite(id: string, site: { name: string; latitude: number; longitude: number; elevation?: number }): Promise<Profile> {
   const res = await fetch(`/api/profiles/${id}/sites`, {

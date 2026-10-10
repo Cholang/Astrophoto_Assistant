@@ -40,6 +40,20 @@ public class PowerWiringTests
     }
 
     [Fact]
+    public void 프로필을_지우면_목록과_사진이_없어진다()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "aira-profile-" + Guid.NewGuid().ToString("N"));
+        var profiles = new ProfileStore(root);
+        var a = profiles.Create(new NewProfile("지울것", null)).Profile!;
+        var b = profiles.Create(new NewProfile("남길것", null)).Profile!;
+        Assert.True(profiles.SaveImage(a.Id, [1, 2, 3]));
+        Assert.True(profiles.Delete(a.Id));
+        Assert.Equal([b.Id], new ProfileStore(root).List().Select(p => p.Id));
+        Assert.Null(profiles.ImageFile(a.Id));
+        Assert.False(profiles.Delete(a.Id)); // 이미 없음
+    }
+
+    [Fact]
     public void 설정하지_않았으면_기본값을_믿고_증거가_있으면_고쳐서_계속_믿는다()
     {
         var root = Path.Combine(Path.GetTempPath(), "aira-power-" + Guid.NewGuid().ToString("N"));

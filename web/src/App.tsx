@@ -6,6 +6,8 @@ import NinaLostCard, { type NinaState } from './components/NinaLostCard'
 import NinaNoticeCard from './components/NinaNoticeCard'
 import StepRail, { RailProvider, type RailExtra, type Stage } from './components/StepRail'
 import SkyBackdrop from './components/SkyBackdrop'
+import { logClicks, logEvent } from './log'
+import { QuitProvider } from './components/QuitControl'
 import { listProfiles, selectProfile, type Profile } from './profiles'
 import BootScreen from './screens/BootScreen'
 import EngineStartScreen from './screens/EngineStartScreen'
@@ -87,6 +89,10 @@ const FADE_MS = 280
 export default function App() {
   const { theme, setTheme } = useTheme()
   const [phase, setPhase] = useState<Phase>('boot')
+  // 기록 파일에 화면 단계·누른 버튼·테마를 남긴다 (2026-10-10 — 모든 단계 로그)
+  useEffect(() => logEvent(`단계: ${phase}`), [phase])
+  useEffect(() => logEvent(`테마: ${theme}`), [theme])
+  useEffect(() => logClicks(), [])
   const [shown, setShown] = useState(true)
   const [profiles, setProfiles] = useState<Profile[] | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -325,6 +331,8 @@ export default function App() {
   const siteInfo = describeSite(site ?? null, profile, profiles ?? [])
 
   return (
+    // 종료 확인은 앱 전체에서 (레일을 숨기거나 빼도 동작). 창 ×도 확인은 단계 화면에서만, 마지막 요약(hideExit)은 바로 닫음
+    <QuitProvider stage={STAGE_OF[phase] ?? null} confirmOnClose={!!STAGE_OF[phase] && !(railExtra?.hideExit && railExtra.stage === STAGE_OF[phase])}>
     <div className={styles.window}>
     {/* 앱 전체 배경 효과 (성운과 별) — 틀 바깥 여백까지. 틀은 그 위에 투명 */}
     <SkyBackdrop />
@@ -391,6 +399,12 @@ export default function App() {
               setEditing(null)
               setPhase('profiles')
             }}
+            onDeleted={(id) => {
+              // 지운 프로필을 목록에서 빼고 프로필 선택 화면으로
+              setProfiles((list) => list?.filter((x) => x.id !== id) ?? list)
+              setEditing(null)
+              setPhase('profiles')
+            }}
             onCancel={(profiles ?? []).length > 0 ? () => setPhase('profiles') : undefined}
           />
         )}
@@ -428,7 +442,8 @@ export default function App() {
       </ScreenReady.Provider>
       {/* 진행 표시는 화면 전환 페이드 밖에 둔다: 화면이 바뀌어도 같은 자리에 그대로 */}
       {STAGE_OF[phase] && (
-        <div className={styles.rail}>
+        // 관측지 목록 화면에서는 숨긴다: 지도·목록을 레일이 가렸다 (2026-10-10 사용자 요청). 종료는 QuitProvider가 맡으니 상관없고, 빼지 않고 숨겨서 단계별 작업 목록 기억은 그대로
+        <div className={styles.rail} hidden={phase === 'site'}>
           <StepRail current={STAGE_OF[phase]} extra={railExtra} />
         </div>
       )}
@@ -456,5 +471,6 @@ export default function App() {
       />
     </div>
     </div>
+    </QuitProvider>
   )
 }

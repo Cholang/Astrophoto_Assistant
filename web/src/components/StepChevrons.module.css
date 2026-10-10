@@ -140,7 +140,7 @@
   align-self: start;
   width: clamp(34px, 3.6cqw, 56px);
   height: clamp(34px, 3.6cqw, 56px);
-  color: var(--pass);
+  color: var(--conn); /* 통과 체크: 보라 (2026-10-10) */
   opacity: 0;
   visibility: hidden;
   transition: opacity 260ms, visibility 0s 260ms;

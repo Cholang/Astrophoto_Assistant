@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>파워박스 포트 시안</title>
+<style>
+  /* 정지 시안 (2026-10-10) — 장비 변경에서 파워박스 원을 눌렀을 때 오른쪽에 나오는 포트 목록. 전원 배선(프로필)에 따라 세 경우 */
+  :root { --bg:#1e1f21; --surface:#27292c; --surface-2:#303236; --line:#3b3e42; --text:#ebe8e3; --muted:#a3a09a; --accent:#f0a93b; --pass:#72bf8e; --glass:rgb(56 59 63/.6); }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 'Pretendard Variable','Malgun Gothic',sans-serif; word-break:keep-all; padding:28px 32px; width:1600px; }
+  h1 { margin:0 0 6px; font-size:24px; }
+  .lead { margin:0 0 22px; color:var(--muted); font-size:14px; }
+  .cases { display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
+  .case { border:1px solid var(--line); border-radius:16px; padding:18px 18px 20px; background:var(--surface); display:grid; gap:14px; align-content:start; }
+  .case h2 { margin:0; font-size:17px; }
+  .case .wire { color:var(--muted); font-size:13px; }
+  .stage { display:flex; gap:16px; align-items:flex-start; }
+  .hub { flex:none; width:120px; height:120px; border-radius:50%; background:var(--glass); border:1.5px solid var(--accent); display:grid; place-content:center; text-align:center; box-shadow:0 0 0 6px rgb(240 169 59/.12); }
+  .hub b { font-size:15px; } .hub span { font-size:11.5px; color:var(--muted); }
+  .ports { flex:1; border:1px solid var(--line); border-radius:12px; background:var(--bg); padding:8px; display:grid; gap:4px; }
+  .ports .title { font-size:12.5px; color:var(--muted); padding:2px 6px 6px; }
+  .row { display:grid; grid-template-columns:52px 1fr; align-items:center; gap:8px; padding:5px 6px; border-radius:8px; }
+  .row:nth-child(even) { background:rgb(255 255 255/.02); }
+  .port { font-weight:700; font-size:13.5px; }
+  .pick { display:flex; justify-content:space-between; align-items:center; border:1px solid var(--line); border-radius:8px; padding:4px 10px; font-size:13.5px; }
+  .pick.empty { color:var(--muted); }
+  .pick::after { content:'▾'; color:var(--muted); font-size:11px; }
+  .pick.on { border-color:color-mix(in srgb, var(--accent) 60%, var(--line)); }
+  .menu { margin:2px 0 0 60px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); padding:6px; font-size:13px; display:grid; gap:2px; box-shadow:0 10px 24px rgb(0 0 0/.35); }
+  .menu div { padding:3px 8px; border-radius:6px; }
+  .menu .dis { color:#6d6b67; }
+  .menu .dis small { margin-left:6px; font-size:11.5px; }
+  .menu .cur { background:rgb(240 169 59/.15); color:var(--accent); }
+  .note { font-size:13px; color:var(--muted); border-left:2px solid var(--line); padding-left:10px; }
+  .note b { color:var(--text); font-weight:600; }
+  .nohub { display:grid; gap:10px; }
+  .ring { display:flex; gap:10px; flex-wrap:wrap; }
+  .dev { width:84px; height:84px; border-radius:50%; background:var(--glass); border:1.5px solid var(--line); display:grid; place-content:center; text-align:center; font-size:12.5px; font-weight:700; }
+  .dev.absent { width:40px; height:40px; border-style:dashed; color:var(--muted); font-size:10px; font-weight:400; }
+  .tag { display:inline-block; font-size:11.5px; color:var(--accent); border:1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius:999px; padding:0 8px; margin-left:6px; }
+</style>
+</head>
+<body>
+<h1>장비 변경 · 파워박스 포트</h1>
+<p class="lead">파워박스 원을 누르면 오른쪽에 그 파워박스의 포트 목록(기종 정의 — WandererBox Plus V3는 DC1~DC6). 포트마다 무엇이 꽂혔는지 고른다. 고른 값은 이 파워박스 장비에 저장되고, 전원 배선(프로필)도 같이 맞춘다 — 예: DC2 = 카메라 → 배선 "카메라 ← 파워박스"</p>
+<div class="cases">
+
+  <section class="case">
+    <h2>① 적도의 먼저 <span class="tag">기본 · 지금 배선</span></h2>
+    <div class="wire">전원 배선: DC 전원 → 적도의 → 파워박스 → 나머지</div>
+    <div class="stage">
+      <div class="hub"><b>파워박스</b><span>WandererBox</span></div>
+      <div class="ports">
+        <div class="title">포트에 꽂은 장비</div>
+        <div class="row"><span class="port">DC1</span><span class="pick empty">비어 있음</span></div>
+        <div class="row"><span class="port">DC2</span><span class="pick on">카메라</span></div>
+        <div class="row"><span class="port">DC3</span><span class="pick on">이슬 방지 열선</span></div>
+        <div class="row"><span class="port">DC4</span><span class="pick on">포커서</span></div>
+        <div class="row"><span class="port">DC5</span><span class="pick empty">비어 있음</span></div>
+        <div class="row"><span class="port">DC6</span><span class="pick empty">비어 있음</span></div>
+      </div>
+    </div>
+    <div class="menu">
+      <div>비어 있음</div>
+      <div class="dis">적도의<small>전원 배선상 DC 전원에서 직접 받음</small></div>
+      <div class="cur">카메라</div><div>포커서</div><div>필터휠</div><div>회전장치</div><div>가이드 카메라</div><div>이슬 방지 열선</div><div>플랫패널</div>
+    </div>
+    <div class="note">적도의는 고를 수 없다(흐림 + 이유). 파워박스 입력이 0V면 "적도의 전원을 켜면 파워박스도 켜집니다". 아이라가 켤 수 있는 것: 포트를 아는 장비(카메라·포커서 등)가 PC에 안 보이면 그 포트를 켜고 기다림</div>
+  </section>
+
+  <section class="case">
+    <h2>② 파워박스 먼저</h2>
+    <div class="wire">전원 배선: DC 전원 → 파워박스 → 적도의 포함 모든 장비</div>
+    <div class="stage">
+      <div class="hub"><b>파워박스</b><span>WandererBox</span></div>
+      <div class="ports">
+        <div class="title">포트에 꽂은 장비</div>
+        <div class="row"><span class="port">DC1</span><span class="pick empty">비어 있음</span></div>
+        <div class="row"><span class="port">DC2</span><span class="pick on">카메라</span></div>
+        <div class="row"><span class="port">DC3</span><span class="pick on">이슬 방지 열선</span></div>
+        <div class="row"><span class="port">DC4</span><span class="pick on">적도의</span></div>
+        <div class="row"><span class="port">DC5</span><span class="pick on">포커서</span></div>
+        <div class="row"><span class="port">DC6</span><span class="pick empty">비어 있음</span></div>
+      </div>
+    </div>
+    <div class="note"><b>적도의도 고를 수 있다.</b> 적도의 포트(COM)가 안 보이면 아이라가 DC4를 켜고 나타나기를 기다린다 — 전에 남긴 "출력 번호를 몰라 못 켬" 문제가 풀림. 파워박스 입력이 0V면 적도의까지 모두 미루고 "파워박스 전원(DC 전원)을 켜 주세요"</div>
+    <div class="note">포트에서 적도의를 고르면 전원 배선도 "적도의 ← 파워박스"로 맞춘다. 반대로 프로필에서 적도의 먼저로 바꾸면 그 포트는 비어 있음으로</div>
+  </section>
+
+  <section class="case">
+    <h2>③ 파워박스 없음</h2>
+    <div class="wire">N.I.N.A. 프로필에 전원 허브(스위치)가 없음 · 각 장비가 자체 전원</div>
+    <div class="nohub">
+      <div class="ring">
+        <div class="dev">적도의</div><div class="dev">카메라</div><div class="dev">포커서</div><div class="dev absent">허브</div>
+      </div>
+      <div class="note">장비 변경에는 파워박스 원 자체가 작은 "등록 안 된 장비" 원으로만 보이고 포트 목록은 없다. 카메라 전원 고르기도 없음(배터리만)</div>
+      <div class="note"><b>전원 배선(프로필)</b>: 파워박스 상자를 흐리게 "없음"으로 두고, 파워박스로 가는 선은 이을 수 없다. 나머지 장비는 선 없이 자체 전원 — 적도의는 DC 전원에서</div>
+      <div class="note"><b>아이라가 하는 일</b>: 출력을 켜는 자동 해결은 하지 않고, 장비가 PC에 안 보이면 "○○ 전원을 켜 주세요"만. 허브 전압 확인도 없음</div>
+      <div class="note">요즘도 흔하다: 적도의 자체 전원 + 카메라 배터리 + USB 전원 포커서 조합의 가벼운 원정 장비. 그래서 허브가 없어도 흐름이 끊기지 않게 한다</div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

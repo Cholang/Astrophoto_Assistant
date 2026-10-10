@@ -1,6 +1,7 @@
 .group {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-auto-flow: column; /* 테마 수만큼 같은 너비 칸 (2026-10-10 셋 → 둘 — repeat(3)이면 빈 칸이 남았음) */
+  grid-auto-columns: 1fr;
   padding: 2px;
   border: 1px solid var(--line);
   border-radius: var(--radius);

@@ -1,40 +1,25 @@
-/* 부팅 로고: 글자 하나로만. 장식 없이 짧게 */
+/* 부팅: 로고 하나를 화면 가운데에 (시작 화면이라 가운데 정렬 — 프로필 화면과 같은 예외). 장식 없이 짧게 */
 .boot {
   flex: 1;
   display: grid;
   align-content: center;
+  justify-items: center;
   padding: 0 var(--gutter);
   gap: 6px;
+  text-align: center;
 }
 
-.mark {
-  margin: 0;
-  font-size: clamp(64px, 12cqw, 112px);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: var(--accent);
+/* 로고 SVG(1220×420)는 가로 그림 — 너비만 정하고 높이는 비율대로 */
+.logo {
+  width: min(1320px, 100%); /* 2026-10-10 로고 v5, 150% (880px → 1320px). 좁은 창에서는 여백 안 폭까지만 — 넘치면 가로 스크롤이 생겼음 */
 }
 
-/* 영어 풀이: 이름 바로 아래, 첫 글자만 강조색 */
-.full {
-  margin: 8px 0 4px;
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--text);
+.logo svg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
-.full b {
-  font-weight: 800;
-  color: var(--accent);
-}
-
-.name {
-  margin: 0;
-  font-size: 17px;
-  color: var(--muted);
-}
 
 .version {
   margin: 6px 0 0;

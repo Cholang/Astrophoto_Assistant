@@ -3,7 +3,7 @@
  * 이름이 바뀌어도 코드는 고치지 않는다 — product.json만 고친다.
  * 문장에 넣을 때는 조사가 이름에 맞게 바뀌도록 ga·reul·neun·wa를 쓴다 (예: `${PRODUCT.ga} 켭니다`).
  */
-declare const __PRODUCT__: { name: string; fullName: string; tagline: string; dataFolder: string; version: string }
+declare const __PRODUCT__: { name: string; fullName: string; dataFolder: string; version: string }
 declare const __VERSION__: string
 
 /** 앱 버전 표기 (예: v0.0.27). product.json의 version + 빌드 번호(커밋 수), vite.config.ts에서 만든다 */
@@ -24,12 +24,11 @@ export function hasFinalConsonant(word: string) {
 const josa = (word: string, withFinal: string, withoutFinal: string) =>
   word + (hasFinalConsonant(word) ? withFinal : withoutFinal)
 
-const { name, fullName, tagline } = __PRODUCT__
+const { name, fullName } = __PRODUCT__
 
 export const PRODUCT = {
   name,
   fullName,
-  tagline,
   /** "AA가" / "별빛이" */
   ga: josa(name, '이', '가'),
   /** "AA를" / "별빛을" */

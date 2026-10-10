@@ -19,7 +19,6 @@ public partial class MainWindow : Window
     private static readonly Dictionary<string, string> ThemeBackground = new()
     {
         ["dark"] = "#1E1F21",
-        ["light"] = "#F1F1EF",
         ["night"] = "#000000",
     };
 
@@ -31,7 +30,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = string.IsNullOrEmpty(Product.Tagline) ? Product.Name : $"{Product.Name} · {Product.Tagline}";
+        Title = Product.Name; // 한 줄 설명(tagline)은 2026-10-10 사용자 요청으로 없앰
         ApplyTheme(ReadSavedTheme());
         Loaded += OnLoaded;
         Closing += OnClosing;

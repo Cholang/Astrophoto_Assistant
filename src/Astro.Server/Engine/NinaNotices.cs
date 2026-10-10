@@ -29,6 +29,20 @@ public sealed class NinaNotices
     /// <summary>아이라가 마지막으로 알림을 만든 시각 — 이때만 N.I.N.A. 알림 창을 숨긴다 (Codex L09: 해석하지 못한 알림은 그대로 보이게)</summary>
     public DateTimeOffset LastAddedAt { get; private set; } = DateTimeOffset.MinValue;
 
+    /// <summary>해석 규칙이 없는 마지막 N.I.N.A. 오류·경고 (알림 창을 돌려주지 않고 원문으로 알리려고 — 2026-10-10)</summary>
+    public (DateTimeOffset At, string Raw)? LastUnknown { get; private set; }
+    public void NoteUnknown(DateTimeOffset at, string raw) { lock (_gate) LastUnknown = (at, raw); }
+
+    /// <summary>
+    /// 숨긴 N.I.N.A. 알림 창을 돌려주지 않고 아이라 알림으로 (해석 규칙이 없으면 원문 그대로). since 뒤의 해석 못 한 로그가 없으면 false — 그때만 창을 돌려준다
+    /// </summary>
+    public bool AddFallback(DateTimeOffset since)
+    {
+        if (LastUnknown is not { } u || u.At < since) return false;
+        Add("nina", "N.I.N.A. 알림", [], "아래 원문이 N.I.N.A.가 띄운 알림입니다. 계속 되풀이되면 N.I.N.A. 창에서 자세히 확인해 주세요.", u.Raw, u.At);
+        return true;
+    }
+
     /// <summary>
     /// 같은 알림이 1분 안에 다시 오면 새로 띄우지 않고 횟수만 (적도의 통신 오류는 속성마다 줄줄이 남는다).
     /// 반복이 이어지면 30초에 한 번 새 번호를 붙여 화면에 다시 전한다 — 화면은 after=번호로 묻기 때문에 번호가 그대로면 횟수 변화를 모른다 (Codex L06)
@@ -56,6 +70,7 @@ public sealed class NinaNotices
                 }
                 return;
             }
+            FileLogProvider.Write("WARN", "N.I.N.A. 알림", $"{title} ({category}) — {raw.Split('\n')[0]}"); // 기록 파일에도 (2026-10-10)
             var n = new NinaNotice(_next++, at, category, title, why, fix, raw, 1);
             _items.Add(n);
             _sentAt[n.Id] = at;
@@ -281,9 +296,14 @@ public sealed class NinaLogWatcher(NinaNotices notices, ILogger<NinaLogWatcher> 
         foreach (var e in NinaLogRules.Parse(lines.Select(l => l.TrimEnd('\r'))))
         {
             if (e.Level is not ("ERROR" or "WARNING")) continue;
-            if (NinaLogRules.Interpret(e) is not { } n) continue;
             var raw = (e.Message + "\n" + e.Body).Trim();
-            notices.Add(n.Category, n.Title, n.Why, n.Fix, raw.Length > 600 ? raw[..600] + "…" : raw, e.At);
+            if (raw.Length > 600) raw = raw[..600] + "…";
+            if (NinaLogRules.Interpret(e) is not { } n)
+            {
+                notices.NoteUnknown(e.At, raw); // 알림 창이 떴다면 이 원문으로 알린다 (NinaToastHider)
+                continue;
+            }
+            notices.Add(n.Category, n.Title, n.Why, n.Fix, raw, e.At);
         }
     }
 }
@@ -316,8 +336,11 @@ public sealed class NinaToastHider(NinaNotices notices) : BackgroundService
         // 숨긴 뒤 5초 안에 아이라 알림이 없으면(로그에 없거나 해석하지 못한 알림) 되돌려 보인다 — 알림이 아무 데도 안 보이는 일이 없게
         if (_hidden != 0 && DateTimeOffset.Now - _hiddenAt > TimeSpan.FromSeconds(5))
         {
-            if (notices.LastAddedAt < _hiddenAt - TimeSpan.FromSeconds(3))
+            // 해석 못 한 알림도 원문으로 아이라 알림을 만들고 창은 돌려주지 않는다 (2026-10-10 — 돌려준 알림을 닫으면 N.I.N.A.가 아이라 위로 올라옴).
+            // 로그에도 없을 때만 돌려주되, 눌러도 앞으로 오지 않는 창으로
+            if (notices.LastAddedAt < _hiddenAt - TimeSpan.FromSeconds(3) && !notices.AddFallback(_hiddenAt - TimeSpan.FromSeconds(5)))
             {
+                NoActivate(_hidden);
                 ShowWindowAsync(_hidden, SwShowNoActivate);
                 _givenBack = _hidden;
             }
@@ -355,6 +378,17 @@ public sealed class NinaToastHider(NinaNotices notices) : BackgroundService
         return found;
     }
 
+    /// <summary>눌러도 활성화되지 않는 창으로 (알림을 닫을 때 N.I.N.A. 본 창이 앞으로 오지 않게)</summary>
+    private static void NoActivate(nint h)
+    {
+        var ex = GetWindowLongPtr(h, GwlExStyle);
+        if ((ex & WsExNoActivate) == 0) SetWindowLongPtr(h, GwlExStyle, ex | WsExNoActivate);
+    }
+
+    private const int GwlExStyle = -20;
+    private const nint WsExNoActivate = 0x08000000;
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hWnd, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern nint SetWindowLongPtr(nint hWnd, int index, nint value);
     private const int SwShowNoActivate = 4;
     private const int SwHide = 0;
     private delegate bool EnumProc(nint hWnd, nint lParam);

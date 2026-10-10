@@ -15,7 +15,6 @@ public static class Product
 
     public static string Name { get; } = Get("AppProductName", "AA");
     public static string FullName { get; } = Get("AppProductFullName", "Astrophoto Assistant");
-    public static string Tagline { get; } = Get("AppProductTagline", "");
 
     /// <summary>영문 짧은 이름 (실행 파일 이름 등)</summary>
     public static string Id { get; } = Get("AppProductId", Name);

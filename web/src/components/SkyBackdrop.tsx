@@ -9,20 +9,19 @@ import styles from './SkyBackdrop.module.css'
  */
 const LEVEL = 1.1
 
-type Theme = 'dark' | 'light' | 'night'
+type Theme = 'dark' | 'night'
 
 /** 별·혜성 색 (r, g, b) — 시안의 --star */
-const STAR: Record<Theme, string> = { dark: '235, 232, 227', light: '60, 62, 66', night: '150, 0, 0' }
+const STAR: Record<Theme, string> = { dark: '235, 232, 227', night: '150, 0, 0' }
 /** 성운 두 층의 색 */
 const NEBULA: Record<Theme, [number, number, number][]> = {
   dark: [[92, 132, 174], [147, 105, 157]],
-  light: [[70, 103, 156], [139, 86, 143]],
   night: [[110, 0, 0], [80, 0, 0]],
 }
 
 const themeOf = (): Theme => {
   const t = document.documentElement.dataset.theme
-  return t === 'light' || t === 'night' ? t : 'dark'
+  return t === 'night' ? t : 'dark'
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a)
@@ -56,7 +55,7 @@ function nebula(index: number, theme: Theme) {
   const g = c.getContext('2d')!
   const d = g.createImageData(640, 400)
   const [r, gr, b] = NEBULA[theme][index]
-  const gain = theme === 'light' ? 560 : 240
+  const gain = 240
   for (let y = 0; y < 400; y++)
     for (let x = 0; x < 640; x++) {
       const u = x / 640, v = y / 400

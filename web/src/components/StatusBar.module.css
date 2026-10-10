@@ -10,10 +10,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 이름 = AIRA 별자리 글자 그림 (BrandMark). 높이만 정하고 너비는 비율대로 */
 .brand {
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: var(--text);
+  display: inline-flex;
+  height: 22px;
+  flex: none;
+}
+
+.brand svg {
+  height: 100%;
+  width: auto;
+  display: block;
 }
 
 /* 앱 이름 바로 옆 작은 버전 (이름과의 간격은 줄 간격보다 좁게) */

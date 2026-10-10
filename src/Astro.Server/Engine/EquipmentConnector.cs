@@ -134,6 +134,10 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
 
     /// <summary>지금 프로필의 전원 배선 (모의·시험에서 저장소가 없으면 기본값)</summary>
     private Profiles.PowerWiring Wiring => power?.Current() ?? Profiles.PowerWiring.Default;
+    /// <summary>이번 연결에서 아이라가 허브 출력을 마지막으로 켠 시각 (그 뒤 10초 동안만 장비가 나타나기를 기다린다)</summary>
+    private DateTime _switchedOnAt = DateTime.MinValue;
+    private TimeSpan JustSwitchedWait => TimeSpan.FromSeconds(10) - (DateTime.UtcNow - _switchedOnAt) is var left && left > TimeSpan.Zero ? left : TimeSpan.Zero;
+
     /// <summary>이번 연결에서 허브 입력 전압이 0이었나 (배선을 고치는 증거에 씀)</summary>
     private bool _hubNoPower;
 
@@ -255,6 +259,8 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
 
         var hubFailed = false;
         var wiring = Wiring;
+        var runClock = System.Diagnostics.Stopwatch.StartNew();
+        ConnectTimingLog.Append($"{DateTime.Now:HH:mm:ss.fff}  === 장비 연결 시작 ({devices.Count(x => !x.Absent)}개{(options.Value.Simulate ? ", 모의" : "")})");
         foreach (var d in devices)
         {
             // 허브가 실패하면 허브부터 해결한다: 전원 배선상 허브에서 전원을 받는 장비만 보류 (docs/POWER_LAYOUT_PLAN.md — 배선을 믿는다).
@@ -271,13 +277,14 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                 continue;
             }
             if (d.Id is not null) yield return Make(d, CheckStatus.Running, "연결하는 중입니다");
-            var result = await ConnectOneAsync(d, ct);
+            var result = await ConnectTimedAsync(d, ct);
             yield return result;
             if (d.Slot.Kind == Hub && result.Status != CheckStatus.Pass) hubFailed = true;
             // 적도의 먼저(적도의 → 파워박스)인데 파워박스에 전원이 없는 채로 적도의가 연결됨 → 파워박스는 적도의에서 받지 않는다
             if (_hubNoPower && d.Slot.Kind == "mount" && result.Status == CheckStatus.Pass && wiring.SourceOf(Hub) == Profiles.PowerWiring.Mount)
                 power?.Learn(Hub, Profiles.PowerWiring.Dc, "파워박스 입력 0V인데 적도의가 연결됨");
         }
+        ConnectTimingLog.Append($"{DateTime.Now:HH:mm:ss.fff}  === 장비 연결 끝 {runClock.ElapsedMilliseconds}ms");
         }
         finally { EndRun(); }
     }
@@ -293,7 +300,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         // [임시] 시뮬레이션: 사용자가 원인을 해결하고 "다시 연결"을 눌렀다고 보고, 이 장비는 이제 성공한다
         if (options.Value.Simulate && !simulateFail) sim.Fix(id);
         var token = BeginRun(ct, fresh: false);
-        try { return await ConnectOneAsync(d, token, simulateFail && options.Value.Simulate); }
+        try { return await ConnectTimedAsync(d, token, simulateFail && options.Value.Simulate, retry: true); }
         finally { EndRun(); }
     }
 
@@ -314,6 +321,27 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         if (d is null || d.Slot.Tier != Recommended) return null;
         choices.GoWithout(id);
         return Make(d, CheckStatus.Warn, $"{d.Slot.Role} 없이 진행합니다");
+    }
+
+    /// <summary>장비 하나 연결 + 걸린 시간을 logs\connect-날짜.log에 (2026-10-10 — 오래 걸리는 이유를 보려고)</summary>
+    private ConnectTimingLog? _timing;
+
+    private async Task<CheckResult> ConnectTimedAsync(Device d, CancellationToken ct, bool forceFail = false, bool retry = false)
+    {
+        _timing = new ConnectTimingLog();
+        try
+        {
+            var result = await ConnectOneAsync(d, ct, forceFail);
+            _timing.Write(d.Slot.Kind, result.Status.ToString(), (retry ? "다시 연결 · " : "") + result.Message);
+            log.LogInformation("장비 연결 {Kind}: {Status} — {Message}{Retry}", d.Slot.Kind, result.Status, result.Message, retry ? " (다시 연결)" : "");
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            _timing.Write(d.Slot.Kind, "Canceled");
+            throw;
+        }
+        finally { _timing = null; }
     }
 
     private async Task<CheckResult> ConnectOneAsync(Device d, CancellationToken ct, bool forceFail = false)
@@ -380,17 +408,21 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                         log.LogInformation("Empire가 켜진 뒤 USB 장치가 새로 꽂혀 Empire를 다시 켭니다");
                         await Task.Run(host.CloseEmpire, ct);
                     }
-                    var pre = await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(10), ct);
-                    // 카메라 전원을 허브 출력에서 받으면(장비 변경에서 고르고 전압을 확인받음) 그 출력을 켜고 카메라가 나타나기를 30초 기다린다 (J05, 10/09 실기: 14초)
+                    // 기다리지 않고 한 번만 확인한다 (2026-10-10 사용자 결정 — 기록상 꺼진 장비를 10초씩 기다린 게 대부분: 안 되면 바로 실패 + 다시 연결).
+                    // 다만 이번에 아이라가 허브 출력(USB 등)을 막 켰으면 USB 장치가 나타나는 데 몇 초 걸려 켠 뒤 10초까지만 남은 만큼 기다린다
+                    var pre = await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, JustSwitchedWait, ct);
+                    _timing?.Step("PC에 보이는지");
+                    // 카메라 전원을 허브 출력에서 받으면(장비 변경에서 고르고 전압을 확인받음) 그 출력을 켜고 카메라가 나타나기를 20초 기다린다 (J05, 10/09 실기: 14초 — 2026-10-10 30초에서 줄임)
                     if (!pre.Ok && kind == "camera" && cameraPower.Outlet is { } outlet && await nina.IsConnectedAsync(Hub, ct))
                     {
                         var turned = await SetHubOutputAsync(n => n == outlet, true, ct);
                         pre = turned == true
-                            ? await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(30), ct) is { Ok: true } p ? Learned(p, kind, "파워박스 출력을 켜자 PC에 나타남")
+                            ? await DevicePrecheck.CheckAsync(host, kind, d.Id, d.Slot.Role, TimeSpan.FromSeconds(20), ct) is { Ok: true } p ? Learned(p, kind, "파워박스 출력을 켜자 PC에 나타남")
                                 : new(false, $"카메라 전원(허브 {ShortOutlet(outlet)})을 켰지만 카메라가 PC에 보이지 않습니다",
                                     $"카메라 전원 스위치가 ON인지, 전원 어댑터가 허브 {ShortOutlet(outlet)}에 꽂혀 있는지, USB 케이블을 확인해 주세요.")
                             : new(false, $"카메라 전원(허브 {ShortOutlet(outlet)})을 켜지 못했습니다",
                                 turned is null ? $"전원 허브에 {ShortOutlet(outlet)} 출력이 없습니다. 장비 변경에서 카메라 전원을 다시 골라 주세요." : "Wanderer Empire에서 출력이 켜지는지 확인해 주세요.");
+                        _timing?.Step("카메라 전원 켜기");
                     }
                     if (!pre.Ok)
                     {
@@ -403,7 +435,9 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                 }
                 if (connectedNow) await nina.DisconnectAsync(kind, ct);
                 // N.I.N.A. 장비 목록에 끝내 없으면 연결을 시도하지 않는다 — N.I.N.A. 오류 알림 대신 할 일 (Codex B05)
-                if (await WaitListedAsync(kind, d.Id, ct) == false)
+                var listed = await WaitListedAsync(kind, d.Id, ct);
+                _timing?.Step("N.I.N.A. 목록");
+                if (listed == false)
                 {
                     live.Forget(kind);
                     var miss = new Diagnosis(["드라이버가 이 PC에 설치되어 있지 않습니다", "장비 전원이 꺼져 있어 목록에 나타나지 않습니다(플러그인 카메라 등)", "N.I.N.A. 프로필의 장비가 다른 PC에서 고른 것입니다"],
@@ -413,6 +447,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                         : Make(d, CheckStatus.Fail, $"N.I.N.A.가 {d.Slot.Role}{Reul(d.Slot.Role)} 찾지 못했습니다", miss);
                 }
                 connected = await nina.ConnectAsync(kind, d.Id, ct) && await nina.IsConnectedAsync(kind, ct);
+                _timing?.Step("N.I.N.A. 연결");
             }
             // 허브가 USB로만 붙고 전원(DC)이 안 들어오면(10/09: USB만으로도 연결됨) 뒤 장비를 N.I.N.A.에 맡기지 않는다 —
             // 허브 입력 전압이 곧 장비 전원 (사용자 배선: 외부 전원 → 적도의 → 새들 → 허브). 전압 칸을 모르면 그냥 진행
@@ -430,13 +465,22 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
                     ["전원이 꺼져 있습니다", "파워박스로 가는 전원 케이블이 빠졌습니다"], fix));
             }
             // 허브가 연결되면 USB 출력을 켜 둔다 — 가이드 카메라·포커서가 허브 USB에 붙어 있다 (자동 해결, 다시 읽어 확인 — 10/09: N.I.N.A.는 실패해도 성공이라 답함)
-            if (connected && kind == Hub) await EnsureHubUsbOnAsync(ct);
+            if (connected && kind == Hub)
+            {
+                _timing?.Step("허브 전압");
+                await EnsureHubUsbOnAsync(ct);
+                _timing?.Step("허브 USB 출력");
+            }
             if (connected) live.Set(kind, d.Id);
             else live.Forget(kind);
 
             // 가이더: N.I.N.A.가 PHD2 프로그램에 붙은 것만으로는 부족 — PHD2 안의 카메라·적도의까지 직접 확인 (2026-10-06)
-            if (connected && kind == "guider" && await CheckPhd2Async(ct) is { } problem)
-                return Make(d, CheckStatus.Fail, problem.Message, new Diagnosis([], problem.Fix));
+            if (connected && kind == "guider")
+            {
+                var problem = await CheckPhd2Async(ct);
+                _timing?.Step("PHD2 확인");
+                if (problem is not null) return Make(d, CheckStatus.Fail, problem.Message, new Diagnosis([], problem.Fix));
+            }
         }
 
         if (connected)
@@ -502,14 +546,21 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         for (var i = 0; i < 9; i++)
         {
             var info = await nina.RequestAsync("equipment/switch/info", TimeSpan.FromSeconds(10), ct);
+            var seen = new List<string>();
             if (info.Response is { ValueKind: JsonValueKind.Object } r)
                 foreach (var key in new[] { "ReadonlySwitches", "Gauges" })
                     if (r.TryGetProperty(key, out var list) && list.ValueKind == JsonValueKind.Array)
                         foreach (var g in list.EnumerateArray())
-                            if (Text(g, "Name") is { } n && IsInputVoltage(n) && g.TryGetProperty("Value", out var v) && v.TryGetDouble(out var volts))
-                                best = Math.Max(best ?? 0, volts);
+                        {
+                            var name = Text(g, "Name");
+                            var has = g.TryGetProperty("Value", out var v) && v.TryGetDouble(out _);
+                            seen.Add($"{name}={(has ? v.GetDouble().ToString("0.##") : "?")}");
+                            if (name is { } n && IsInputVoltage(n) && has) best = Math.Max(best ?? 0, v.GetDouble());
+                        }
+            // 기록: 허브가 주는 읽기 전용 칸 이름과 값 — 입력 전압 칸 이름이 맞는지 다음 실행에서 확인하려고 (2026-10-10, 실기 미확인)
+            if (i == 0 || best is null && i == 2) log.LogInformation("허브 읽기 칸 ({Try}번째): {Gauges}", i + 1, seen.Count == 0 ? "없음" : string.Join(", ", seen));
             if (best is null && i >= 2) return null; // 전압 칸이 없음
-            if (best >= NoPowerVolts) return best;
+            if (best >= NoPowerVolts) { log.LogInformation("허브 입력 전압 {Volts}V — 전원 있음", best); return best; }
             await Task.Delay(1000, ct);
         }
         return best;
@@ -548,6 +599,7 @@ public sealed class EquipmentConnector(NinaApiClient nina, IOptions<EquipmentOpt
         static bool IsOn(JsonElement x) => x.TryGetProperty("Value", out var v) && v.TryGetDouble(out var d) && d >= 1;
         if (IsOn(list[index]) == on) return true;
         await nina.RequestAsync($"equipment/switch/set?index={index}&value={(on ? 1 : 0)}", TimeSpan.FromSeconds(10), ct);
+        if (on) _switchedOnAt = DateTime.UtcNow;
         for (var i = 0; i < 10; i++)
         {
             await Task.Delay(1000, ct);

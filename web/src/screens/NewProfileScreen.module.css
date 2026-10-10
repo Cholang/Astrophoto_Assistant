@@ -180,3 +180,19 @@
     transition: none;
   }
 }
+
+/* 프로필 삭제: 돌아가기 아래 작은 글자 버튼, 가리키면 실패색 */
+.remove {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--size-small);
+  cursor: pointer;
+}
+
+.remove:hover:not(:disabled) {
+  color: var(--fail);
+}

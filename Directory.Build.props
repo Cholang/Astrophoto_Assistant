@@ -8,7 +8,6 @@
     <AppProductJson>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)product.json'))</AppProductJson>
     <AppProductName>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"name"\s*:\s*"([^"]*)".*', '$1'))</AppProductName>
     <AppProductFullName>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"fullName"\s*:\s*"([^"]*)".*', '$1'))</AppProductFullName>
-    <AppProductTagline>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"tagline"\s*:\s*"([^"]*)".*', '$1'))</AppProductTagline>
     <AppDataFolder>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"dataFolder"\s*:\s*"([^"]*)".*', '$1'))</AppDataFolder>
     <!-- 영문 짧은 이름: 실행 파일 이름 (화면 이름은 한글일 수 있어 따로 둔다) -->
     <AppProductId>$([System.Text.RegularExpressions.Regex]::Replace('$(AppProductJson)', '(?s).*"id"\s*:\s*"([^"]*)".*', '$1'))</AppProductId>
@@ -20,7 +19,6 @@
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Astro.Core'">
     <AssemblyMetadata Include="AppProductName" Value="$(AppProductName)" />
     <AssemblyMetadata Include="AppProductFullName" Value="$(AppProductFullName)" />
-    <AssemblyMetadata Include="AppProductTagline" Value="$(AppProductTagline)" />
     <AssemblyMetadata Include="AppDataFolder" Value="$(AppDataFolder)" />
     <AssemblyMetadata Include="AppProductId" Value="$(AppProductId)" />
     <AssemblyMetadata Include="AppPreviousDataFolder" Value="$(AppPreviousDataFolder)" />

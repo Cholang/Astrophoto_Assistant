@@ -55,7 +55,8 @@ public sealed class EngineStarter(NinaApiClient nina, InternetCheck internet, Ni
             string? error = null;
             try
             {
-                behind = BackgroundWindows.Watch(TimeSpan.FromSeconds(8), BackgroundWindows.Nina);
+                // N.I.N.A.가 켜지며 장비 드라이버를 훑을 때 Wanderer Empire도 켜져 시작 로고("항상 위")를 띄운다 (2026-10-10 사용자) — 같이 지켜보고, 늦게 뜨는 로고까지 20초 더
+                behind = BackgroundWindows.Watch(TimeSpan.FromSeconds(20), BackgroundWindows.Nina, BackgroundWindows.WandererEmpire);
                 Process.Start(new ProcessStartInfo(ninaExe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(ninaExe), WindowStyle = ProcessWindowStyle.Minimized });
                 justLaunched = true;
                 programs?.NinaLaunched(); // 아이라를 끌 때 이 N.I.N.A.(와 N.I.N.A.가 켠 PHD2)를 닫는다

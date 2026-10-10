@@ -1,10 +1,11 @@
 import { Activity, Pencil } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Button from '../components/Button'
+import ConfirmDialog from '../components/ConfirmDialog'
 import PowerWiringPanel, { wiringSummary } from '../components/PowerWiringPanel'
 import ProfileAvatar from '../components/ProfileAvatar'
 import TextField from '../components/TextField'
-import { createProfile, DEFAULT_WIRING, editProfile, getPower, MEMO_MAX_BYTES, NICKNAME_MAX_BYTES, profileImageUrl, savePower, toSquareProfileImage, uploadProfileImage, type PowerWiring, type Profile } from '../profiles'
+import { createProfile, DEFAULT_WIRING, deleteProfile, editProfile, getPower, MEMO_MAX_BYTES, NICKNAME_MAX_BYTES, profileImageUrl, savePower, toSquareProfileImage, uploadProfileImage, type PowerWiring, type Profile } from '../profiles'
 import styles from './NewProfileScreen.module.css'
 
 /**
@@ -16,12 +17,15 @@ export default function NewProfileScreen({
   editing = null,
   onCreated,
   onEdited,
+  onDeleted,
   onCancel,
 }: {
   /** 있으면 새로 만들지 않고 이 프로필을 고친다 (프로필 선택 화면의 연필) */
   editing?: Profile | null
   onCreated: (p: Profile) => void
   onEdited?: (p: Profile) => void
+  /** 편집 중인 프로필을 지웠을 때 (프로필 선택 화면으로) */
+  onDeleted?: (id: string) => void
   onCancel?: () => void
 }) {
   const [nickname, setNickname] = useState(editing?.nickname ?? '')
@@ -37,6 +41,18 @@ export default function NewProfileScreen({
   const [custom, setCustom] = useState(false)
   const [changed, setChanged] = useState(false)
   const [wiringOpen, setWiringOpen] = useState(false)
+  const [deleting, setDeleting] = useState<'ask' | 'busy' | null>(null)
+  const remove = async () => {
+    if (!editing) return
+    setDeleting('busy')
+    try {
+      await deleteProfile(editing.id)
+      onDeleted?.(editing.id)
+    } catch (err) {
+      setDeleting(null)
+      setError((err as Error).message)
+    }
+  }
   useEffect(() => {
     if (!editing) return
     getPower(editing.id)
@@ -160,8 +176,22 @@ export default function NewProfileScreen({
               프로필 목록으로 돌아가기
             </button>
           )}
+          {/* 프로필 삭제: 편집 때만, 맨 아래 작은 글자 버튼 (주 버튼과 떨어뜨려 실수로 누르지 않게) → 확인 창 */}
+          {editing && (
+            <button type="button" className={styles.remove} onClick={() => setDeleting('ask')} disabled={saving || deleting === 'busy'}>
+              프로필 삭제
+            </button>
+          )}
         </div>
       </form>
+      <ConfirmDialog
+        open={deleting !== null}
+        message={`'${editing?.nickname ?? ''}' 프로필을 삭제합니다. 관측지 목록과 전원 배선도 함께 지워지고 되돌릴 수 없습니다.`}
+        confirmLabel="삭제"
+        busy={deleting === 'busy'}
+        onConfirm={() => void remove()}
+        onCancel={() => setDeleting(null)}
+      />
       <aside className={styles.side} aria-hidden={!wiringOpen} inert={!wiringOpen}>
         <PowerWiringPanel
           value={wiring}

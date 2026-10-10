@@ -30,6 +30,8 @@ public static class AppServer
             ContentRootPath = contentRoot,
         });
         if (url is not null) builder.WebHost.UseUrls(url);
+        // 모든 단계 기록을 파일로 (logs/aira-날짜.log — 2026-10-10 사용자 요청, FileLogProvider)
+        builder.Logging.AddProvider(new FileLogProvider());
         // AI API 키 등 비밀 값: 이 PC의 사용자 비밀 저장소에서 읽는다 (git·화면에 남지 않음).
         // 기본 설정은 개발 모드에서만 읽으므로 항상 읽도록 직접 추가. 환경 변수가 있으면 환경 변수가 이긴다.
         builder.Configuration.AddUserSecrets(typeof(AppServer).Assembly, optional: true);
@@ -155,6 +157,12 @@ public static class AppServer
         // 아이라 종료 마지막: 아이라가 켠 N.I.N.A.면 PHD2와 함께 닫는다 (촬영 중이면 두기). 사용자가 켜 둔 N.I.N.A.는 그대로
         api.MapPost("/engine/close", async (ProgramCloser programs, Shoot.ShootSession shoot, CancellationToken ct) =>
             Results.Ok(new { closed = programs.LaunchedNina && !shoot.Active && await programs.CloseAsync(ct) }));
+        // 화면의 단계 이동·버튼 기록 (같은 로그 파일에 "화면"으로)
+        api.MapPost("/log", (ClientLog input) =>
+        {
+            FileLogProvider.Write("INFO", "화면", (input.Message ?? "").Length > 500 ? input.Message![..500] : input.Message ?? "");
+            return Results.NoContent();
+        });
         api.MapPost("/focuser/park", async (Prepare.FocuserPark park, CancellationToken ct) => Results.Ok(new { problem = await park.ParkAsync(ct) }));
         // 진행 표시 아래 "적도의 홈": 지금 보낼 수 있는지(이유) · 보내기
         api.MapGet("/mount/home", async (Prepare.MountHome home, CancellationToken ct) => Results.Ok(await home.StateAsync(ct)));
@@ -398,6 +406,7 @@ public static class AppServer
 
     private sealed record RigSelect(string Kind, string? DeviceId, string? Name);
     private sealed record CameraPowerChoice(string? Outlet);
+    private sealed record ClientLog(string? Message);
     private sealed record PowerInput(Dictionary<string, string?> Sources);
 
     private sealed record UpdateDismiss(string Id, string Version);
@@ -454,6 +463,9 @@ public static class AppServer
             plan.ProfileSelected(id); // 다른 프로필이면 계획 대화를 새로 (CX-PLAN-06)
             return Results.NoContent();
         });
+
+        // 프로필 삭제 (편집 화면, 확인 창 뒤)
+        profiles.MapDelete("/{id}", (string id, ProfileStore store) => store.Delete(id) ? Results.NoContent() : Results.NotFound());
 
         // 별명·메모 고치기 (프로필 선택 화면)
         profiles.MapPut("/{id}", (string id, NewProfile input, ProfileStore store) =>

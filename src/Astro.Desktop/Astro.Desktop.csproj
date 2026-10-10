@@ -16,7 +16,7 @@
     <UseWPF>true</UseWPF>
     <!-- 실행 파일 이름 = product.json의 id (Directory.Build.props — name은 한글일 수 있어 영문 id로) -->
     <AssemblyName>$(AppProductId)</AssemblyName>
-    <!-- 앱 아이콘: 실행 파일·작업 표시줄·Alt+Tab·창 제목 (원본 그림: 저장소 맨 위 AstrophotoAssistant.png, 16~256px를 담은 .ico) -->
+    <!-- 앱 아이콘: 실행 파일·작업 표시줄·Alt+Tab·창 제목 (원본: mockups/aira-brand/aira-icon-v2.svg — 48px 이하는 aira-icon-v2-tiny.svg(굵고 밝은 A, 잔별·지면 없음 — 200% 화면의 작업 표시줄이 48px). 그림자 여백을 잘라 타일이 칸을 꽉 채움. 16~256px PNG를 담은 .ico, 2026-10-10) -->
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 

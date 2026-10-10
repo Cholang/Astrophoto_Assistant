@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { tellHost } from './host'
 
-export type Theme = 'dark' | 'light' | 'night'
+// 테마는 두 가지 (2026-10-10 사용자 결정 — 밝게 테마 없앰): 기본(값 dark — 짙은 회색) · 다크(값 night — 촬영용 적색). 값 이름은 저장된 설정과 호환을 위해 그대로
+export type Theme = 'dark' | 'night'
 
 export const THEMES: { value: Theme; label: string }[] = [
-  { value: 'dark', label: '어둡게' },
-  { value: 'light', label: '밝게' },
-  { value: 'night', label: '촬영' },
+  { value: 'dark', label: '기본' },
+  { value: 'night', label: '다크' },
 ]
 
 const KEY = 'app.theme'
@@ -14,7 +14,7 @@ const KEY = 'app.theme'
 function load(): Theme {
   try {
     const v = localStorage.getItem(KEY)
-    if (v === 'dark' || v === 'light' || v === 'night') return v
+    if (v === 'dark' || v === 'night') return v // 예전에 고른 'light'는 기본으로
   } catch {
     /* 저장소를 못 쓰면 기본값 */
   }

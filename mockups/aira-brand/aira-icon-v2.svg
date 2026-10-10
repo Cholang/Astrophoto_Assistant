@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" data-theme="dark" role="img" aria-labelledby="title"><title id="title">AIRA 촬영 망원경과 별자리 A</title><style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" data-theme="default" role="img" aria-labelledby="title"><title id="title">AIRA 촬영 망원경과 별자리 A</title><style>
 svg{--bg:#1e1f21;--ink:#9290f5;--accent:#c6ad80;color:var(--ink)}
-svg[data-theme="light"]{--bg:#f1f1ef;--ink:#5146a3;--accent:#8a6631}
+
 svg[data-theme="night"]{--bg:#000;--ink:#a62626;--accent:#d04444}
 .ink{stroke:var(--ink);fill:none;stroke-linecap:round;stroke-linejoin:round}
 .solid{fill:var(--ink)}.accent{fill:var(--accent)}
 svg{--tile-top:#393a4d;--tile-bottom:#1c1d29;--edge:#a5a3ca;--shine:#dddafa;--shade:#080910}
-svg[data-theme="light"]{--tile-top:#faf9ff;--tile-bottom:#d8d9e6;--edge:#fff;--shine:#fff;--shade:#676581}
+
 svg[data-theme="night"]{--tile-top:#230a0a;--tile-bottom:#080101;--edge:#682323;--shine:#9a3030;--shade:#000}
 @media(max-width:48px){.detail{display:none}.art{filter:none}}
 </style><defs><path id="spark" fill-rule="evenodd" d="M0-10 C1.2-10 1.1-5.8 2.9-3.1 C4.4-1.1 8-1.1 8 0 C8 1.1 4.4 1.1 2.9 3.1 C1.1 5.8 1.2 10 0 10 C-1.2 10-1.1 5.8-2.9 3.1 C-4.4 1.1-8 1.1-8 0 C-8-1.1-4.4-1.1-2.9-3.1 C-1.1-5.8-1.2-10 0-10Z M0-3.4 Q1-1 2.7 0 Q1 1 0 3.4 Q-1 1-2.7 0 Q-1-1 0-3.4Z"/><linearGradient id="comet-tail" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9290f5" stop-opacity="0"/><stop offset="1" stop-color="#9290f5" stop-opacity=".65"/></linearGradient><linearGradient id="tile" x2=".8" y2="1"><stop stop-color="var(--tile-top)"/><stop offset="1" stop-color="var(--tile-bottom)"/></linearGradient>

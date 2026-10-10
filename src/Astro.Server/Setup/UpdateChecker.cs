@@ -94,7 +94,7 @@ public sealed class UpdateChecker(IHttpClientFactory http, IOptions<NinaOptions>
 
             var client = http.CreateClient("updates");
             client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd($"{Product.Name}-update-check"); // GitHub API는 User-Agent가 있어야 한다
+            client.DefaultRequestHeaders.UserAgent.ParseAdd($"{Product.Id}-update-check"); // GitHub API는 User-Agent가 있어야 한다. 영문 Id로 — 한글 이름(아이라)은 User-Agent에 쓸 수 없어 이름을 바꾼 뒤 확인이 늘 실패했음 (2026-10-10 기록에서 발견)
             var latest = new Dictionary<string, string>();
             var ninaVersion = InstallLocator.NinaExe(nina.Value.ExePath) is { } exe ? FileVersion(exe) : null;
             // 네 곳은 서로 상관없으니 한꺼번에 묻는다 — 가장 느린 한 곳만큼만 기다린다 (Codex 최적화 제안)

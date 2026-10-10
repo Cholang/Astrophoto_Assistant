@@ -93,8 +93,15 @@ public static class BackgroundWindows
                             }
                             else if (_onTop)
                             {
-                                // AA가 위에 있으니 창은 그대로 두고, 포커스만 AA로
-                                if (GetForegroundWindow() == h && Process.GetCurrentProcess().MainWindowHandle is var own and not 0) SetForegroundWindow(own);
+                                // 스스로 "항상 위"인 창(Wanderer Empire 시작 로고 등 — 2026-10-10 사용자: 장비 연결 중 화면을 가림)은 그 표시를 풀어
+                                // 아이라("항상 위") 아래로 보낸다. 나머지 창은 그대로 두고 포커스만 아이라로
+                                var own = Process.GetCurrentProcess().MainWindowHandle;
+                                if ((GetWindowLongPtr(h, GwlExStyle) & WsExTopmost) != 0)
+                                {
+                                    SetWindowPos(h, HwndNoTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+                                    if (own != 0) SetWindowPos(own, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+                                }
+                                if (GetForegroundWindow() == h && own != 0) SetForegroundWindow(own);
                             }
                             else if (GetForegroundWindow() == h)
                             {
@@ -150,6 +157,9 @@ public static class BackgroundWindows
     private static readonly nint HwndBottom = 1, HwndTopmost = -1, HwndNoTopmost = -2;
     private const uint SwpNoSize = 0x1, SwpNoMove = 0x2, SwpNoActivate = 0x10;
     private const uint GwOwner = 4;
+    private const int GwlExStyle = -20;
+    private const nint WsExTopmost = 0x8;
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hWnd, int index);
 
     private delegate bool EnumWindowsProc(nint hWnd, nint lParam);
 

@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" data-theme="default" role="img" aria-labelledby="title"><title id="title">AIRA 촬영 망원경과 별자리 A</title><style>
-svg{--bg:#1e1f21;--ink:#9290f5;--accent:#c6ad80;color:var(--ink)}
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384" data-theme="default" role="img" aria-labelledby="title"><title id="title">AIRA 촬영 망원경과 별자리 A (32px 이하)</title><style>
+svg{--bg:#1e1f21;--ink:#b6b4ff;--accent:#c6ad80;color:var(--ink)}
 
 svg[data-theme="night"]{--bg:#000;--ink:#a62626;--accent:#d04444}
 .ink{stroke:var(--ink);fill:none;stroke-linecap:round;stroke-linejoin:round}
 .solid{fill:var(--ink)}.accent{fill:var(--accent)}
-svg{--tile-top:#393a4d;--tile-bottom:#1c1d29;--edge:#a5a3ca;--shine:#dddafa;--shade:#080910}
+svg{--tile-top:#474960;--tile-bottom:#272939;--edge:#a5a3ca;--shine:#dddafa;--shade:#080910}
 
 svg[data-theme="night"]{--tile-top:#230a0a;--tile-bottom:#080101;--edge:#682323;--shine:#9a3030;--shade:#000}
 @media(max-width:48px){.detail{display:none}.art{filter:none}}
@@ -14,7 +14,7 @@ svg[data-theme="night"]{--tile-top:#230a0a;--tile-bottom:#080101;--edge:#682323;
 <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000" flood-opacity=".28"/></filter>
 <filter id="relief" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="1.5" stdDeviation="1" flood-color="#000" flood-opacity=".4"/></filter>
 <clipPath id="tile-clip"><rect x="12" y="10" width="360" height="360" rx="76"/></clipPath></defs><rect x="12" y="10" width="360" height="360" rx="76" fill="url(#tile)" filter="url(#shadow)"/><rect x="13" y="11" width="358" height="358" rx="75" fill="url(#light)" stroke="url(#rim)" stroke-width="2"/><g clip-path="url(#tile-clip)"><g class="art" transform="translate(28 26) scale(.85)" filter="url(#relief)"><!-- Telescope, including tripod, fits in the lower-left quadrant. -->
-<g id="telescope" transform="translate(26.01 182.276) scale(.49)"><g class="ink" stroke-width="5.5">
+<g id="telescope" transform="translate(26.01 182.276) scale(.49)"><g class="ink" stroke-width="10">
 <path d="M176 249 L112 337.035 M181 250 L181 325.125 M186 249 L240 318.316"/>
 <path d="M175 218 L181 232"/><circle cx="181" cy="241" r="9"/>
 <g transform="rotate(-25 165 198)">
@@ -25,8 +25,7 @@ svg[data-theme="night"]{--tile-top:#230a0a;--tile-bottom:#080101;--edge:#682323;
 <rect x="139" y="143" width="82" height="15" rx="3"/>
 <rect x="122" y="143" width="17" height="15" rx="3"/>
 </g></g></g>
-<g id="constellation-a"><path class="ink" stroke-width="4.5" d="M183.59 203.37 L206.41 159.63 M219.48 134.27 L262.52 49.73 M275.07 50.14 L316.93 140.86 M329.02 167.19 L347.98 208.81 M228.41 147.98 L307.59 153.02"/><use class="solid" href="#spark" transform="translate(177 216) scale(1.5)"/><use class="accent" href="#spark" transform="translate(269 37) scale(1.5)"/><use class="solid" href="#spark" transform="translate(354 222) scale(1.5)"/><use class="solid" href="#spark" transform="translate(213 147) scale(1.5)"/><use class="solid" href="#spark" transform="translate(323 154) scale(1.5)"/></g>
+<g id="constellation-a" transform="translate(274 146) scale(1.12) translate(-265 -130)"><path class="ink" stroke-width="10" d="M183.59 203.37 L206.41 159.63 M219.48 134.27 L262.52 49.73 M275.07 50.14 L316.93 140.86 M329.02 167.19 L347.98 208.81 M228.41 147.98 L307.59 153.02"/><use class="solid" href="#spark" transform="translate(177 216) scale(2)"/><use class="accent" href="#spark" transform="translate(269 37) scale(2)"/><use class="solid" href="#spark" transform="translate(354 222) scale(2)"/><use class="solid" href="#spark" transform="translate(213 147) scale(2)"/><use class="solid" href="#spark" transform="translate(323 154) scale(2)"/></g>
 <path d="M59 65 Q36 56 17 21 Q43 38 59 65Z" fill="url(#comet-tail)"/><use class="solid" href="#spark" transform="translate(59 65) scale(1.5)"/>
-<g class="solid"><circle cx="122" cy="111" r="2.2"/><circle cx="65" cy="160" r="2"/><use href="#spark" transform="translate(329 274) scale(.8)"/></g>
-<g class="solid detail" opacity=".7"><circle cx="146" cy="59" r="1.8"/><circle cx="92" cy="207" r="1.6"/><circle cx="175" cy="116" r="1.7"/><circle cx="263" cy="277" r="2"/><circle cx="350" cy="91" r="1.5"/><use href="#spark" transform="translate(149 185) scale(.45)"/><use href="#spark" transform="translate(212 292) scale(.4)"/></g><!-- Same ground curve as the logo, transformed with the feet to preserve contact. -->
-<g transform="translate(-12 114) scale(.7)" class="ink" stroke-width="5"><path d="M35 360 Q290 273 590 362"/><path d="M105 365 L102 355 M114 366 L119 358 M278 371 V360 M267 369 L262 362 M290 369 L295 362"/></g></g></g></svg>
+
+</g></g></svg>

@@ -1,24 +1,24 @@
 /* 색·간격·글자 크기는 모두 여기 토큰으로만 쓴다 (DESIGN.md 7장).
-   세 테마(dark · light · night)가 같은 토큰 이름을 공유한다. 값은 모두 [임시].
+   두 테마(dark = 화면 이름 "기본", night = "다크"·촬영용 적색)가 같은 토큰 이름을 공유한다 (밝게 테마는 2026-10-10 없앰). 값은 모두 [임시].
    글꼴은 앱 안에 포함한다 — 현장에는 인터넷이 없을 수 있다. */
 @import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 
 :root,
 :root[data-theme='dark'] {
-  --glass-blur: blur(14px) saturate(1.15);
-  /* [임시] 다크: 푸른 기 없는 짙은 회색 + 호박색 */
+  --glass-blur: blur(18px) saturate(1.2);
+  /* [임시] 기본: 푸른 기 없는 짙은 회색 + 보라 강조 (2026-10-10 호박색 → 로고·연결 표현의 보라). 경고(--warn)는 호박색 그대로 */
   --bg: #1e1f21;
   --surface: #27292c;
   --surface-2: #303236;
   --line: #3b3e42;
   --text: #ebe8e3;
   --muted: #a3a09a;
-  --accent: #f0a93b;
-  --on-accent: #231800;
+  --accent: #a9a6f7;
+  --on-accent: #17153a;
   --pass: #72bf8e;
   --fail: #f07a52;
   --warn: #f0a93b;
-  --focus: #f0a93b;
+  --focus: #a9a6f7;
   --primary-bg: var(--accent);
   --primary-border: var(--accent);
   --primary-text: var(--on-accent);
@@ -26,51 +26,23 @@
   --step-idle: #242528;
   --step-hover: #2a2c30;
   --step-done: #303337;
-  --step-done-line: #5e8f6f;
+  --step-done-line: rgb(169 166 247 / 0.55); /* 확인됨 외곽선: 초록 → 보라 (2026-10-10, --conn-soft와 같음) */
   --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.35);
   /* 글래스 원 (2026-10-09 — 배경 효과 위의 장비 연결 원): 반투명 면 + 뒤 흐림 + 옅은 테두리. strong = 확인됨·가리킴 */
-  --glass-bg: rgb(46 48 52 / 0.38);
-  --glass-bg-strong: rgb(56 59 63 / 0.55);
-  --glass-line: rgb(255 255 255 / 0.09);
+  --glass-bg: rgb(46 48 52 / 0.24); /* 2026-10-10 투명감 조금 더 (.38 → .24, 흐림 14 → 18px) */
+  --glass-bg-strong: rgb(56 59 63 / 0.45);
+  --glass-line: rgb(255 255 255 / 0.10);
+  /* 장비 연결 상태 (2026-10-10 사용자 선택 B — 노랑·초록 대신 로고의 보라): 연결 중 = 테두리를 도는 빛, 연결됨 = 한 번 반짝인 뒤 은은한 빛 */
+  --conn: #a9a6f7;
+  --conn-soft: rgb(169 166 247 / 0.55);
+  --conn-glow: rgb(169 166 247 / 0.22);
+  --conn-flash: rgb(169 166 247 / 0.6);
   /* 하늘 화면(준비 단계 배경): 사진이라 밝게 테마에서도 어둡다. 그 위 글자·선은 하늘 전용 색 */
   --sky: #0e0f11;
   --star: #e8e6e1;
   --sky-muted: rgb(255 255 255 / 0.55);
   --sky-line: rgb(255 255 255 / 0.16);
   color-scheme: dark;
-}
-
-:root[data-theme='light'] {
-  /* [임시] 라이트: 순백이 아닌 옅은 회색 + 진한 호박색 */
-  --bg: #f1f1ef;
-  --surface: #fafaf9;
-  --surface-2: #e7e7e4;
-  --line: #d6d6d2;
-  --text: #25272a;
-  --muted: #676a6e;
-  --accent: #b36b00;
-  --on-accent: #ffffff;
-  --pass: #2f7d4e;
-  --fail: #c24a26;
-  --warn: #a06200;
-  --focus: #b36b00;
-  --primary-bg: var(--accent);
-  --primary-border: var(--accent);
-  --primary-text: var(--on-accent);
-  --step-idle: #e7e7e4;
-  --step-hover: #e0e0dc;
-  --step-done: #ffffff;
-  --step-done-line: #8fb89d;
-  --lift-shadow: 0 10px 24px rgb(0 0 0 / 0.14);
-  /* 글래스 원 (2026-10-09 — 배경 효과 위의 장비 연결 원): 반투명 면 + 뒤 흐림 + 옅은 테두리. strong = 확인됨·가리킴 */
-  --glass-bg: rgb(255 255 255 / 0.45);
-  --glass-bg-strong: rgb(255 255 255 / 0.7);
-  --glass-line: rgb(0 0 0 / 0.08);
-  --sky: #16181b;
-  --star: #ebe8e3;
-  --sky-muted: rgb(255 255 255 / 0.6);
-  --sky-line: rgb(255 255 255 / 0.18);
-  color-scheme: light;
 }
 
 :root[data-theme='night'] {
@@ -101,6 +73,10 @@
   --glass-bg: rgb(12 0 0 / 0.55);
   --glass-bg-strong: rgb(23 0 0 / 0.7);
   --glass-line: rgb(60 0 0 / 0.7);
+  --conn: #b80000;
+  --conn-soft: rgb(184 0 0 / 0.55);
+  --conn-glow: rgb(184 0 0 / 0.18);
+  --conn-flash: rgb(184 0 0 / 0.45);
   --sky: #000000;
   --star: #b80000;
   --sky-muted: #9a0000;

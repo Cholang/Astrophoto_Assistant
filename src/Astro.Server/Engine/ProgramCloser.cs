@@ -33,7 +33,32 @@ public sealed class ProgramCloser(NinaWatcher watcher, ILogger<ProgramCloser> lo
                 catch (InvalidOperationException) { /* 이미 닫힘 */ }
                 finally { p.Dispose(); }
             }
+        if (all) CloseEmpireStartedSince(StartedAt);
         if (all) _launched = false;
         return all;
+    }
+
+    /// <summary>아이라(서버)가 켜진 시각 — 이 뒤에 켜진 Wanderer Empire는 아이라의 장비 연결이 켠 것</summary>
+    private static readonly DateTime StartedAt = Process.GetCurrentProcess().StartTime;
+
+    /// <summary>
+    /// N.I.N.A.를 닫은 뒤, 아이라가 켜진 뒤에 켜진 Wanderer Empire(와 그 ASCOM 서버)를 닫는다 (2026-10-10 사용자 요청 — 아이라가 켰으면 끝낼 때도).
+    /// 그 전부터 켜져 있던 Empire(사용자가 켜 둔 것)는 그대로. 파워박스 출력의 켜짐·꺼짐은 장치에 남는다
+    /// </summary>
+    private void CloseEmpireStartedSince(DateTime since)
+    {
+        foreach (var name in new[] { BackgroundWindows.WandererEmpire, "ASCOM.WandererBox1", "ASCOM.WandererBox2" })
+            foreach (var p in Process.GetProcessesByName(name))
+                using (p)
+                {
+                    try
+                    {
+                        if (p.StartTime < since) continue;
+                        if (!p.CloseMainWindow() || !p.WaitForExit(5000)) p.Kill();
+                        p.WaitForExit(5000);
+                        log.LogInformation("{Name}을 닫음 (아이라가 켠 것)", name);
+                    }
+                    catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+                }
     }
 }
